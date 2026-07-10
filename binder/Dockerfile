@@ -25,6 +25,12 @@ RUN $ISAACSIM_PYTHON_EXE -m pip install \
 COPY --chown=${NB_USER}:users binder/isaacsim_python_wrapper.sh /home/jovyan/.local/bin/isaacsim_python_wrapper.sh
 COPY --chown=${NB_USER}:users binder/kernel.json /opt/conda/share/jupyter/kernels/isaac-sim/kernel.json
 
+# Install jupyter kernel of the CRAM venv python. The wrapper sources the ROS 2
+# environment and the ros2_ws overlay, so notebooks on this kernel can import
+# rclpy/json_msgs without the jupyter server having sourced anything.
+COPY --chown=${NB_USER}:users binder/cram_python_wrapper.sh /home/jovyan/.local/bin/cram_python_wrapper.sh
+COPY --chown=${NB_USER}:users binder/cram-kernel.json /opt/conda/share/jupyter/kernels/cram/kernel.json
+
 # Install UV (builds the giskard venv below)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 #===========================================================#
@@ -83,10 +89,6 @@ RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
 # and python client).
 RUN cd ${REPO_DIR}/ros2_ws && \
     bash -c "source /opt/ros/jazzy/setup.bash && colcon build --packages-select json_msgs"
-
-# Register the CRAM venv as a jupyter kernel (used by the demo notebook).
-RUN ${REPO_DIR}/cognitive_robot_abstract_machine/.venv/bin/python \
-        -m ipykernel install --user --name cram --display-name "CRAM Python (venv)"
 
 # Set Jupyterlab default directory
 WORKDIR ${REPO_DIR}

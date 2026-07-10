@@ -1,0 +1,14 @@
+{
+    "argv": [
+        "/home/jovyan/.local/bin/cram_python_wrapper.sh",
+        "-m",
+        "ipykernel_launcher",
+        "-f",
+        "{connection_file}"
+    ],
+    "display_name": "CRAM",
+    "language": "python",
+    "metadata": {
+        "debugger": true
+    }
+}

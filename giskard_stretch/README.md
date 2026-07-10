@@ -46,8 +46,12 @@ sudo apt-get install -y ros-jazzy-rclpy-message-converter ros-jazzy-py-trees ros
 cd cognitive_robot_abstract_machine
 uv sync
 .venv/bin/pip install py_trees argcomplete
-.venv/bin/python -m ipykernel install --user --name cram --display-name "CRAM Python (venv)"
 cd ..
+# CRAM jupyter kernel: a wrapper that sources ROS 2 + the ros2_ws overlay
+# before starting the venv python, so notebooks need no pre-sourced jupyter.
+cp binder/cram_python_wrapper.sh ~/.local/bin/
+mkdir -p ~/.local/share/jupyter/kernels/cram
+cp binder/cram-kernel.json ~/.local/share/jupyter/kernels/cram/kernel.json
 # giskard's action interface package (workspace at the repo root)
 source /opt/ros/jazzy/setup.bash
 cd ros2_ws && colcon build --packages-select json_msgs
@@ -55,8 +59,8 @@ cd ros2_ws && colcon build --packages-select json_msgs
 
 ## Running
 
-Everything can be started from `giskard_demo.ipynb` (kernel: **CRAM Python
-(venv)**) — it launches the simulation and the giskard server as background
+Everything can be started from `giskard_demo.ipynb` (kernel: **CRAM**) — it
+launches the simulation and the giskard server as background
 processes and demonstrates joint-space, gripper, Cartesian (arm-only /
 whole-body), and base goals.
 

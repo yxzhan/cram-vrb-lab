@@ -19,7 +19,7 @@ closed-loop whole-body control of a Hello Robot Stretch in an apartment scene
 git clone --recurse-submodules <this-repo>   # environment setup: see binder/Dockerfile
 ```
 
-Open `giskard_stretch/giskard_demo.ipynb` (kernel: **CRAM Python (venv)**) — it
+Open `giskard_stretch/giskard_demo.ipynb` (kernel: **CRAM**) — it
 starts the simulation and the giskard server and walks through all motion goals.
 
 Details and troubleshooting: `giskard_stretch/README.md`.
