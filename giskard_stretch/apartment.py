@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 """Isaac Sim apartment scene with a Stretch robot, controlled over ROS 2.
 
-Minimal simulation side of the giskard demo (see ../giskard_stretch/):
+Minimal simulation side of the giskard demo (server config and demo
+notebook live in this same directory):
 - publishes /stretch/joint_states, /odom, TF, /head_camera/image_raw
 - subscribes /stretch/cmd_vel + /cmd_vel (Twist, kinematic base with a 1 s
   watchdog), /stretch/joint_command (position targets),
   /stretch/joint_velocity_cmd (giskard's streamed velocities, integrated into
   position targets each sim step), /stretch/gripper_command (Float64)
 
-Run with the Isaac Sim python:
-    ~/.local/bin/isaacsim_python_wrapper.sh examples/apartment.py
+Run with the Isaac Sim python (or from giskard_demo.ipynb):
+    binder/isaacsim_python_wrapper.sh giskard_stretch/apartment.py
 """
 
 import math

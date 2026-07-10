@@ -1,29 +1,25 @@
 # cram_isaacsim
 
-在 Isaac Sim 中运行 [CRAM](https://github.com/cram2/cognitive_robot_abstract_machine)
-（Cognitive Robot Abstract Machine）。当前演示：用 giskardpy 闭环控制公寓场景中的
-Hello Robot Stretch（关节 / 末端笛卡尔 / 底盘 / 夹爪）。
+Running [CRAM](https://github.com/cram2/cognitive_robot_abstract_machine)
+(Cognitive Robot Abstract Machine) in NVIDIA Isaac Sim. Current demo: giskardpy
+closed-loop whole-body control of a Hello Robot Stretch in an apartment scene
+(joint-space / Cartesian end-effector / base / gripper goals).
 
-| 目录 | 内容 |
+| Directory | Content |
 |---|---|
-| `examples/apartment.py` | 仿真场景 + Stretch 的 ROS2 桥 |
-| `giskard_stretch/` | giskard 服务端 + `giskard_demo.ipynb` 演示 |
-| `cognitive_robot_abstract_machine/` | CRAM monorepo（子模块） |
-| `assets/` | USD 资产；`stretch_urdf/` 为官方 URDF 子模块 |
-| `ros2_ws/` | json_msgs 消息包 |
-| `binder/` | Docker 镜像定义 |
+| `giskard_stretch/` | Sim script, giskard server config, and the `giskard_demo.ipynb` demo |
+| `cognitive_robot_abstract_machine/` | CRAM monorepo (git submodule) |
+| `assets/` | USD assets; `stretch_urdf/` is the official URDF submodule |
+| `ros2_ws/` | json_msgs interface package (giskard's action API) |
+| `binder/` | Docker image definition |
 
-## 快速开始
+## Quick start
 
 ```bash
-git clone --recurse-submodules <this-repo>   # 环境构建见 binder/Dockerfile
-source /opt/ros/jazzy/setup.bash && source ros2_ws/install/setup.bash
-
-# 1. 仿真
-~/.local/bin/isaacsim_python_wrapper.sh examples/apartment.py
-# 2. giskard 服务端（等 "giskard is ready"）
-cognitive_robot_abstract_machine/.venv/bin/python giskard_stretch/giskard_stretch_isaac.py
-# 3. 打开 giskard_stretch/giskard_demo.ipynb 发运动目标（内核选 "Giskard Python (venv)"）
+git clone --recurse-submodules <this-repo>   # environment setup: see binder/Dockerfile
 ```
 
-详细说明与故障排查见 `giskard_stretch/README.md`。
+Open `giskard_stretch/giskard_demo.ipynb` (kernel: **CRAM Python (venv)**) — it
+starts the simulation and the giskard server and walks through all motion goals.
+
+Details and troubleshooting: `giskard_stretch/README.md`.

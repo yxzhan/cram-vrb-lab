@@ -84,9 +84,9 @@ RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
 RUN cd ${REPO_DIR}/ros2_ws && \
     bash -c "source /opt/ros/jazzy/setup.bash && colcon build --packages-select json_msgs"
 
-# Register the giskard venv as a jupyter kernel for the demo notebook.
+# Register the CRAM venv as a jupyter kernel (used by the demo notebook).
 RUN ${REPO_DIR}/cognitive_robot_abstract_machine/.venv/bin/python \
-        -m ipykernel install --user --name giskard --display-name "Giskard Python (venv)"
+        -m ipykernel install --user --name cram --display-name "CRAM Python (venv)"
 
 # Set Jupyterlab default directory
 WORKDIR ${REPO_DIR}
