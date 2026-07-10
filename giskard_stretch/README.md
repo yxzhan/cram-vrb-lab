@@ -37,7 +37,7 @@ Isaac Sim (examples/apartment.py)                      giskard 服务端 (本目
 # ROS 依赖
 sudo apt-get install -y ros-jazzy-rclpy-message-converter ros-jazzy-py-trees-ros
 # venv 依赖
-/home/jovyan/isaacsim-giskard/cognitive_robot_abstract_machine/.venv/bin/pip install py_trees argcomplete
+/home/jovyan/cram_isaacsim/cognitive_robot_abstract_machine/.venv/bin/pip install py_trees argcomplete
 # giskard 的 action 消息包（本仓库自带定义，工作空间在仓库根目录）
 source /opt/ros/jazzy/setup.bash
 cd ros2_ws && colcon build --packages-select json_msgs
@@ -49,13 +49,13 @@ cd ros2_ws && colcon build --packages-select json_msgs
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/jovyan/isaacsim-giskard/ros2_ws/install/setup.bash
+source /home/jovyan/cram_isaacsim/ros2_ws/install/setup.bash
 ```
 
 1. **Isaac Sim**：`~/.local/bin/isaacsim_python_wrapper.sh examples/apartment.py`
 2. **giskard 服务端**（monorepo venv）：
    ```bash
-   /home/jovyan/isaacsim-giskard/cognitive_robot_abstract_machine/.venv/bin/python \
+   /home/jovyan/cram_isaacsim/cognitive_robot_abstract_machine/.venv/bin/python \
        giskard_stretch/giskard_stretch_isaac.py
    ```
    等待日志出现 `giskard is ready`。

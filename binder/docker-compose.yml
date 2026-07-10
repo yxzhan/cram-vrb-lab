@@ -1,7 +1,7 @@
 version: '3'
 services:
-  isaacsim-giskard:
-    image: isaacsim-giskard:main
+  cram_isaacsim:
+    image: cram_isaacsim:main
     build:
       context: ../
       dockerfile: ./binder/Dockerfile

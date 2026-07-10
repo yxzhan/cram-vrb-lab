@@ -67,7 +67,7 @@ RUN pip install -r /tmp/requirements.txt
 # NOTE: requires the repo to be cloned with --recurse-submodules so the
 # cognitive_robot_abstract_machine submodule is present in the build context.
 USER ${NB_USER}
-ENV REPO_DIR=${HOME}/isaacsim-giskard
+ENV REPO_DIR=${HOME}/cram_isaacsim
 RUN mkdir -p ${REPO_DIR}
 COPY --chown=${NB_USER}:users . ${REPO_DIR}/
 RUN git config --global --add safe.directory ${REPO_DIR}
