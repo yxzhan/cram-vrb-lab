@@ -23,7 +23,7 @@ RUN $ISAACSIM_PYTHON_EXE -m pip install \
 
 # Install jupyter kernel of Isaac-sim python
 COPY --chown=${NB_USER}:users binder/isaacsim_python_wrapper.sh /home/jovyan/.local/bin/isaacsim_python_wrapper.sh
-COPY --chown=${NB_USER}:users binder/kernel.json /opt/conda/share/jupyter/kernels/isaac-sim/kernel.json
+COPY --chown=${NB_USER}:users binder/isaac-kernel.json /opt/conda/share/jupyter/kernels/isaac-sim/kernel.json
 
 # Install jupyter kernel of the CRAM venv python. The wrapper sources the ROS 2
 # environment and the ros2_ws overlay, so notebooks on this kernel can import
