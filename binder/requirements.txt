@@ -1,0 +1,2 @@
+# URDF parsing (used by giskard_stretch/stretch_joints.py and giskardpy)
+urdf_parser_py

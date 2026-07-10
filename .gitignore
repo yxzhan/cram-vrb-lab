@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+giskard_stretch/ros2_ws/build/
+giskard_stretch/ros2_ws/install/
+giskard_stretch/ros2_ws/log/
+.ipynb_checkpoints/
