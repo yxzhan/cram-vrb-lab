@@ -10,7 +10,7 @@ Isaac Sim (examples/apartment.py)                     giskard 服务端
   /stretch/cmd_vel            ◄────────────────────  底盘 Twist（闭环, 带 1s 看门狗）
   /stretch/joint_velocity_cmd ◄────────────────────  关节速度流（仿真内积分为位置目标）
 
-  demo 客户端 ── JsonAction(/giskard/command) ──► giskard
+  giskard_demo.ipynb ── JsonAction(/giskard/command) ──► giskard
 ```
 
 ## 仓库结构
@@ -18,9 +18,10 @@ Isaac Sim (examples/apartment.py)                     giskard 服务端
 | 目录 | 内容 |
 |---|---|
 | `examples/apartment.py` | 仿真：公寓场景 + Stretch + ROS2 桥（含速度积分与 cmd_vel 看门狗） |
-| `giskard_stretch/` | giskard 服务端配置、4 个 demo、json_msgs 消息包（见其 README） |
+| `giskard_stretch/` | giskard 服务端配置 + **`giskard_demo.ipynb`** 演示 notebook |
 | `cognitive_robot_abstract_machine/` | giskardpy monorepo（git 子模块） |
-| `usd/` | 公寓场景与 Stretch 的 USD 资产、URDF+mesh |
+| `assets/` | 公寓场景与 Stretch 的 USD 资产；`stretch_urdf/` 为官方 URDF 子模块 |
+| `ros2_ws/` | json_msgs 消息包（giskard 的 action 接口） |
 | `binder/` | Docker 镜像定义（Isaac Sim + ROS2 Jazzy + giskard 环境） |
 
 ## 获取代码
@@ -38,10 +39,11 @@ sudo apt-get install -y ros-jazzy-rclpy-message-converter ros-jazzy-py-trees ros
 cd cognitive_robot_abstract_machine
 uv sync
 .venv/bin/pip install py_trees argcomplete
+.venv/bin/python -m ipykernel install --user --name giskard --display-name "Giskard Python (venv)"
 cd ..
 # 3. json_msgs 消息包
 source /opt/ros/jazzy/setup.bash
-cd giskard_stretch/ros2_ws && colcon build --packages-select json_msgs && cd ../..
+cd ros2_ws && colcon build --packages-select json_msgs && cd ..
 ```
 
 ## 运行
@@ -50,7 +52,7 @@ cd giskard_stretch/ros2_ws && colcon build --packages-select json_msgs && cd ../
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source giskard_stretch/ros2_ws/install/setup.bash
+source ros2_ws/install/setup.bash
 ```
 
 1. **仿真**（Isaac Sim python）：
@@ -61,13 +63,7 @@ source giskard_stretch/ros2_ws/install/setup.bash
    ```bash
    cognitive_robot_abstract_machine/.venv/bin/python giskard_stretch/giskard_stretch_isaac.py
    ```
-3. **demo**：
-   ```bash
-   PY=cognitive_robot_abstract_machine/.venv/bin/python
-   $PY giskard_stretch/demo_joint_goal.py 0.8            # 升降
-   $PY giskard_stretch/demo_gripper.py open              # 夹爪
-   $PY giskard_stretch/demo_cartesian_goal.py 0 0 0.15   # 末端笛卡尔（--full-body 全身）
-   $PY giskard_stretch/demo_base_goal.py 0.5 0           # 底盘
-   ```
+3. **发运动目标**：打开 `giskard_stretch/giskard_demo.ipynb`（内核选
+   "Giskard Python (venv)"），依次执行关节 / 夹爪 / 末端笛卡尔 / 底盘的演示 cell。
 
 精度、调参与故障排查见 `giskard_stretch/README.md`。

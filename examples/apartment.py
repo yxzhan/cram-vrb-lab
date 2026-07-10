@@ -66,12 +66,12 @@ my_world.reset()
 
 # Ground
 define_prim("/World/Ground", "Xform").GetReferences().AddReference(
-    f"{BASE_DIR}/../usd/Grid/default_environment.usd"
+    f"{BASE_DIR}/../assets/Grid/default_environment.usd"
 )
 
 # Apartment
 create_prim(
-    usd_path=f"{BASE_DIR}/../usd/apartment/apartmentICRA.usda",
+    usd_path=f"{BASE_DIR}/../assets/apartment/apartmentICRA.usda",
     prim_path="/World/Apartment",
     position=np.array([-6, 5, 0.0701]),
 )
@@ -95,7 +95,7 @@ for _ in range(30):
 from isaacsim.core.prims import Articulation
 
 create_prim(
-    usd_path=f"{BASE_DIR}/../usd/stretch/stretch.usd",
+    usd_path=f"{BASE_DIR}/../assets/stretch/stretch.usd",
     prim_path="/World/stretch",
     position=np.array([-1.5, 0, 0.05]),
     orientation=np.array([0, 0, 0, 1]),

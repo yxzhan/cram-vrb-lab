@@ -23,12 +23,13 @@ Isaac Sim (examples/apartment.py)                      giskard 服务端 (本目
   看门狗——流式发布（giskard/Nav2）停止后底盘会自动停住，不再永久锁存。
   注意：这也意味着 notebook 里单次发布、靠锁存持续运动的手动 teleop 会在
   1 秒后停下（需要持续运动就持续发布）。
-- URDF 用仿真自带的 `usd/stretch/stretch.urdf`，加载时做两处修补
-  （`stretch_joints.load_patched_urdf`）：插入语义模型需要的
-  `link_straight_gripper`；mesh 路径改为绝对路径（mesh 已从
-  hello-robot/stretch_urdf 拷贝到 `usd/stretch/meshes/`）。
+- URDF 直接用官方 [hello-robot/stretch_urdf](https://github.com/hello-robot/stretch_urdf)
+  子模块（`assets/stretch_urdf/`，SE3 + DW3 手腕 + SG3 夹爪变体），不自维护 URDF 文件。
+  加载时修补（`stretch_joints.load_patched_urdf`）：插入语义模型需要的
+  `link_straight_gripper`；修正官方文件里两个手指关节的全零 limit；mesh 相对路径
+  改为子模块内的绝对路径。
 - 关节顺序契约在 `stretch_joints.CONTROLLED_JOINTS`（速度消息不带关节名，
-  giskard 端和桥接端必须一致）。
+  giskard 端和仿真端必须一致）。
 
 ## 一次性安装（已完成，记录备查）
 
@@ -37,9 +38,9 @@ Isaac Sim (examples/apartment.py)                      giskard 服务端 (本目
 sudo apt-get install -y ros-jazzy-rclpy-message-converter ros-jazzy-py-trees-ros
 # venv 依赖
 /home/jovyan/isaacsim-giskard/cognitive_robot_abstract_machine/.venv/bin/pip install py_trees argcomplete
-# giskard 的 action 消息包（本仓库自带定义）
+# giskard 的 action 消息包（本仓库自带定义，工作空间在仓库根目录）
 source /opt/ros/jazzy/setup.bash
-cd giskard_stretch/ros2_ws && colcon build --packages-select json_msgs
+cd ros2_ws && colcon build --packages-select json_msgs
 ```
 
 ## 启动顺序
@@ -48,7 +49,7 @@ cd giskard_stretch/ros2_ws && colcon build --packages-select json_msgs
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-source /home/jovyan/isaacsim-giskard/giskard_stretch/ros2_ws/install/setup.bash
+source /home/jovyan/isaacsim-giskard/ros2_ws/install/setup.bash
 ```
 
 1. **Isaac Sim**：`~/.local/bin/isaacsim_python_wrapper.sh examples/apartment.py`
@@ -61,18 +62,10 @@ source /home/jovyan/isaacsim-giskard/giskard_stretch/ros2_ws/install/setup.bash
 
 ## Demo
 
-都用 venv python 运行：
+打开 **`giskard_demo.ipynb`**（内核选 "Giskard Python (venv)"），按顺序执行：
+关节空间、夹爪开合、末端笛卡尔（仅手臂 / 全身）、底盘移动。
 
-```bash
-PY=/home/jovyan/isaacsim-giskard/cognitive_robot_abstract_machine/.venv/bin/python
-$PY giskard_stretch/demo_joint_goal.py 0.8            # 升降到 0.8m
-$PY giskard_stretch/demo_gripper.py open|close        # 夹爪开合
-$PY giskard_stretch/demo_cartesian_goal.py 0 0 0.15   # 末端沿自身坐标系平移（仅手臂）
-$PY giskard_stretch/demo_cartesian_goal.py --full-body 0.4 0 0   # 全身（底盘参与）
-$PY giskard_stretch/demo_base_goal.py 0.5 0           # 底盘（DifferentialDriveBaseGoal）
-```
-
-自定义运动目标参照 `giskard_client.py` + 各 demo 的写法；任务类型见
+自定义运动目标参照 `giskard_client.py` + notebook 的写法；任务类型见
 `giskardpy/src/giskardpy/motion_statechart/tasks/`，文档示例
 `giskardpy/doc/examples/`。
 

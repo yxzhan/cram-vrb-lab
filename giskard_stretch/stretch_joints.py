@@ -29,14 +29,17 @@ JOINT_STATES_TOPIC = "/stretch/joint_states"
 CMD_VEL_TOPIC = "/stretch/cmd_vel"
 ODOM_TOPIC = "/odom"
 
-_STRETCH_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "usd", "stretch"
+# Official URDF from the hello-robot/stretch_urdf submodule (SE3 with the DW3
+# dex wrist and SG3 gripper -- the variant matching assets/stretch/stretch.usd).
+_REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_STRETCH_URDF_DIR = os.path.join(_REPO_DIR, "assets", "stretch_urdf", "stretch_urdf", "SE3")
+SIM_URDF_PATH = os.path.join(
+    _STRETCH_URDF_DIR, "stretch_description_SE3_eoa_wrist_dw3_tool_sg3.urdf"
 )
-SIM_URDF_PATH = os.path.join(_STRETCH_DIR, "stretch.urdf")
 
 # giskardpy's semantic Stretch model expects link_straight_gripper as the root
-# of the gripper subtree; the sim URDF attaches the S3 gripper body directly to
-# link_wrist_roll. Reparent it through an intermediate link.
+# of the gripper subtree; the official URDF attaches the S3 gripper body
+# directly to link_wrist_roll. Reparent it through an intermediate link.
 _S3_JOINT_OLD = """  <joint name="joint_gripper_s3_body" type="fixed">
     <origin rpy="0 0 -3.14159265358975" xyz="0 0 0.0209999999993159"/>
     <parent link="link_wrist_roll"/>
@@ -58,6 +61,12 @@ _S3_JOINT_NEW = """  <link name="link_straight_gripper"/>
     <axis xyz="0 0 0"/>
   </joint>"""
 
+# The official URDF ships the two gripper finger joints with zeroed limits
+# (effort/lower/upper/velocity all 0), which would make them immovable for
+# giskard. Give them their real range (matches the articulation in the sim).
+_FINGER_LIMIT_OLD = '<limit effort="0" lower="0" upper="0" velocity="0"/>'
+_FINGER_LIMIT_NEW = '<limit effort="100" lower="-0.6" upper="0.6" velocity="1.0"/>'
+
 
 def load_patched_urdf() -> str:
     with open(SIM_URDF_PATH) as f:
@@ -66,6 +75,9 @@ def load_patched_urdf() -> str:
     assert urdf.count(_S3_JOINT_OLD) == 1, "joint_gripper_s3_body block not found"
     urdf = urdf.replace(_S3_JOINT_OLD, _S3_JOINT_NEW)
 
-    mesh_dir = os.path.join(_STRETCH_DIR, "meshes")
+    assert urdf.count(_FINGER_LIMIT_OLD) == 2, "expected exactly the 2 finger limits"
+    urdf = urdf.replace(_FINGER_LIMIT_OLD, _FINGER_LIMIT_NEW)
+
+    mesh_dir = os.path.join(_STRETCH_URDF_DIR, "meshes")
     urdf = urdf.replace('filename="./meshes/', f'filename="{mesh_dir}/')
     return urdf

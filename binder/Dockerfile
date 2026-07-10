@@ -81,8 +81,12 @@ RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
 
 # Build the json_msgs ROS workspace (JsonAction used by giskard's action server
 # and python client).
-RUN cd ${REPO_DIR}/giskard_stretch/ros2_ws && \
+RUN cd ${REPO_DIR}/ros2_ws && \
     bash -c "source /opt/ros/jazzy/setup.bash && colcon build --packages-select json_msgs"
+
+# Register the giskard venv as a jupyter kernel for the demo notebook.
+RUN ${REPO_DIR}/cognitive_robot_abstract_machine/.venv/bin/python \
+        -m ipykernel install --user --name giskard --display-name "Giskard Python (venv)"
 
 # Set Jupyterlab default directory
 WORKDIR ${REPO_DIR}
