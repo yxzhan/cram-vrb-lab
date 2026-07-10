@@ -83,7 +83,7 @@ RUN git config --global --add safe.directory ${REPO_DIR}
 # are not in its workspace lockfile.
 RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
     ~/.local/bin/uv sync && \
-    .venv/bin/pip install py_trees argcomplete
+    .venv/bin/pip install py_trees argcomplete nest_asyncio
 
 # Build the json_msgs ROS workspace (JsonAction used by giskard's action server
 # and python client).

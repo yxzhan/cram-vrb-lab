@@ -6,7 +6,14 @@ shim and returns a connected GiskardWrapper.
 
 import atexit
 
+import nest_asyncio
+
 from giskardpy.middleware.ros2 import rospy
+
+# GiskardWrapper.execute blocks via asyncio's run_until_complete; inside
+# jupyter the kernel's event loop is already running, which raises
+# "Cannot run the event loop while another loop is running" without this.
+nest_asyncio.apply()
 
 
 def add_end_conditions(msc, task, timeout_seconds=60.0, settle_seconds=1.0):

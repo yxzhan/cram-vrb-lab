@@ -45,7 +45,7 @@ sudo apt-get install -y ros-jazzy-rclpy-message-converter ros-jazzy-py-trees ros
 # CRAM venv (uv workspace) + the two extras giskardpy's ROS2 middleware needs
 cd cognitive_robot_abstract_machine
 uv sync
-.venv/bin/pip install py_trees argcomplete
+.venv/bin/pip install py_trees argcomplete nest_asyncio
 cd ..
 # CRAM jupyter kernel: a wrapper that sources ROS 2 + the ros2_ws overlay
 # before starting the venv python, so notebooks need no pre-sourced jupyter.
