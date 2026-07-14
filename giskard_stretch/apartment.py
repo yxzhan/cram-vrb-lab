@@ -280,6 +280,8 @@ class StretchROS(Node):
         self._vel_cmd = None
         self._vel_cmd_time = None
         self._vel_targets = None
+        self._vel_was_zero = None
+        self._vel_last_tick = None
 
         # TF: link names and the base link index
         self.body_names = list(robot.body_names)
@@ -288,12 +290,16 @@ class StretchROS(Node):
         )
         self._odom_prev = None          # (t, x, y, yaw) for finite-difference twist
 
-        self.create_subscription(Twist, f"/{prefix}/cmd_vel", self.cmd_vel_cb, 10)
-        self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_cb, 10)
+        # Streamed command topics use queue depth 1: only the LATEST command
+        # matters, and letting a queue build up makes the sim execute commands
+        # that are hundreds of milliseconds old -- the controller answers the
+        # perceived lag with overshoot and eventually a limit cycle.
+        self.create_subscription(Twist, f"/{prefix}/cmd_vel", self.cmd_vel_cb, 1)
+        self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_cb, 1)
         self.create_subscription(JointState, f"/{prefix}/joint_command",
                                  self.joint_cmd_cb, 10)
         self.create_subscription(Float64MultiArray, f"/{prefix}/joint_velocity_cmd",
-                                 self.joint_vel_cmd_cb, 10)
+                                 self.joint_vel_cmd_cb, 1)
         self.create_subscription(Float64, f"/{prefix}/gripper_command",
                                  self.gripper_cmd_cb, 10)
         self.pub_js = self.create_publisher(JointState, f"/{prefix}/joint_states", 10)
@@ -321,22 +327,49 @@ class StretchROS(Node):
     def integrate_joint_velocities(self, dt):
         """Integrate streamed joint velocities into position targets (called
         every sim step, like integrate_base). Silence beyond VEL_CMD_TIMEOUT
-        holds position (the drives latch the last targets); zero-velocity
-        joints stay anchored to their measured position; the lead clamp keeps
-        targets near reality so a blocked joint (contact) is not wound up."""
+        holds position (the drives latch the last targets).
+
+        Zero-velocity joints hold a FIXED target that is snapped to the
+        measured position once, on the transition to zero (this kills the
+        end-of-goal overshoot from a leading target). The target must NOT
+        keep following the measured position while the velocity stays zero:
+        with target == measured the position drive exerts no force, so a
+        gravity-loaded joint (joint_lift) sags a little every step and the
+        following target ratchets it all the way down.
+
+        Integration uses measured WALL-CLOCK time, not the nominal rendering
+        dt: giskard's QP plans in wall time, while a loaded sim steps slower
+        than its nominal rate. Integrating the nominal dt executes commands
+        at a load-dependent fraction of the commanded speed, which the
+        controller perceives as lag and answers with overshoot."""
+        now = time.time()
+        wall_dt, self._vel_last_tick = (
+            (min(now - self._vel_last_tick, 0.2), now)
+            if self._vel_last_tick is not None else (dt, now)
+        )
         if self._vel_cmd is None:
             return
-        if time.time() - self._vel_cmd_time > self.VEL_CMD_TIMEOUT:
+        if now - self._vel_cmd_time > self.VEL_CMD_TIMEOUT:
             self._vel_targets = None
+            self._vel_was_zero = None
             return
+        dt = wall_dt
         measured = self.robot.get_joint_positions()[0][self.vel_cmd_dof]
         if self._vel_targets is None:
             self._vel_targets = measured.copy()
-        target = self._vel_targets + self._vel_cmd * dt
-        target = np.where(self._vel_cmd == 0.0, measured, target)
-        target = np.clip(target, measured - self.VEL_MAX_LEAD,
+            self._vel_was_zero = np.ones(len(self.vel_cmd_dof), dtype=bool)
+        zero = self._vel_cmd == 0.0
+        newly_zero = zero & ~self._vel_was_zero
+        # moving joints: integrate, with an anti-windup clamp around measured
+        moving = np.clip(self._vel_targets + self._vel_cmd * dt,
+                         measured - self.VEL_MAX_LEAD,
                          measured + self.VEL_MAX_LEAD)
+        # zero-velocity joints: keep the held target (snap once when entering)
+        target = np.where(zero,
+                          np.where(newly_zero, measured, self._vel_targets),
+                          moving)
         target = np.clip(target, self._vel_dof_lower, self._vel_dof_upper)
+        self._vel_was_zero = zero
         self._vel_targets = target
         self.robot.set_joint_position_targets(
             target.reshape(1, -1), joint_indices=self.vel_cmd_dof)
@@ -496,7 +529,11 @@ try:
         stretch_node.integrate_base(dt)
         stretch_node.integrate_joint_velocities(dt)
         my_world.step(render=True)
-        rclpy.spin_once(stretch_node, timeout_sec=0.0)
+        # Drain ALL pending callbacks (spin_once handles only ONE message per
+        # call; with giskard streaming two topics at ~20 Hz each, a single
+        # spin per sim tick falls behind and commands arrive stale).
+        for _ in range(16):
+            rclpy.spin_once(stretch_node, timeout_sec=0.0)
         stretch_node.publish_joint_states()
         stretch_node.publish_tf()
         stretch_node.publish_odom()

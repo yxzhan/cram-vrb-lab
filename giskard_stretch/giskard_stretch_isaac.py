@@ -57,8 +57,12 @@ def main():
         world_config=WorldWithStretchConfigDiffDrive(urdf=load_patched_urdf()),
         robot_interface_config=StretchIsaacInterface(),
         behavior_tree_config=ClosedLoopBTConfig(),
+        # 15 Hz: the highest rate the QP loop actually sustains on this
+        # machine while the sim runs alongside; a nominal rate the loop can't
+        # keep makes the controller's internal dt wrong. (giskardpy warns
+        # below 20 Hz -- harmless here.)
         qp_controller_config=QPControllerConfig(
-            target_frequency=20, prediction_horizon=15
+            target_frequency=15, prediction_horizon=15
         ),
     )
     giskard.live()
