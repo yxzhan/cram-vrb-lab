@@ -1,7 +1,7 @@
 version: '3'
 services:
-  cram_isaacsim:
-    image: cram_isaacsim:main
+  cram-vrb-lab:
+    image: cram-vrb-lab:main
     build:
       context: ../
       dockerfile: ./binder/Dockerfile

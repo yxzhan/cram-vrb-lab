@@ -1,2 +1,2 @@
-# URDF parsing (used by giskard_stretch/stretch_joints.py and giskardpy)
+# URDF parsing (used by cram_vrb_lab/robots/stretch/joints.py and giskardpy)
 urdf_parser_py

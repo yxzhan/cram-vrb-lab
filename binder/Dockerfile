@@ -39,7 +39,7 @@ USER ${NB_USER}
 COPY --chown=${NB_USER}:users binder/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
-ENV REPO_DIR=${HOME}/cram_isaacsim
+ENV REPO_DIR=${HOME}/cram-vrb-lab
 RUN mkdir -p ${REPO_DIR}
 
 #============= Pinned CRAM stack (deps + ROS workspace) =============#
@@ -86,11 +86,12 @@ COPY --chown=${NB_USER}:users binder/cram-kernel.json /opt/conda/share/jupyter/k
 # Pinned assets (Isaac USD scenes, stretch_urdf submodule) - rarely change.
 COPY --chown=${NB_USER}:users assets ${REPO_DIR}/assets
 
-# Frequently-changing top-level content (demo scripts, notebooks, wrappers).
+# Frequently-changing top-level content (package, demos, wrappers).
 # Copied LAST so editing them reuses every cached layer above.
-COPY --chown=${NB_USER}:users giskard_stretch ${REPO_DIR}/giskard_stretch
+COPY --chown=${NB_USER}:users cram_vrb_lab ${REPO_DIR}/cram_vrb_lab
+COPY --chown=${NB_USER}:users demos ${REPO_DIR}/demos
 COPY --chown=${NB_USER}:users binder ${REPO_DIR}/binder
-COPY --chown=${NB_USER}:users README.md ${REPO_DIR}/README.md
+COPY --chown=${NB_USER}:users README.md pyproject.toml ${REPO_DIR}/
 RUN git config --global --add safe.directory ${REPO_DIR}
 
 # Set Jupyterlab default directory
