@@ -1,14 +1,15 @@
-"""Shared launcher for the Stretch Isaac Sim demo notebooks.
+"""Shared launcher for the demo notebooks.
 
-Starts the Isaac Sim scene (``apartment.py``) and the giskard control server and
-waits until each prints its ready marker. Two run modes:
+Starts an Isaac Sim scene script and a giskard control server and waits until
+each prints its ready marker. Two run modes:
 
 - ``terminal=False`` (default): a detached background subprocess writing to a log
   file, which is polled for the marker.
 - ``terminal=True``: a visible ``gnome-terminal`` window running the same command
   (tee'd to the log so readiness is still detected). Handy for watching output.
 
-Used by both ``giskard_demo.ipynb`` and ``cram_demo.ipynb``.
+The defaults launch the Stretch + apartment demo; other robot/scene combinations
+pass their own ``sim_script`` / ``server_script`` / ``marker``.
 """
 
 import os
@@ -18,16 +19,18 @@ import sys
 import time
 from pathlib import Path
 
-# giskard_stretch/ -> repo root (cram_isaacsim)
-REPO = Path(__file__).resolve().parent.parent
+from cram_vrb_lab.paths import REPO_DIR as REPO
 
-# ROS 2 discovery, matched to apartment.py so the notebook kernel sees the topics.
+# ROS 2 discovery, matched to the sim scripts so the notebook kernel sees the topics.
 os.environ.setdefault("ROS_DOMAIN_ID", "0")
 os.environ.setdefault("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
 os.environ.setdefault("ROS_AUTOMATIC_DISCOVERY_RANGE", "LOCALHOST")
 
-ISAAC_SIM_LOG = "/tmp/apartment_sim.log"
+ISAAC_SIM_LOG = "/tmp/isaac_sim.log"
 GISKARD_SERVER_LOG = "/tmp/giskard_server.log"
+
+DEFAULT_SIM_SCRIPT = REPO / "demos" / "stretch_apartment_sim.py"
+DEFAULT_SERVER_SCRIPT = REPO / "demos" / "stretch_apartment_giskard_server.py"
 
 # Sourced before the command in terminal mode: a fresh gnome-terminal shell does
 # not inherit the kernel's sourced ROS environment (the background mode does).
@@ -46,6 +49,8 @@ def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True)
 
     :param terminal: run in a visible gnome-terminal window instead of a detached
         background subprocess.
+    :param kill_stale: pkill -f pattern for stale instances; note a basename
+        pattern matches any process whose command line contains it.
     :return: the Popen handle (the gnome-terminal launcher when terminal=True).
     """
     if (
@@ -87,17 +92,22 @@ def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True)
     )
 
 
-def start_isaac_sim(terminal=False, timeout=900, camera=None):
-    """Launch the Isaac Sim apartment scene; wait for the ROS bridge node.
+def start_isaac_sim(sim_script=None, marker="StretchROS node ready.",
+                    terminal=False, timeout=900, camera=None):
+    """Launch an Isaac Sim scene script; wait for its ready marker.
 
     First startup can take a few minutes (shader compilation).
 
-    :param camera: head-camera mode passed to apartment.py's ``--camera``
-        (``"rgb"`` / ``"depth"`` / ``"both"`` / ``"none"``); None uses its default.
+    :param sim_script: scene script run under the Isaac Sim python (default:
+        the Stretch apartment demo).
+    :param camera: head-camera mode passed as ``--camera``
+        (``"rgb"`` / ``"depth"`` / ``"both"`` / ``"none"``); None uses the
+        script's default.
     """
+    sim_script = Path(sim_script) if sim_script else DEFAULT_SIM_SCRIPT
     args = [
         f"{REPO}/binder/isaacsim_python_wrapper.sh",
-        f"{REPO}/giskard_stretch/apartment.py",
+        str(sim_script),
     ]
     if camera is not None:
         args += ["--camera", camera]
@@ -105,28 +115,32 @@ def start_isaac_sim(terminal=False, timeout=900, camera=None):
         "isaac sim",
         args,
         ISAAC_SIM_LOG,
-        "StretchROS node ready.",
+        marker,
         timeout=timeout,
-        kill_stale="giskard_stretch/apartment.py",
+        kill_stale=sim_script.name,
         terminal=terminal,
     )
 
 
-def start_giskard_server(terminal=False, timeout=300):
-    """Launch the giskard control server; wait until it is ready."""
+def start_giskard_server(server_script=None, marker="giskard is ready",
+                         terminal=False, timeout=300):
+    """Launch a giskard control server script; wait until it is ready."""
+    server_script = Path(server_script) if server_script else DEFAULT_SERVER_SCRIPT
     return start(
         "giskard server",
-        [sys.executable, f"{REPO}/giskard_stretch/giskard_stretch_isaac.py"],
+        [sys.executable, str(server_script)],
         GISKARD_SERVER_LOG,
-        "giskard is ready",
+        marker,
         timeout=timeout,
-        kill_stale="giskard_stretch_isaac.py",
+        kill_stale=server_script.name,
         terminal=terminal,
     )
 
 
-def stop():
-    """Stop the Isaac Sim scene and the giskard server, however they were started."""
-    for pattern in ("giskard_stretch/apartment.py", "giskard_stretch_isaac.py"):
+def stop(patterns=None):
+    """Stop the sim and the giskard server, however they were started."""
+    if patterns is None:
+        patterns = (DEFAULT_SIM_SCRIPT.name, DEFAULT_SERVER_SCRIPT.name)
+    for pattern in patterns:
         subprocess.run(["pkill", "-f", pattern], stdout=subprocess.DEVNULL)
     print("stopped isaac sim + giskard server")

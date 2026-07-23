@@ -46,7 +46,7 @@ def add_external_collision_avoidance(
 
     The robot then keeps a safety distance from every other collision-enabled body
     in giskard's world -- the apartment walls and furniture, once the environment
-    is loaded (see `apartment_world_config.WorldWithStretchAndApartmentDiffDrive`).
+    is loaded (see `cram_vrb_lab.scenes.apartment.giskard_world`).
     The robot is auto-detected from the world, and the distances come from the
     `AvoidExternalCollisions` rule the semantic Stretch model registers.
 

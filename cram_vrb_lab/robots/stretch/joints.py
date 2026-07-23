@@ -2,11 +2,14 @@
 
 The joint order of CONTROLLED_JOINTS is the contract between giskard's
 joint-group velocity controller and the sim's velocity-command integrator
-(VELOCITY_CONTROLLED_JOINTS in examples/apartment.py): the Float64MultiArray
-velocity command carries no joint names, only values in this order.
+(``StretchROS`` in ``cram_vrb_lab.robots.stretch.isaac_node``): the
+Float64MultiArray velocity command carries no joint names, only values in
+this order.
 """
 
 import os
+
+from cram_vrb_lab.paths import ASSETS_DIR
 
 CONTROLLED_JOINTS = [
     "joint_lift",
@@ -27,12 +30,20 @@ VELOCITY_CMD_TOPIC = "/stretch/joint_velocity_cmd"
 JOINT_COMMAND_TOPIC = "/stretch/joint_command"
 JOINT_STATES_TOPIC = "/stretch/joint_states"
 CMD_VEL_TOPIC = "/stretch/cmd_vel"
+GRIPPER_CMD_TOPIC = "/stretch/gripper_command"
 ODOM_TOPIC = "/odom"
+
+RGB_IMAGE_TOPIC = "/head_camera/image_raw"
+RGB_INFO_TOPIC = "/head_camera/camera_info"
+DEPTH_IMAGE_TOPIC = "/head_camera/depth/image_raw"
+DEPTH_INFO_TOPIC = "/head_camera/depth/camera_info"
+# Camera messages are stamped in this frame; it exists in the tf tree because
+# the giskard server publishes it from the (patched) URDF.
+CAMERA_FRAME_ID = "camera_color_optical_frame"
 
 # Official URDF from the hello-robot/stretch_urdf submodule (SE3 with the DW3
 # dex wrist and SG3 gripper -- the variant matching assets/stretch/stretch.usd).
-_REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_STRETCH_URDF_DIR = os.path.join(_REPO_DIR, "assets", "stretch_urdf", "stretch_urdf", "SE3")
+_STRETCH_URDF_DIR = str(ASSETS_DIR / "stretch_urdf" / "stretch_urdf" / "SE3")
 SIM_URDF_PATH = os.path.join(
     _STRETCH_URDF_DIR, "stretch_description_SE3_eoa_wrist_dw3_tool_sg3.urdf"
 )

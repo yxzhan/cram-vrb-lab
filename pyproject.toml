@@ -1,0 +1,26 @@
+[project]
+name = "cram-vrb-lab"
+version = "0.1.0"
+description = "Virtual research lab: CRAM household tasks in NVIDIA Isaac Sim"
+requires-python = ">=3.10"
+
+# Metadata only. The demos and notebooks import cram_vrb_lab via a sys.path
+# insert of the repo root (see demos/*.py), NOT via an installed package: the
+# CRAM venv is managed by `uv sync` inside the submodule (which prunes foreign
+# packages) and the Isaac python wrapper unsets PYTHONPATH. An editable install
+# into your own venv works too: `pip install -e .`
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = [
+    "cram_vrb_lab",
+    "cram_vrb_lab.sim",
+    "cram_vrb_lab.control",
+    "cram_vrb_lab.robots",
+    "cram_vrb_lab.robots.stretch",
+    "cram_vrb_lab.scenes",
+    "cram_vrb_lab.scenes.apartment",
+]

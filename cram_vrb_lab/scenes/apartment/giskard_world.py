@@ -5,7 +5,7 @@ the surroundings (walls, furniture) and can avoid collisions with them.
 Purely additive: no changes to giskardpy or semantic_digital_twin. It subclasses
 the stock ``WorldWithStretchConfigDiffDrive`` and, after the robot is built,
 merges ``apartment.urdf`` into the same world at the pose the apartment occupies
-in the Isaac Sim scene (``apartment.py``).
+in the Isaac Sim scene (:mod:`cram_vrb_lab.scenes.apartment.isaac_scene`).
 
 .. warning::
    ``apartment.urdf`` references meshes from the ``iai_apartment`` / ``iai_kitchen``
@@ -19,18 +19,16 @@ in the Isaac Sim scene (``apartment.py``).
 .. note::
    ``apartment.urdf`` is a *different asset* from the ``apartmentICRA.usda`` scene
    rendered by Isaac Sim, and its root frame is flipped and offset relative to the
-   USD origin. :func:`apartment_pose_in_map` encodes the measured alignment (180 deg
-   yaw + offset) composed with Isaac's USD prim placement. Re-verify in RViz if the
-   prim placement in ``apartment.py`` changes.
+   USD origin. :func:`~cram_vrb_lab.scenes.apartment.constants.apartment_pose_in_map`
+   encodes the measured alignment (180 deg yaw + offset) composed with Isaac's USD
+   prim placement. Re-verify in RViz if the prim placement changes.
 """
 
 from __future__ import annotations
 
-import math
-import os
 import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass, field
-from typing_extensions import List, Optional, Tuple
+from typing_extensions import Optional
 
 from giskardpy.middleware.ros2.scripts.iai_robots.stretch.configs import (
     WorldWithStretchConfigDiffDrive,
@@ -46,50 +44,7 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 )
 from semantic_digital_twin.world_description.connections import FixedConnection
 
-_REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-APARTMENT_URDF_PATH: str = os.path.join(
-    _REPO_DIR,
-    "cognitive_robot_abstract_machine",
-    "coraplex",
-    "resources",
-    "worlds",
-    "apartment.urdf",
-)
-"""Location of the apartment description shipped with coraplex."""
-
-USD_PRIM_POSITION_IN_MAP: Tuple[float, float, float] = (-6.0, 0.0, 0.0701)
-"""Where Isaac places the apartment USD prim, in the giskard ``map`` frame.
-
-From ``apartment.py`` (``create_prim(prim_path="/World/Apartment",
-position=[-6, 5, 0.0701])``). Giskard's ``map`` frame coincides with the Isaac
-world frame because the localization joint is identity (``map == odom``) and
-``/odom`` reports the ground-truth pose.
-"""
-
-APARTMENT_URDF_OFFSET_IN_USD: Tuple[float, float, float] = (9.5, 2.5, 0.0)
-"""Translation, in the (world-aligned) USD-origin frame, applied to
-``apartment.urdf`` after the yaw rotation to line its root up with the USD origin."""
-
-APARTMENT_URDF_YAW_IN_USD: float = math.pi
-"""Rotation about Z applied to ``apartment.urdf`` to line it up with the USD origin;
-the URDF is authored 180 deg flipped relative to ``apartmentICRA.usda``."""
-
-
-def apartment_pose_in_map() -> HomogeneousTransformationMatrix:
-    """Pose of ``apartment.urdf``'s root in the giskard ``map`` frame.
-
-    Composes the Isaac USD prim placement (``map_T_usd``) with the measured
-    URDF-to-USD alignment (``usd_T_urdf`` = yaw 180 deg then the offset). Because
-    the USD prim is placed with identity rotation this reduces to a translation of
-    ``(3.5, 7.5, 0.0701)`` and a 180 deg yaw, but the composition keeps the two
-    documented facts (prim placement, URDF/USD alignment) editable in isolation.
-    """
-    map_T_usd = HomogeneousTransformationMatrix.from_xyz_rpy(*USD_PRIM_POSITION_IN_MAP)
-    usd_T_urdf = HomogeneousTransformationMatrix.from_xyz_rpy(
-        *APARTMENT_URDF_OFFSET_IN_USD, yaw=APARTMENT_URDF_YAW_IN_USD
-    )
-    return map_T_usd @ usd_T_urdf
+from .constants import APARTMENT_URDF_PATH, apartment_pose_in_map
 
 
 def _mesh_is_resolvable(filename: str, path_resolver: PathResolver) -> bool:
