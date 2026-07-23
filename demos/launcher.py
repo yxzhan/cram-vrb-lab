@@ -28,9 +28,11 @@ os.environ.setdefault("ROS_AUTOMATIC_DISCOVERY_RANGE", "LOCALHOST")
 
 ISAAC_SIM_LOG = "/tmp/isaac_sim.log"
 GISKARD_SERVER_LOG = "/tmp/giskard_server.log"
+RVIZ_LOG = "/tmp/rviz.log"
 
 DEFAULT_SIM_SCRIPT = REPO / "demos" / "stretch_apartment_sim.py"
 DEFAULT_SERVER_SCRIPT = REPO / "demos" / "stretch_apartment_giskard_server.py"
+DEFAULT_RVIZ_CONFIG = REPO / "demos" / "stretch.rviz"
 
 # Sourced before the command in terminal mode: a fresh gnome-terminal shell does
 # not inherit the kernel's sourced ROS environment (the background mode does).
@@ -44,8 +46,8 @@ def _tail(log_path, lines=10):
     return "\n".join(Path(log_path).read_text(errors="ignore").splitlines()[-lines:])
 
 
-def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True):
-    """Start ``args`` and block until ``marker`` appears in ``log_path``.
+def _launch(name, args, log_path, kill_stale=None, terminal=True):
+    """Kill stale instances, then start ``args`` logging to ``log_path``.
 
     :param terminal: run in a visible gnome-terminal window instead of a detached
         background subprocess.
@@ -67,11 +69,16 @@ def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True)
     print(f"starting {name}{' in a terminal' if terminal else ''}, logging to {log_path}")
     if terminal:
         inner = f"{_SOURCE}{shlex.join(args)} 2>&1 | tee {shlex.quote(log_path)}; exec bash"
-        proc = subprocess.Popen(["gnome-terminal", "--", "bash", "-c", inner])
-    else:
-        proc = subprocess.Popen(
-            args, stdout=open(log_path, "w"), stderr=subprocess.STDOUT
-        )
+        return subprocess.Popen(["gnome-terminal", "--", "bash", "-c", inner])
+    return subprocess.Popen(args, stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
+
+
+def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True):
+    """Start ``args`` and block until ``marker`` appears in ``log_path``.
+
+    Parameters and return value as for :func:`_launch`.
+    """
+    proc = _launch(name, args, log_path, kill_stale=kill_stale, terminal=terminal)
 
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -137,10 +144,25 @@ def start_giskard_server(server_script=None, marker="giskard is ready",
     )
 
 
+def start_rviz(rviz_config=None, terminal=False):
+    """Launch rviz2 with a config file; returns immediately (no ready marker).
+
+    :param rviz_config: rviz config file (default: the Stretch demo config).
+    """
+    rviz_config = Path(rviz_config) if rviz_config else DEFAULT_RVIZ_CONFIG
+    return _launch(
+        "rviz2",
+        ["rviz2", "-d", str(rviz_config)],
+        RVIZ_LOG,
+        kill_stale="rviz2",
+        terminal=terminal,
+    )
+
+
 def stop(patterns=None):
-    """Stop the sim and the giskard server, however they were started."""
+    """Stop the sim, the giskard server and rviz, however they were started."""
     if patterns is None:
-        patterns = (DEFAULT_SIM_SCRIPT.name, DEFAULT_SERVER_SCRIPT.name)
+        patterns = (DEFAULT_SIM_SCRIPT.name, DEFAULT_SERVER_SCRIPT.name, "rviz2")
     for pattern in patterns:
         subprocess.run(["pkill", "-f", pattern], stdout=subprocess.DEVNULL)
-    print("stopped isaac sim + giskard server")
+    print("stopped isaac sim + giskard server + rviz")

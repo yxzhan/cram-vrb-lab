@@ -9,3 +9,4 @@ from pathlib import Path
 REPO_DIR = Path(__file__).resolve().parents[1]
 ASSETS_DIR = REPO_DIR / "assets"
 CRAM_SUBMODULE_DIR = REPO_DIR / "cognitive_robot_abstract_machine"
+ROS2_WS_DIR = REPO_DIR / "ros2_ws"

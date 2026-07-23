@@ -7,7 +7,7 @@ side (:mod:`cram_vrb_lab.scenes.apartment.isaac_scene`) and the giskard side
 
 import math
 
-from cram_vrb_lab.paths import ASSETS_DIR, CRAM_SUBMODULE_DIR
+from cram_vrb_lab.paths import ASSETS_DIR, ROS2_WS_DIR
 
 GRID_USD_PATH = str(ASSETS_DIR / "Grid" / "default_environment.usd")
 """Ground/grid environment referenced under the apartment."""
@@ -16,9 +16,11 @@ APARTMENT_USD_PATH = str(ASSETS_DIR / "apartment" / "apartmentICRA.usda")
 """The apartment scene rendered by Isaac Sim."""
 
 APARTMENT_URDF_PATH = str(
-    CRAM_SUBMODULE_DIR / "coraplex" / "resources" / "worlds" / "apartment.urdf"
+    ROS2_WS_DIR / "src" / "iai_maps" / "iai_apartment" / "urdf" / "apartment.urdf"
 )
-"""Location of the apartment description shipped with coraplex."""
+"""Location of the apartment description: the iai_apartment source checkout in
+``ros2_ws`` (same xacro lineage and root frame as the copy coraplex ships, so
+the measured USD alignment below applies unchanged)."""
 
 USD_PRIM_POSITION_IN_MAP = (-6.0, 5.0, 0.0701)
 """Where Isaac places the apartment USD prim, in the giskard ``map`` frame.
@@ -30,7 +32,7 @@ coincides with the Isaac world frame because the localization joint is identity
 (``map == odom``) and ``/odom`` reports the ground-truth pose.
 """
 
-APARTMENT_URDF_OFFSET_IN_USD = (9.5, 2.5, 0.0)
+APARTMENT_URDF_OFFSET_IN_USD = (9.5, -2.5, 0.0)
 """Translation, in the (world-aligned) USD-origin frame, applied to
 ``apartment.urdf`` after the yaw rotation to line its root up with the USD origin."""
 

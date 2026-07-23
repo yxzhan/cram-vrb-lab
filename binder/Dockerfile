@@ -56,7 +56,7 @@ RUN git config --global --add safe.directory ${REPO_DIR}/cognitive_robot_abstrac
 # two packages giskardpy's ROS2 middleware needs that are not in its lockfile.
 RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
     ~/.local/bin/uv sync && \
-    .venv/bin/pip install nest_asyncio
+    .venv/bin/pip install nest_asyncio argcomplete
 
 # Full CRAM ROS 2 workspace (overlay at ${REPO_DIR}/ros2_ws). The setup script
 # lives in the submodule and clones the code-iai / cram2 description and message
