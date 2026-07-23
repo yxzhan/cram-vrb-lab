@@ -3,10 +3,10 @@
 
 Minimal simulation side of the giskard demo (server config and demo
 notebook live in this same directory):
-- publishes /stretch/joint_states, /odom, TF (odom->base_link->links + static
-  base_link->laser and link_head_tilt->camera_color_optical_frame), and the head
-  camera per --camera: /head_camera/image_raw (rgb8) and/or
-  /head_camera/depth/image_raw (32FC1, metres), stamped in camera_color_optical_frame
+- publishes /stretch/joint_states, /odom, TF (odom->base_link->links), and the
+  head camera per --camera: /head_camera/image_raw (rgb8) and/or
+  /head_camera/depth/image_raw (32FC1, metres) with camera_info, stamped in
+  camera_color_optical_frame (that frame comes from the giskard server's URDF tf tree)
 - subscribes /stretch/cmd_vel (Twist, kinematic base with a 1 s watchdog),
   /stretch/joint_velocity_cmd (giskard's streamed velocities, integrated into
   position targets each sim step), /stretch/gripper_command (Float64)
@@ -50,7 +50,7 @@ _parser = argparse.ArgumentParser(description="Isaac Sim Stretch apartment scene
 _parser.add_argument(
     "--camera",
     choices=["rgb", "depth", "both", "none"],
-    default="rgb" if os.environ.get("ISAAC_NO_CAMERA", "0") == "1" else "rgb",
+    default="both" if os.environ.get("ISAAC_NO_CAMERA", "0") == "1" else "rgb",
     help="head-camera mode: publish the rgb image, the depth image, both, or run "
     "no camera at all (default: rgb, or none when ISAAC_NO_CAMERA=1).",
 )
@@ -130,7 +130,7 @@ create_prim(
     usd_path=f"{BASE_DIR}/../assets/stretch/stretch.usd",
     prim_path="/World/stretch",
     position=np.array([-1.5, 0, 0.05]),
-    orientation=np.array([0, 0, 0, 1]),
+    orientation=np.array([1, 0, 0, 0]),
 )
 
 stretch = Articulation(prim_paths_expr="/World/stretch", name="stretch")
@@ -199,7 +199,7 @@ if CAMERA_MODE != "none":
         prim_path=head_cam_prim,
         frequency=30,
         resolution=(640, 360),
-        orientation=rot_utils.euler_angles_to_quats(np.array([-90, 0, 0]), degrees=True),
+        orientation=rot_utils.euler_angles_to_quats(np.array([0, 0, 0]), degrees=True),
     )
     head_cam.initialize()
     head_cam.set_focal_length(1.5)
@@ -223,7 +223,7 @@ from geometry_msgs.msg import Twist, TransformStamped
 from sensor_msgs.msg import JointState, Image, CameraInfo
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64, Float64MultiArray
-from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
+from tf2_ros import TransformBroadcaster
 
 # Joints accepting streamed velocity commands on /<prefix>/joint_velocity_cmd
 # (Float64MultiArray carries no names, so this ORDER is the contract with the
@@ -358,8 +358,6 @@ class StretchROS(Node):
                 CameraInfo, "/head_camera/depth/camera_info", 10)
         self.pub_odom = self.create_publisher(Odometry, "/odom", 10)
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.static_tf = StaticTransformBroadcaster(self)
-        self._publish_static_tf()
 
     def cmd_vel_cb(self, msg):
         # Just latch the twist; integrate_base (called every sim step) applies it.
@@ -569,46 +567,6 @@ class StretchROS(Node):
                 msg.twist.twist.angular.z = dyaw / dt
         self._odom_prev = (t, float(p[0]), float(p[1]), yaw)
         self.pub_odom.publish(msg)
-
-    def _publish_static_tf(self):
-        # base_link -> laser, from the URDF joint_laser (xyz 0.004 0 0.1664,
-        # yaw pi). The fixed "laser" link is merged out of the articulation on
-        # URDF import, so it is not in body_names -- publish it here.
-        now = self.get_clock().now().to_msg()
-        tfs = [self._make_tf(now, "base_link", "laser",
-                             np.array([0.004, 0.0, 0.1664]),
-                             np.array([0.0, 0.0, 1.0, 0.0]))]  # x,y,z,w -> yaw pi
-        camera_tf = self._camera_static_tf(now)
-        if camera_tf is not None:
-            tfs.append(camera_tf)
-        self.static_tf.sendTransform(tfs)
-
-    def _camera_static_tf(self, stamp):
-        """Static tf from link_head_tilt to camera_color_optical_frame.
-
-        The camera is rigidly mounted on link_head_tilt, which itself moves with
-        the head joints -- publish_tf covers that dynamic base_link->link_head_tilt
-        edge. This fixed mount is therefore computed once, from the current camera
-        and head-link world poses. Returns None if there is no camera or the head
-        link is absent from the articulation.
-        """
-        if self.head_cam is None:
-            return None
-        head_tilt_idx = next(
-            (i for i, n in enumerate(self.body_names) if "link_head_tilt" in n), None)
-        if head_tilt_idx is None:
-            return None
-        lt = _as_np(self.robot._physics_view.get_link_transforms()).reshape(-1, 7)
-        p_head, q_head = lt[head_tilt_idx, :3], lt[head_tilt_idx, 3:7]  # xyz, xyzw
-        cam_p, cam_q_wxyz = self.head_cam.get_world_pose(camera_axes="ros")
-        cam_p = _as_np(cam_p)
-        w, x, y, z = _as_np(cam_q_wxyz)          # get_world_pose is scalar-first
-        cam_q = np.array([x, y, z, w])           # -> scalar-last (x, y, z, w)
-        q_head_inv = _qconj(q_head)
-        p_rel = _qrot(q_head_inv, cam_p - p_head)
-        q_rel = _qmul(q_head_inv, cam_q)
-        return self._make_tf(stamp, self.body_names[head_tilt_idx],
-                             "camera_color_optical_frame", p_rel, q_rel)
 
     def publish_tf(self):
         # World pose of every link: (num_links, 7) = x, y, z, qx, qy, qz, qw.

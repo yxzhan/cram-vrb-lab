@@ -4,27 +4,14 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Status1
+        - /Global Options1
       Splitter Ratio: 0.5
-    Tree Height: 330
-  - Class: rviz_common/Selection
-    Name: Selection
-  - Class: rviz_common/Tool Properties
-    Expanded:
-      - /2D Goal Pose1
-      - /Publish Point1
-    Name: Tool Properties
-    Splitter Ratio: 0.5886790156364441
+    Tree Height: 365
   - Class: rviz_common/Views
     Expanded:
       - /Current View1
     Name: Views
     Splitter Ratio: 0.5
-  - Class: rviz_common/Time
-    Experimental: false
-    Name: Time
-    SyncMode: 0
-    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -43,163 +30,14 @@ Visualization Manager:
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 50
+      Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
-      Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: MarkerArray
-      Namespaces:
-        __closest_points__: true
-        armchair: true
-        base_imu: true
-        base_link: true
-        bedside_table: true
-        cabinet1: true
-        cabinet10: true
-        cabinet10_drawer_bottom: true
-        cabinet10_drawer_middle: true
-        cabinet10_drawer_top: true
-        cabinet11: true
-        cabinet11_drawer_bottom: true
-        cabinet11_drawer_middle: true
-        cabinet11_drawer_top: true
-        cabinet1_coloksu_level4: true
-        cabinet1_coloksu_level5: true
-        cabinet1_door_top_left: true
-        cabinet1_drawer_bottom: true
-        cabinet1_drawer_middle: true
-        cabinet2: true
-        cabinet2_door_left: true
-        cabinet2_drawer_big: true
-        cabinet2_drawer_small: true
-        cabinet3: true
-        cabinet3_door_bottom_left: true
-        cabinet3_door_top_left: true
-        cabinet4: true
-        cabinet4_door_bottom: true
-        cabinet4_door_top: true
-        cabinet5: true
-        cabinet5_drawer_bottom: true
-        cabinet5_drawer_middle: true
-        cabinet5_drawer_top: true
-        cabinet6: true
-        cabinet6_drawer_bottom: true
-        cabinet6_drawer_middle: true
-        cabinet6_drawer_top: true
-        cabinet7: true
-        cabinet7_door_bottom_left: true
-        cabinet8: true
-        cabinet8_drawer_bottom: true
-        cabinet8_drawer_middle: true
-        cabinet9: true
-        cabinet9_drawer_bottom: true
-        cabinet9_drawer_middle: true
-        cabinet9_drawer_top: true
-        camera_link: true
-        caster_link: true
-        coffe_machine: true
-        coffee_table: true
-        coffee_table_drawer: true
-        cooktop: true
-        countertop: true
-        dishwasher_drawer_middle: true
-        gripper_camera_link: true
-        handle_cab10_b: true
-        handle_cab10_m: true
-        handle_cab10_t: true
-        handle_cab11_b: true
-        handle_cab11_m: true
-        handle_cab11_t: true
-        handle_cab1_drawer_bottom: true
-        handle_cab1_drawer_mid: true
-        handle_cab1_top_door: true
-        handle_cab2_door: true
-        handle_cab3_door_bottom: true
-        handle_cab3_door_top: true
-        handle_cab4_door_bottom: true
-        handle_cab5_b: true
-        handle_cab5_m: true
-        handle_cab5_t: true
-        handle_cab6_b: true
-        handle_cab6_m: true
-        handle_cab6_t: true
-        handle_cab7: true
-        handle_cab7_middle: true
-        handle_cab8: true
-        handle_cab9_b: true
-        handle_cab9_m: true
-        handle_cab9_t: true
-        island_back: true
-        island_countertop: true
-        island_waterfall_left: true
-        island_waterfall_right: true
-        laser: true
-        link_arm_l0: true
-        link_arm_l1: true
-        link_arm_l2: true
-        link_arm_l3: true
-        link_arm_l4: true
-        link_aruco_d405: true
-        link_aruco_fingertip_left: true
-        link_aruco_fingertip_right: true
-        link_aruco_inner_wrist: true
-        link_aruco_left_base: true
-        link_aruco_right_base: true
-        link_aruco_shoulder: true
-        link_aruco_top_wrist: true
-        link_gripper_finger_left: true
-        link_gripper_finger_right: true
-        link_gripper_fingertip_left: true
-        link_gripper_fingertip_right: true
-        link_gripper_s3_body: true
-        link_head: true
-        link_head_nav_cam: true
-        link_head_pan: true
-        link_head_tilt: true
-        link_left_wheel: true
-        link_lift: true
-        link_mast: true
-        link_right_wheel: true
-        link_wrist_pitch: true
-        link_wrist_roll: true
-        link_wrist_yaw: true
-        link_wrist_yaw_bottom: true
-        oven: true
-        respeaker_base: true
-        side_A_left: true
-        side_A_rb: true
-        side_A_rt: true
-        sink: true
-        sofa: true
-        table_area_main: true
-        tap_body: true
-        tap_handle: true
-        useless_underbar_a: true
-        useless_underbar_b: true
-        wall_coloksu_wall1: true
-        wall_coloksu_wall2: true
-        wall_coloksu_wall3: true
-        wall_coloksu_wall4: true
-        walls: true
-        wardrobe: true
-        wardrobe_door_left: true
-        wardrobe_door_left_handle: true
-        wardrobe_door_right: true
-        wardrobe_door_right_handle: true
-        windows: true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /semworld/viz_marker
       Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
       Filter (blacklist): ""
       Filter (whitelist): ""
-      Frame Timeout: 90
+      Frame Timeout: 15
       Frames:
         All Enabled: true
         apartment_root:
@@ -556,9 +394,9 @@ Visualization Manager:
           Value: true
         windows:
           Value: true
-      Marker Scale: 1
+      Marker Scale: 0.5
       Name: TF
-      Show Arrows: false
+      Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
@@ -742,145 +580,164 @@ Visualization Manager:
                 {}
               laser:
                 {}
+              link_arm_l0:
+                link_aruco_inner_wrist:
+                  {}
+                link_aruco_top_wrist:
+                  {}
+              link_arm_l1:
+                {}
+              link_arm_l2:
+                {}
+              link_arm_l3:
+                {}
               link_aruco_left_base:
                 {}
               link_aruco_right_base:
                 {}
+              link_gripper_finger_left:
+                link_aruco_fingertip_left:
+                  {}
+                link_gripper_fingertip_left:
+                  {}
+              link_gripper_finger_right:
+                link_aruco_fingertip_right:
+                  {}
+                link_gripper_fingertip_right:
+                  {}
+              link_head_pan:
+                {}
+              link_head_tilt:
+                camera_bottom_screw_frame:
+                  camera_link:
+                    camera_accel_frame:
+                      camera_accel_optical_frame:
+                        {}
+                    camera_color_frame:
+                      camera_color_optical_frame:
+                        {}
+                    camera_depth_frame:
+                      camera_depth_optical_frame:
+                        {}
+                    camera_gyro_frame:
+                      camera_gyro_optical_frame:
+                        {}
+                    camera_infra1_frame:
+                      camera_infra1_optical_frame:
+                        {}
+                    camera_infra2_frame:
+                      camera_infra2_optical_frame:
+                        {}
+                link_head_nav_cam:
+                  {}
               link_left_wheel:
                 {}
+              link_lift:
+                link_arm_l4:
+                  {}
+                link_aruco_shoulder:
+                  {}
               link_mast:
                 link_head:
-                  link_head_pan:
-                    link_head_tilt:
-                      camera_bottom_screw_frame:
-                        camera_link:
-                          camera_accel_frame:
-                            camera_accel_optical_frame:
-                              {}
-                          camera_color_frame:
-                            camera_color_optical_frame:
-                              {}
-                          camera_depth_frame:
-                            camera_depth_optical_frame:
-                              {}
-                          camera_gyro_frame:
-                            camera_gyro_optical_frame:
-                              {}
-                          camera_infra1_frame:
-                            camera_infra1_optical_frame:
-                              {}
-                          camera_infra2_frame:
-                            camera_infra2_optical_frame:
-                              {}
-                      link_head_nav_cam:
-                        {}
-                link_lift:
-                  link_arm_l4:
-                    link_arm_l3:
-                      link_arm_l2:
-                        link_arm_l1:
-                          link_arm_l0:
-                            link_aruco_inner_wrist:
-                              {}
-                            link_aruco_top_wrist:
-                              {}
-                            link_wrist_yaw:
-                              link_wrist_yaw_bottom:
-                                link_wrist_pitch:
-                                  link_wrist_roll:
-                                    link_straight_gripper:
-                                      link_gripper_s3_body:
-                                        gripper_camera_bottom_screw_frame:
-                                          gripper_camera_link:
-                                            gripper_camera_color_frame:
-                                              gripper_camera_color_optical_frame:
-                                                {}
-                                            gripper_camera_depth_frame:
-                                              gripper_camera_depth_optical_frame:
-                                                {}
-                                            gripper_camera_infra1_frame:
-                                              gripper_camera_infra1_optical_frame:
-                                                {}
-                                            gripper_camera_infra2_frame:
-                                              gripper_camera_infra2_optical_frame:
-                                                {}
-                                        link_aruco_d405:
-                                          {}
-                                        link_grasp_center:
-                                          {}
-                                        link_gripper_finger_left:
-                                          link_aruco_fingertip_left:
-                                            {}
-                                          link_gripper_fingertip_left:
-                                            {}
-                                        link_gripper_finger_right:
-                                          link_aruco_fingertip_right:
-                                            {}
-                                          link_gripper_fingertip_right:
-                                            {}
-                                    link_wrist_quick_connect:
-                                      {}
-                  link_aruco_shoulder:
-                    {}
+                  {}
                 respeaker_base:
                   {}
               link_right_wheel:
                 {}
+              link_wrist_pitch:
+                {}
+              link_wrist_roll:
+                link_straight_gripper:
+                  link_gripper_s3_body:
+                    gripper_camera_bottom_screw_frame:
+                      gripper_camera_link:
+                        gripper_camera_color_frame:
+                          gripper_camera_color_optical_frame:
+                            {}
+                        gripper_camera_depth_frame:
+                          gripper_camera_depth_optical_frame:
+                            {}
+                        gripper_camera_infra1_frame:
+                          gripper_camera_infra1_optical_frame:
+                            {}
+                        gripper_camera_infra2_frame:
+                          gripper_camera_infra2_optical_frame:
+                            {}
+                    link_aruco_d405:
+                      {}
+                    link_grasp_center:
+                      {}
+                link_wrist_quick_connect:
+                  {}
+              link_wrist_yaw:
+                link_wrist_yaw_bottom:
+                  {}
       Update Interval: 0
       Value: true
-    - Class: rviz_default_plugins/Image
+    - Alpha: 1
+      Auto Size:
+        Auto Size Factor: 1
+        Value: true
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/DepthCloud
+      Color: 255; 255; 255
+      Color Image Topic: /head_camera/image_raw
+      Color Transformer: RGB8
+      Color Transport Hint: raw
+      Decay Time: 0
+      Depth Map Topic: /head_camera/depth/image_raw
+      Depth Map Transport Hint: raw
       Enabled: true
-      Max Value: 1
-      Median window: 5
-      Min Value: 0
-      Name: Image
-      Normalize Range: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Name: DepthCloud
+      Occlusion Compensation:
+        Occlusion Time-Out: 30
+        Value: false
+      Position Transformer: XYZ
+      Queue Size: 5
+      Reliability Policy: Best effort
+      Selectable: true
+      Size (Pixels): 3
+      Style: Flat Squares
+      Topic Filter: true
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /head_camera/image_raw
+        Value: /semworld/viz_marker
       Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: map
+    Fixed Frame: odom
     Frame Rate: 30
   Name: root
   Tools:
     - Class: rviz_default_plugins/Interact
       Hide Inactive Objects: true
     - Class: rviz_default_plugins/MoveCamera
-    - Class: rviz_default_plugins/Select
     - Class: rviz_default_plugins/FocusCamera
     - Class: rviz_default_plugins/Measure
       Line color: 128; 128; 0
-    - Class: rviz_default_plugins/SetInitialPose
-      Covariance x: 0.25
-      Covariance y: 0.25
-      Covariance yaw: 0.06853891909122467
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /initialpose
-    - Class: rviz_default_plugins/SetGoal
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /goal_pose
-    - Class: rviz_default_plugins/PublishPoint
-      Single click: true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /clicked_point
   Transformation:
     Current:
       Class: rviz_default_plugins/TF
@@ -888,43 +745,35 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 7.087372779846191
+      Distance: 5.752192974090576
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.25888681411743164
-        Y: -0.06421566009521484
-        Z: 0.021816253662109375
+        X: -2.029094696044922
+        Y: -0.29695558547973633
+        Z: 1.5535262823104858
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6600363254547119
+      Pitch: 0.3800002634525299
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.2551145553588867
+      Yaw: 3.471816062927246
     Saved: ~
 Window Geometry:
   Displays:
-    collapsed: false
-  Height: 850
-  Hide Left Dock: false
-  Hide Right Dock: true
-  Image:
-    collapsed: false
-  QMainWindow State: 000000ff00000000fd000000040000000000000156000002b8fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003b000001d3000000c700fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d0061006700650100000214000000df0000001600ffffff000000010000010f000002b4fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003b000002b4000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000003c70000003efc0100000002fb0000000800540069006d00650100000000000003c70000025300fffffffb0000000800540069006d006501000000000000045000000000000000000000026b000002b800000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
-  Selection:
-    collapsed: false
-  Time:
-    collapsed: false
-  Tool Properties:
-    collapsed: false
-  Views:
     collapsed: true
-  Width: 967
-  X: 1940
-  Y: 78
+  Height: 800
+  Hide Left Dock: true
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd000000010000000000000156000002cafc0200000003fb0000000c00430061006d006500720061000000003b000000bb0000000000000000fb000000100044006900730070006c006100790073000000003b000002ca000000c700fffffffb0000000a0056006900650077007300000001f100000114000000a000ffffff000003d8000002ca00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Views:
+    collapsed: false
+  Width: 984
+  X: 0
+  Y: 657

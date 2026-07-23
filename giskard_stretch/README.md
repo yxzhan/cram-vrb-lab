@@ -50,9 +50,11 @@ clients:
 - **Head camera** (one RGBD sensor, for perception — not the control loop):
   `apartment.py --camera {rgb,depth,both,none}` selects the streams (rgb ->
   `/head_camera/image_raw`, depth -> `/head_camera/depth/image_raw` as 32FC1
-  metres). Images are stamped in `camera_color_optical_frame`, published as a
-  static tf under the dynamic `link_head_tilt` (so it tracks the head joints), so
-  they resolve in TF for perception/pointclouds. From a notebook:
+  metres), plus `camera_info` for both. Images are stamped in
+  `camera_color_optical_frame`, which the giskard server already broadcasts as
+  part of the Stretch URDF tf tree (REP-103 optical), so they resolve in TF for
+  perception/pointclouds — the sim must **not** also publish that frame (two
+  parents break tf). From a notebook:
   `start_isaac_sim(camera="both")`. Because the camera drives RTX rendering,
   `--camera none` (or `ISAAC_NO_CAMERA=1`) plus `ISAAC_HEADLESS=1` /
   `ISAAC_RENDER=0` let a machine with no usable GPU display still run the control
