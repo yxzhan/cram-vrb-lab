@@ -1,0 +1,27 @@
+# Keep the Docker build context small and reproducible. Everything the image
+# needs is either built inside the image or copied explicitly by the Dockerfile.
+
+# Git metadata. CRAM versions are pinned via the submodule checkout and no
+# package uses setuptools_scm (versions come from `__version__` attrs), so .git
+# is not needed at build time.
+**/.git
+
+# Python build artifacts / virtualenvs. The image builds its own CRAM .venv via
+# `uv sync`; copying the host one would drag in host-specific paths.
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+
+# The ROS 2 workspace is built inside the image by setup_ros_workspace.sh, not
+# copied from the host. The host copy also carries a hand-made json_msgs that
+# would duplicate the one in cram_ros2_packages.
+ros2_ws
+
+# Editor / agent state.
+.claude
+.idea
+.vscode

@@ -2,21 +2,61 @@
 
 Controls the Stretch robot simulated by `apartment.py` through
 [giskardpy](../cognitive_robot_abstract_machine/giskardpy) (closed-loop
-whole-body QP control). Purely additive integration: no changes to giskardpy
-core or semantic_digital_twin.
+whole-body QP control), using the **real-robot interface shape** so the sim
+exercises the same giskard code path as physical hardware. Two ways to drive it:
+
+- **`giskard_demo.ipynb`** — low-level: hand-build giskard `MotionStatechart`s
+  (joint / gripper / Cartesian / base goals). You say *how* to move.
+- **`cram_demo.ipynb`** — high-level: **CRAM** plans (park arm, move torso,
+  navigate, …). You say *what* to achieve and CRAM binds it to giskard motions
+  at run time.
+
+Purely additive integration: no changes to giskardpy core or
+semantic_digital_twin.
 
 ## Architecture
 
 ```
-Isaac Sim (apartment.py)                              giskard server (this dir)
-  /stretch/joint_states       ─────────────────────►  sync_joint_state_topic
-  /odom                       ─────────────────────►  sync_odometry_topic (DiffDrive)
-  /stretch/cmd_vel            ◄─────────────────────  base Twist (closed loop)
-  /stretch/joint_velocity_cmd ◄─────────────────────  joint velocities (Float64MultiArray, ~20 Hz)
+Isaac Sim (apartment.py)                          giskard server (giskard_stretch_isaac.py)
+  /stretch/joint_states       ───────────────────►  sync_joint_state_topic
+  /odom (odom→base_link, GT)  ───────────────────►  sync_odometry_topic (DiffDrive)
+  TF (odom→base_link→links)                         + loads apartment.urdf into its world
+  /stretch/cmd_vel            ◄───────────────────  base Twist (closed loop)
+  /stretch/joint_velocity_cmd ◄───────────────────  joint velocities (Float64MultiArray, ~15 Hz)
+  /stretch/gripper_command    ◄───────────────────  gripper Float64 (native, bypasses giskard)
+  /head_camera/image_raw            (rgb8)          head camera, per --camera (perception, not control)
+  /head_camera/depth/image_raw      (32FC1, m)
 
-  giskard_demo.ipynb ── JsonAction(/giskard/command) ──► giskard
+localization stand-in (giskard_stretch_isaac.py: start_localization_stand_in)
+  map→odom (static identity)  ───────────────────►  sync_6dof_joint_with_tf_frame
+
+clients:
+  giskard_demo.ipynb        MotionStatechart ── JsonAction(/giskard/command) ───►  giskard
+  cram_demo.ipynb           CRAM plan       ─── GiskardWrapper.execute ──────────►  giskard
 ```
 
+- **Real-robot interface** (`StretchRealStyleInterface`): giskard consumes
+  `map→odom` (localization) from tf, wheel odometry from `/odom`, and joint
+  states from the joint-state topic, and streams base/joint velocities back —
+  exactly as against physical hardware. On a real robot only the odometry source
+  and the localization node change. Here the sim publishes ground-truth `/odom`
+  and a static identity `map→odom` stands in for AMCL/SLAM, so `map == odom ==
+  the Isaac world frame`.
+- **Apartment in the world** (`WorldWithStretchAndApartmentDiffDrive`): the
+  giskard world giskard plans in also contains the apartment (walls/furniture),
+  so motions can avoid it. See the collision-avoidance sections in both
+  notebooks. The apartment `.urdf` is aligned to the Isaac `.usda` scene by
+  `apartment_world_config.apartment_pose_in_map`.
+- **Head camera** (one RGBD sensor, for perception — not the control loop):
+  `apartment.py --camera {rgb,depth,both,none}` selects the streams (rgb ->
+  `/head_camera/image_raw`, depth -> `/head_camera/depth/image_raw` as 32FC1
+  metres). Images are stamped in `camera_color_optical_frame`, published as a
+  static tf under the dynamic `link_head_tilt` (so it tracks the head joints), so
+  they resolve in TF for perception/pointclouds. From a notebook:
+  `start_isaac_sim(camera="both")`. Because the camera drives RTX rendering,
+  `--camera none` (or `ISAAC_NO_CAMERA=1`) plus `ISAAC_HEADLESS=1` /
+  `ISAAC_RENDER=0` let a machine with no usable GPU display still run the control
+  path.
 - giskard's closed loop outputs **joint velocities**; the sim integrates them
   into position targets every physics step
   (`StretchROS.integrate_joint_velocities`: exact sim dt, anti-windup lead
@@ -52,30 +92,40 @@ cd ..
 cp binder/cram_python_wrapper.sh ~/.local/bin/
 mkdir -p ~/.local/share/jupyter/kernels/cram
 cp binder/cram-kernel.json ~/.local/share/jupyter/kernels/cram/kernel.json
-# giskard's action interface package (workspace at the repo root)
-source /opt/ros/jazzy/setup.bash
-cd ros2_ws && colcon build --packages-select json_msgs
+# Full CRAM ROS 2 workspace at ./ros2_ws: robot descriptions (incl. the
+# iai_apartment/iai_kitchen meshes apartment.urdf needs), json_msgs, robokudo
+# msgs, ... git-lfs must be initialized first so the mesh LFS objects come down.
+git lfs install
+OVERLAY_WS=$PWD/ros2_ws \
+  bash cognitive_robot_abstract_machine/.github/docker/setup_ros_workspace.sh
 ```
 
 ## Running
 
-Everything can be started from `giskard_demo.ipynb` (kernel: **CRAM**) — it
-launches the simulation and the giskard server as background
-processes and demonstrates joint-space, gripper, Cartesian (arm-only /
-whole-body), and base goals.
+Everything can be started from either notebook (kernel: **CRAM**) — each one's
+first cell calls `demo_launch.start_isaac_sim()` / `start_giskard_server()` to
+launch the simulation and the giskard server (background processes, or pass
+`terminal=True` to open each in a `gnome-terminal` window):
+
+- `giskard_demo.ipynb` — joint-space, gripper, Cartesian (arm-only / whole-body),
+  base goals, and external collision avoidance against the apartment.
+- `cram_demo.ipynb` — the same robot driven by high-level CRAM plans
+  (park arms, move torso, gripper, navigate).
 
 Manual start (source `/opt/ros/jazzy/setup.bash` and
 `ros2_ws/install/setup.bash` in every terminal):
 
 1. **Isaac Sim**: `binder/isaacsim_python_wrapper.sh giskard_stretch/apartment.py`
-2. **giskard server** (wait for the `giskard is ready` log line):
+2. **giskard server** (wait for the `giskard is ready` log line; it also launches
+   the static `map→odom` localization stand-in):
    ```bash
    cognitive_robot_abstract_machine/.venv/bin/python giskard_stretch/giskard_stretch_isaac.py
    ```
 
-For custom motion goals follow `giskard_client.py` + the notebook; task types
-live in `giskardpy/src/giskardpy/motion_statechart/tasks/`, worked examples in
-`giskardpy/doc/examples/`.
+For custom motion goals follow `giskard_client.py` + `giskard_demo.ipynb`; task
+types live in `giskardpy/src/giskardpy/motion_statechart/tasks/`, worked examples
+in `giskardpy/doc/examples/`. For high-level plans follow `cram_demo.ipynb`; CRAM
+actions live in `coraplex/src/coraplex/robot_plans/actions/`.
 
 ## Measured accuracy and known issues
 
@@ -91,22 +141,30 @@ live in `giskardpy/src/giskardpy/motion_statechart/tasks/`, worked examples in
   `giskard_client.add_end_conditions` (hold the reached goal for 1 s while the
   QP winds velocities down to zero) stops much more precisely. Use it in your
   own scripts.
+- **External collision avoidance** (against the apartment) is opt-in per motion:
+  `giskard_demo.ipynb`'s `run_goal(..., avoid_collisions=True)` and
+  `cram_demo.ipynb`'s `real_robot(collision_avoidance=True)` add an
+  `ExternalCollisionAvoidance` goal. If the robot refuses to move it may start
+  inside a collision body's violated distance — re-check
+  `apartment_world_config.apartment_pose_in_map` or disable avoidance.
 - **Self-collision avoidance is not enabled**
   (`WorldWithStretchConfigDiffDrive.setup_collision_config` is empty). Do not
   command EE goals that press into the robot's own body (e.g. straight down
-  with a bent wrist). Contact can physically jam the gripper fingers; reset
-  through the sim's native interface:
+  with a bent wrist). Contact can physically jam the gripper fingers; reset the
+  gripper through the sim's native interface:
   ```bash
   ros2 topic pub --once /stretch/gripper_command std_msgs/msg/Float64 "{data: 0.05}"
   ```
-  and use `/stretch/joint_command` to move back to a neutral pose if needed.
+  To move a twisted arm back, send a giskard joint goal (the raw
+  `/stretch/joint_command` position path was removed in the slim-down).
 - giskard is a **whole-body controller**: even an "arm-only" goal may slightly
   adjust other controlled joints (including the base).
-- Do not teleop manually while giskard is executing (`/stretch/cmd_vel` and
-  `/stretch/joint_command` would fight each other).
-- giskard and the sim both publish TF (`odom -> base_link` has two sources);
-  this only affects RViz display — the control path does not consume TF.
-- QP `target_frequency=20` (`giskard_stretch_isaac.py`); below 20 the library
-  warns. The sim-side integrator's `VEL_MAX_LEAD` (0.02, apartment.py) clamps
-  how far targets may lead the measured position, which also prevents force
-  build-up on contact.
+- Do not teleop the base manually (`/stretch/cmd_vel`) while giskard is
+  executing — the two twist streams would fight each other.
+- TF has redundant `odom→base_link` publishers (the sim and giskard's own world
+  viz); this only affects RViz display — the control path consumes `/odom` (topic)
+  and `map→odom` (tf), not `odom→base_link` tf.
+- QP `target_frequency=15` (`giskard_stretch_isaac.py`); below 20 the library
+  warns (harmless here). The sim-side integrator's `VEL_MAX_LEAD` (0.02,
+  apartment.py) clamps how far targets may lead the measured position, which also
+  prevents force build-up on contact.

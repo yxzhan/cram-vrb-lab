@@ -39,6 +39,33 @@ def add_end_conditions(msc, task, timeout_seconds=60.0, settle_seconds=1.0):
     return timeout
 
 
+def add_external_collision_avoidance(
+    msc, max_velocity=0.2, cancel_if_collision_violated=True
+):
+    """Add whole-body external collision avoidance to the motion statechart `msc`.
+
+    The robot then keeps a safety distance from every other collision-enabled body
+    in giskard's world -- the apartment walls and furniture, once the environment
+    is loaded (see `apartment_world_config.WorldWithStretchAndApartmentDiffDrive`).
+    The robot is auto-detected from the world, and the distances come from the
+    `AvoidExternalCollisions` rule the semantic Stretch model registers.
+
+    `cancel_if_collision_violated` aborts the motion if a body is already inside the
+    violated distance (rather than pushing through it); set it False to keep
+    commanding the goal while merely braking near obstacles. Returns the added node.
+    """
+    from giskardpy.motion_statechart.goals.collision_avoidance import (
+        ExternalCollisionAvoidance,
+    )
+
+    node = ExternalCollisionAvoidance(
+        max_velocity=max_velocity,
+        cancel_if_collision_violated=cancel_if_collision_violated,
+    )
+    msc.add_node(node)
+    return node
+
+
 def connect(node_name: str = "giskard_demo_client"):
     rospy.init_node(node_name)
     # Join the spinner thread and destroy the node at interpreter exit;

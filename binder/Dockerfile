@@ -25,12 +25,6 @@ RUN $ISAACSIM_PYTHON_EXE -m pip install \
 COPY --chown=${NB_USER}:users binder/isaacsim_python_wrapper.sh /home/jovyan/.local/bin/isaacsim_python_wrapper.sh
 COPY --chown=${NB_USER}:users binder/isaac-kernel.json /opt/conda/share/jupyter/kernels/isaac-sim/kernel.json
 
-# Install jupyter kernel of the CRAM venv python. The wrapper sources the ROS 2
-# environment and the ros2_ws overlay, so notebooks on this kernel can import
-# rclpy/json_msgs without the jupyter server having sourced anything.
-COPY --chown=${NB_USER}:users binder/cram_python_wrapper.sh /home/jovyan/.local/bin/cram_python_wrapper.sh
-COPY --chown=${NB_USER}:users binder/cram-kernel.json /opt/conda/share/jupyter/kernels/cram/kernel.json
-
 # Install UV (builds the giskard venv below)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 #===========================================================#
@@ -40,55 +34,64 @@ RUN curl -LO https://github.com/yxzhan/vscode_remote_desktop/releases/download/v
     code-server --install-extension vscode-remote-desktop-0.1.0.vsix && \
     rm vscode-remote-desktop-0.1.0.vsix
 
-#============= Fast-DDS serialization stack upgrade =============#
-# The base image pins the ROS core at an older snapshot; the Isaac Sim ROS2
-# bridge needs a consistent (newer) Fast-CDR/Fast-DDS stack, otherwise node
-# creation aborts inside Fast-DDS's XTypes type-cache with
-#   eprosima::fastcdr::exception::BadParamException
-# Upgrade the whole serialization stack together to keep fastcdr and fastrtps
-# consistent. Also installs the ROS packages needed by the giskard demo
-# (rclpy_message_converter, py_trees_ros).
-RUN sudo apt-get update && \
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        ros-jazzy-fastcdr \
-        ros-jazzy-fastrtps \
-        ros-jazzy-rmw-fastrtps-cpp \
-        ros-jazzy-rmw-fastrtps-shared-cpp \
-        ros-jazzy-rosidl-dynamic-typesupport \
-        ros-jazzy-rosidl-dynamic-typesupport-fastrtps \
-        ros-jazzy-rosidl-typesupport-fastrtps-cpp \
-        ros-jazzy-rosidl-typesupport-fastrtps-c \
-        ros-jazzy-rclpy-message-converter \
-        ros-jazzy-py-trees \
-        ros-jazzy-py-trees-ros && \
-    sudo rm -rf /var/lib/apt/lists/*
-#================================================================#
-
-# Python packages for the jupyter env
+# Python packages for the jupyter env (rarely changes).
 USER ${NB_USER}
 COPY --chown=${NB_USER}:users binder/requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
-# Copy repo content to the image.
-# NOTE: requires the repo to be cloned with --recurse-submodules so the
-# cognitive_robot_abstract_machine submodule is present in the build context.
-USER ${NB_USER}
 ENV REPO_DIR=${HOME}/cram_isaacsim
 RUN mkdir -p ${REPO_DIR}
-COPY --chown=${NB_USER}:users . ${REPO_DIR}/
-RUN git config --global --add safe.directory ${REPO_DIR}
 
-# Build the giskard python environment (uv workspace -> .venv inside the
-# submodule) and add the two packages giskardpy's ROS2 middleware needs that
-# are not in its workspace lockfile.
+#============= Pinned CRAM stack (deps + ROS workspace) =============#
+# The two builds below are expensive but depend only on the version-pinned
+# cognitive_robot_abstract_machine submodule, so they stay cached when only the
+# top-level demo scripts change (those are copied last, further down). The
+# submodule is copied ALONE here; the rest of the repo is copied afterwards.
+# NOTE: requires the repo to be cloned with --recurse-submodules so the
+# submodule is present in the build context.
+COPY --chown=${NB_USER}:users cognitive_robot_abstract_machine ${REPO_DIR}/cognitive_robot_abstract_machine
+RUN git config --global --add safe.directory ${REPO_DIR}/cognitive_robot_abstract_machine
+
+# CRAM python environment (uv workspace -> .venv inside the submodule) plus the
+# two packages giskardpy's ROS2 middleware needs that are not in its lockfile.
 RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
     ~/.local/bin/uv sync && \
-    .venv/bin/pip install py_trees argcomplete nest_asyncio
+    .venv/bin/pip install nest_asyncio
 
-# Build the json_msgs ROS workspace (JsonAction used by giskard's action server
-# and python client).
-RUN cd ${REPO_DIR}/ros2_ws && \
-    bash -c "source /opt/ros/jazzy/setup.bash && colcon build --packages-select json_msgs"
+# Full CRAM ROS 2 workspace (overlay at ${REPO_DIR}/ros2_ws). The setup script
+# lives in the submodule and clones the code-iai / cram2 description and message
+# repos, colcon-building them with --merge-install. Notably it brings in:
+#   - iai_maps -> iai_apartment / iai_kitchen, whose meshes apartment.urdf needs
+#     (without them the apartment collision geometry cannot be resolved),
+#   - cram_ros2_packages, which provides json_msgs (JsonAction) used by giskard's
+#     action server and python client.
+# git-lfs is initialized before the clones so the mesh LFS objects are smudged in
+# (otherwise the mesh files are left as LFS pointer stubs). The host's ros2_ws is
+# excluded via .dockerignore and rebuilt fresh here, so there is no hand-made
+# json_msgs to collide with the one in cram_ros2_packages.
+RUN sudo apt-get update && \
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git-lfs && \
+    git lfs install && \
+    OVERLAY_WS=${REPO_DIR}/ros2_ws \
+        bash ${REPO_DIR}/cognitive_robot_abstract_machine/.github/docker/setup_ros_workspace.sh && \
+    sudo rm -rf /var/lib/apt/lists/*
+#===================================================================#
+
+# Install jupyter kernel of the CRAM venv python. The wrapper sources the ROS 2
+# environment and the ros2_ws overlay, so notebooks on this kernel can import
+# rclpy/json_msgs without the jupyter server having sourced anything.
+COPY --chown=${NB_USER}:users binder/cram_python_wrapper.sh /home/jovyan/.local/bin/cram_python_wrapper.sh
+COPY --chown=${NB_USER}:users binder/cram-kernel.json /opt/conda/share/jupyter/kernels/cram/kernel.json
+
+# Pinned assets (Isaac USD scenes, stretch_urdf submodule) - rarely change.
+COPY --chown=${NB_USER}:users assets ${REPO_DIR}/assets
+
+# Frequently-changing top-level content (demo scripts, notebooks, wrappers).
+# Copied LAST so editing them reuses every cached layer above.
+COPY --chown=${NB_USER}:users giskard_stretch ${REPO_DIR}/giskard_stretch
+COPY --chown=${NB_USER}:users binder ${REPO_DIR}/binder
+COPY --chown=${NB_USER}:users README.md ${REPO_DIR}/README.md
+RUN git config --global --add safe.directory ${REPO_DIR}
 
 # Set Jupyterlab default directory
 WORKDIR ${REPO_DIR}

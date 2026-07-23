@@ -3,14 +3,17 @@
 
 Minimal simulation side of the giskard demo (server config and demo
 notebook live in this same directory):
-- publishes /stretch/joint_states, /odom, TF, /head_camera/image_raw
-- subscribes /stretch/cmd_vel + /cmd_vel (Twist, kinematic base with a 1 s
-  watchdog), /stretch/joint_command (position targets),
+- publishes /stretch/joint_states, /odom, TF (odom->base_link->links + static
+  base_link->laser and link_head_tilt->camera_color_optical_frame), and the head
+  camera per --camera: /head_camera/image_raw (rgb8) and/or
+  /head_camera/depth/image_raw (32FC1, metres), stamped in camera_color_optical_frame
+- subscribes /stretch/cmd_vel (Twist, kinematic base with a 1 s watchdog),
   /stretch/joint_velocity_cmd (giskard's streamed velocities, integrated into
   position targets each sim step), /stretch/gripper_command (Float64)
 
-Run with the Isaac Sim python (or from giskard_demo.ipynb):
-    binder/isaacsim_python_wrapper.sh giskard_stretch/apartment.py
+Run with the Isaac Sim python (or from giskard_demo.ipynb / cram_demo.ipynb):
+    binder/isaacsim_python_wrapper.sh giskard_stretch/apartment.py [--camera MODE]
+where MODE is rgb (default), depth, both, or none.
 """
 
 import math
@@ -39,11 +42,33 @@ if os.path.isdir(source_dir) and not os.path.isdir(target_dir):
     shutil.copytree(source_dir, target_dir)
 
 
+# ------------------------------------------------------------- Command-line args
+# Parsed (and stripped from sys.argv) before SimulationApp, which parses argv too.
+import argparse
+
+_parser = argparse.ArgumentParser(description="Isaac Sim Stretch apartment scene")
+_parser.add_argument(
+    "--camera",
+    choices=["rgb", "depth", "both", "none"],
+    default="rgb" if os.environ.get("ISAAC_NO_CAMERA", "0") == "1" else "rgb",
+    help="head-camera mode: publish the rgb image, the depth image, both, or run "
+    "no camera at all (default: rgb, or none when ISAAC_NO_CAMERA=1).",
+)
+ARGS, _unknown_args = _parser.parse_known_args()
+sys.argv = sys.argv[:1] + _unknown_args  # hide --camera from SimulationApp
+
+CAMERA_MODE = ARGS.camera
+WANT_RGB = CAMERA_MODE in ("rgb", "both")
+WANT_DEPTH = CAMERA_MODE in ("depth", "both")
+
+
 # ---------------------------------------------------------------- SimulationApp
 from isaacsim import SimulationApp
 
 simulation_app = SimulationApp({
-    "headless": False,
+    # Headless is opt-in via ISAAC_HEADLESS=1 (e.g. on a machine with no usable
+    # X display); the interactive viewer is the default.
+    "headless": os.environ.get("ISAAC_HEADLESS", "0") == "1",
     "hide_ui": False,
     "width": 1280,
     "height": 960,
@@ -51,6 +76,12 @@ simulation_app = SimulationApp({
     "display_options": 3286,  # show the default grid
 })
 print("SimulationApp Ready!")
+
+# Rendering can be disabled with ISAAC_RENDER=0 to run headless physics only,
+# e.g. on a machine whose GPU/display cannot do RTX rendering. The control path
+# (joint states, odometry, TF from the physics view) needs no rendering; the
+# head camera does, so ISAAC_RENDER=0 implies no camera image.
+RENDER = os.environ.get("ISAAC_RENDER", "1") != "0"
 
 
 # ------------------------------------------------------------------- The scene
@@ -89,7 +120,7 @@ for i in range(1, 4):
 viewports.set_camera_view(eye=np.array([-6.5, -2, 2]), target=np.array([-1, 1, 1]))
 
 for _ in range(30):
-    my_world.step(render=True)
+    my_world.step(render=RENDER)
 
 
 # ---------------------------------------------------------------- The Stretch
@@ -106,7 +137,7 @@ stretch = Articulation(prim_paths_expr="/World/stretch", name="stretch")
 my_world.reset()
 
 for _ in range(10):
-    my_world.step(render=True)
+    my_world.step(render=RENDER)
 
 # --- Fix the telescoping arm joint gains ---
 # The arm extends through four serially-chained prismatic joints
@@ -143,33 +174,42 @@ stretch.set_gains(kps=np.zeros((1, 2)), kds=np.zeros((1, 2)), joint_indices=whee
 stretch.set_friction_coefficients(np.zeros((1, 2)), joint_indices=wheel_dof)
 
 for _ in range(3):
-    my_world.step(render=True)
+    my_world.step(render=RENDER)
 print("Stretch ready: arm gains raised, base kinematic.")
 
 
 # ------------------------------------------------------------------ Head camera
-import omni
-from pxr import UsdGeom
-from isaacsim.sensors.camera import Camera
-import isaacsim.core.utils.numpy.rotations as rot_utils
+# One RGBD sensor; --camera selects which streams it publishes (rgb / depth /
+# both / none). The camera does RTX raytraced rendering, so `none` (equivalently
+# ISAAC_NO_CAMERA=1) also lets machines whose GPU/display cannot render it run
+# the control path, which does not use the camera.
+head_cam = None
+if CAMERA_MODE != "none":
+    import omni
+    from pxr import UsdGeom
+    from isaacsim.sensors.camera import Camera
+    import isaacsim.core.utils.numpy.rotations as rot_utils
 
-stage = omni.usd.get_context().get_stage()
+    stage = omni.usd.get_context().get_stage()
 
-head_cam_prim = ("/World/stretch/link_head_tilt/camera_bottom_screw_frame/"
-                 "camera_link/camera_color_frame/camera_color_optical_frame")
-UsdGeom.Camera.Define(stage, head_cam_prim)
-head_cam = Camera(
-    prim_path=head_cam_prim,
-    frequency=30,
-    resolution=(640, 360),
-    orientation=rot_utils.euler_angles_to_quats(np.array([-90, 0, 0]), degrees=True),
-)
-head_cam.initialize()
-head_cam.set_focal_length(1.5)
-head_cam.set_clipping_range(near_distance=0.01, far_distance=20)
+    head_cam_prim = ("/World/stretch/link_head_tilt/camera_bottom_screw_frame/"
+                     "camera_link/camera_color_frame/camera_color_optical_frame")
+    UsdGeom.Camera.Define(stage, head_cam_prim)
+    head_cam = Camera(
+        prim_path=head_cam_prim,
+        frequency=30,
+        resolution=(640, 360),
+        orientation=rot_utils.euler_angles_to_quats(np.array([-90, 0, 0]), degrees=True),
+    )
+    head_cam.initialize()
+    head_cam.set_focal_length(1.5)
+    head_cam.set_clipping_range(near_distance=0.01, far_distance=20)
+    if WANT_DEPTH:
+        # distance_to_image_plane = metric depth (m) read back by get_depth().
+        head_cam.add_distance_to_image_plane_to_frame()
 
-for _ in range(20):
-    my_world.step(render=True)
+    for _ in range(20):
+        my_world.step(render=RENDER)
 
 # Gripper finger DOFs for /stretch/gripper_command.
 finger_dof = np.array([stretch.get_dof_index("joint_gripper_finger_left"),
@@ -180,7 +220,7 @@ finger_dof = np.array([stretch.get_dof_index("joint_gripper_finger_left"),
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, TransformStamped
-from sensor_msgs.msg import JointState, Image
+from sensor_msgs.msg import JointState, Image, CameraInfo
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64, Float64MultiArray
 from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
@@ -239,10 +279,13 @@ def _as_np(x):
 
 
 class StretchROS(Node):
-    def __init__(self, robot, head_cam=None, finger_dof=None, prefix="stretch"):
+    def __init__(self, robot, head_cam=None, finger_dof=None, prefix="stretch",
+                 publish_rgb=True, publish_depth=False):
         super().__init__(f"{prefix}_ros")
         self.robot = robot
         self.head_cam = head_cam
+        self.publish_rgb = publish_rgb
+        self.publish_depth = publish_depth
         self.finger_dof = finger_dof
 
         # Differential base geometry (for the cosmetic wheel spin only -- the
@@ -295,15 +338,24 @@ class StretchROS(Node):
         # that are hundreds of milliseconds old -- the controller answers the
         # perceived lag with overshoot and eventually a limit cycle.
         self.create_subscription(Twist, f"/{prefix}/cmd_vel", self.cmd_vel_cb, 1)
-        self.create_subscription(Twist, "/cmd_vel", self.cmd_vel_cb, 1)
-        self.create_subscription(JointState, f"/{prefix}/joint_command",
-                                 self.joint_cmd_cb, 10)
         self.create_subscription(Float64MultiArray, f"/{prefix}/joint_velocity_cmd",
                                  self.joint_vel_cmd_cb, 1)
         self.create_subscription(Float64, f"/{prefix}/gripper_command",
                                  self.gripper_cmd_cb, 10)
         self.pub_js = self.create_publisher(JointState, f"/{prefix}/joint_states", 10)
-        self.pub_head_img = self.create_publisher(Image, "/head_camera/image_raw", 10)
+        # Intrinsics are constant; build the CameraInfo once and just restamp it.
+        self._camera_info = (
+            self._build_camera_info() if self.head_cam is not None else None)
+        if self.publish_rgb:
+            self.pub_head_img = self.create_publisher(
+                Image, "/head_camera/image_raw", 10)
+            self.pub_head_info = self.create_publisher(
+                CameraInfo, "/head_camera/camera_info", 10)
+        if self.publish_depth:
+            self.pub_head_depth = self.create_publisher(
+                Image, "/head_camera/depth/image_raw", 10)
+            self.pub_head_depth_info = self.create_publisher(
+                CameraInfo, "/head_camera/depth/camera_info", 10)
         self.pub_odom = self.create_publisher(Odometry, "/odom", 10)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.static_tf = StaticTransformBroadcaster(self)
@@ -401,12 +453,6 @@ class StretchROS(Node):
         self.robot.set_joint_velocities(
             np.array([[vl, vr]]), joint_indices=self.wheel_dof)
 
-    def joint_cmd_cb(self, msg):
-        target = self.robot.get_joint_positions()[0]
-        for name, pos in zip(msg.name, msg.position):
-            target[self.robot.get_dof_index(name)] = pos
-        self.robot.set_joint_position_targets([target])
-
     def gripper_cmd_cb(self, msg):
         tgt = self.robot.get_joint_positions()[0].copy()
         for i in self.finger_dof:
@@ -420,8 +466,10 @@ class StretchROS(Node):
         msg.position = self.robot.get_joint_positions()[0].tolist()
         self.pub_js.publish(msg)
 
-    def _image_msg(self, rgb):
+    def _image_msg(self, rgb, stamp):
         msg = Image()
+        msg.header.stamp = stamp
+        msg.header.frame_id = "camera_color_optical_frame"
         msg.height = rgb.shape[0]
         msg.width = rgb.shape[1]
         msg.encoding = "rgb8"
@@ -429,13 +477,63 @@ class StretchROS(Node):
         msg.data = np.ascontiguousarray(rgb, dtype=np.uint8).tobytes()
         return msg
 
+    def _depth_msg(self, depth, stamp):
+        depth = _as_np(depth).astype(np.float32)
+        if depth.ndim == 3:
+            depth = depth[..., 0]
+        # REP 118: no-data pixels in a 32FC1 depth image are NaN. Isaac returns
+        # +inf for rays that hit nothing (beyond the far clip); mark them invalid
+        # so depth_image_proc / RViz DepthCloud skip them instead of projecting
+        # points at infinity.
+        depth = np.where(np.isfinite(depth), depth, np.nan)
+        msg = Image()
+        msg.header.stamp = stamp
+        msg.header.frame_id = "camera_color_optical_frame"
+        msg.height, msg.width = int(depth.shape[0]), int(depth.shape[1])
+        msg.encoding = "32FC1"
+        msg.step = msg.width * 4
+        msg.data = np.ascontiguousarray(depth, dtype=np.float32).tobytes()
+        return msg
+
+    def _build_camera_info(self):
+        """CameraInfo (pinhole intrinsics) for the head camera, computed once.
+
+        Needed by RViz's DepthCloud / depth_image_proc to turn the depth image
+        into a point cloud. fx/fy come from the USD focal length and aperture.
+        """
+        width, height = 640, 360
+        focal = self.head_cam.get_focal_length()
+        fx = width * focal / self.head_cam.get_horizontal_aperture()
+        fy = height * focal / self.head_cam.get_vertical_aperture()
+        cx, cy = width / 2.0, height / 2.0
+        info = CameraInfo()
+        info.header.frame_id = "camera_color_optical_frame"
+        info.width, info.height = width, height
+        info.distortion_model = "plumb_bob"
+        info.d = [0.0, 0.0, 0.0, 0.0, 0.0]
+        info.k = [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
+        info.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+        info.p = [fx, 0.0, cx, 0.0, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0]
+        return info
+
+    def _publish_camera_info(self, pub, stamp):
+        self._camera_info.header.stamp = stamp
+        pub.publish(self._camera_info)
+
     def publish_camera(self):
         if self.head_cam is None:
             return
-        rgba = self.head_cam.get_rgba()
-        if rgba is None or len(rgba) == 0:
-            return
-        self.pub_head_img.publish(self._image_msg(rgba[:, :, :3]))
+        stamp = self.get_clock().now().to_msg()
+        if self.publish_rgb:
+            rgba = self.head_cam.get_rgba()
+            if rgba is not None and len(rgba) > 0:
+                self.pub_head_img.publish(self._image_msg(rgba[:, :, :3], stamp))
+                self._publish_camera_info(self.pub_head_info, stamp)
+        if self.publish_depth:
+            depth = self.head_cam.get_depth()
+            if depth is not None and len(depth) > 0:
+                self.pub_head_depth.publish(self._depth_msg(depth, stamp))
+                self._publish_camera_info(self.pub_head_depth_info, stamp)
 
     def publish_odom(self):
         """Publish odom->base_link as nav_msgs/Odometry (ground-truth = perfect
@@ -477,10 +575,40 @@ class StretchROS(Node):
         # yaw pi). The fixed "laser" link is merged out of the articulation on
         # URDF import, so it is not in body_names -- publish it here.
         now = self.get_clock().now().to_msg()
-        t = self._make_tf(now, "base_link", "laser",
-                          np.array([0.004, 0.0, 0.1664]),
-                          np.array([0.0, 0.0, 1.0, 0.0]))  # x,y,z,w -> yaw pi
-        self.static_tf.sendTransform([t])
+        tfs = [self._make_tf(now, "base_link", "laser",
+                             np.array([0.004, 0.0, 0.1664]),
+                             np.array([0.0, 0.0, 1.0, 0.0]))]  # x,y,z,w -> yaw pi
+        camera_tf = self._camera_static_tf(now)
+        if camera_tf is not None:
+            tfs.append(camera_tf)
+        self.static_tf.sendTransform(tfs)
+
+    def _camera_static_tf(self, stamp):
+        """Static tf from link_head_tilt to camera_color_optical_frame.
+
+        The camera is rigidly mounted on link_head_tilt, which itself moves with
+        the head joints -- publish_tf covers that dynamic base_link->link_head_tilt
+        edge. This fixed mount is therefore computed once, from the current camera
+        and head-link world poses. Returns None if there is no camera or the head
+        link is absent from the articulation.
+        """
+        if self.head_cam is None:
+            return None
+        head_tilt_idx = next(
+            (i for i, n in enumerate(self.body_names) if "link_head_tilt" in n), None)
+        if head_tilt_idx is None:
+            return None
+        lt = _as_np(self.robot._physics_view.get_link_transforms()).reshape(-1, 7)
+        p_head, q_head = lt[head_tilt_idx, :3], lt[head_tilt_idx, 3:7]  # xyz, xyzw
+        cam_p, cam_q_wxyz = self.head_cam.get_world_pose(camera_axes="ros")
+        cam_p = _as_np(cam_p)
+        w, x, y, z = _as_np(cam_q_wxyz)          # get_world_pose is scalar-first
+        cam_q = np.array([x, y, z, w])           # -> scalar-last (x, y, z, w)
+        q_head_inv = _qconj(q_head)
+        p_rel = _qrot(q_head_inv, cam_p - p_head)
+        q_rel = _qmul(q_head_inv, cam_q)
+        return self._make_tf(stamp, self.body_names[head_tilt_idx],
+                             "camera_color_optical_frame", p_rel, q_rel)
 
     def publish_tf(self):
         # World pose of every link: (num_links, 7) = x, y, z, qx, qy, qz, qw.
@@ -518,7 +646,8 @@ class StretchROS(Node):
 
 
 stretch_node = StretchROS(stretch, head_cam=head_cam, finger_dof=finger_dof,
-                          prefix="stretch")
+                          prefix="stretch",
+                          publish_rgb=WANT_RGB, publish_depth=WANT_DEPTH)
 print("StretchROS node ready.")
 
 
@@ -528,7 +657,7 @@ try:
         dt = my_world.get_rendering_dt()
         stretch_node.integrate_base(dt)
         stretch_node.integrate_joint_velocities(dt)
-        my_world.step(render=True)
+        my_world.step(render=RENDER)
         # Drain ALL pending callbacks (spin_once handles only ONE message per
         # call; with giskard streaming two topics at ~20 Hz each, a single
         # spin per sim tick falls behind and commands arrive stale).
