@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
-ros2_ws/build/
-ros2_ws/install/
-ros2_ws/log/
+# Generated ROS2 workspace: third-party clones + colcon build output, rebuilt by
+# cognitive_robot_abstract_machine/.github/docker/setup_ros_workspace.sh (see README)
+ros2_ws/
 .ipynb_checkpoints/
