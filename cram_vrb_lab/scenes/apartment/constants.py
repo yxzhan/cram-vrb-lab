@@ -20,13 +20,14 @@ APARTMENT_URDF_PATH = str(
 )
 """Location of the apartment description shipped with coraplex."""
 
-USD_PRIM_POSITION_IN_MAP = (-6.0, 0.0, 0.0701)
+USD_PRIM_POSITION_IN_MAP = (-6.0, 5.0, 0.0701)
 """Where Isaac places the apartment USD prim, in the giskard ``map`` frame.
 
-From ``apartment.py`` (``create_prim(prim_path="/World/Apartment",
-position=[-6, 5, 0.0701])``). Giskard's ``map`` frame coincides with the Isaac
-world frame because the localization joint is identity (``map == odom``) and
-``/odom`` reports the ground-truth pose.
+Consumed by BOTH the Isaac side (``isaac_scene.load_apartment_scene``) and the
+giskard side (:func:`apartment_pose_in_map`), so the rendered apartment and
+giskard's collision world stay aligned by construction. Giskard's ``map`` frame
+coincides with the Isaac world frame because the localization joint is identity
+(``map == odom``) and ``/odom`` reports the ground-truth pose.
 """
 
 APARTMENT_URDF_OFFSET_IN_USD = (9.5, 2.5, 0.0)

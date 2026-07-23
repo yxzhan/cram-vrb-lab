@@ -9,7 +9,7 @@ import numpy as np
 from isaacsim.core.utils import viewports
 from isaacsim.core.utils.prims import create_prim, define_prim
 
-from .constants import APARTMENT_USD_PATH, GRID_USD_PATH
+from .constants import APARTMENT_USD_PATH, GRID_USD_PATH, USD_PRIM_POSITION_IN_MAP
 
 
 def load_apartment_scene(world, render):
@@ -21,7 +21,7 @@ def load_apartment_scene(world, render):
     create_prim(
         usd_path=APARTMENT_USD_PATH,
         prim_path="/World/Apartment",
-        position=np.array([-6, 5, 0.0701]),
+        position=np.array(USD_PRIM_POSITION_IN_MAP),
     )
 
     # Lights so the raytraced scene is not black
