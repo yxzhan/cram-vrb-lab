@@ -152,7 +152,7 @@ def start_rviz(rviz_config=None, terminal=False):
     rviz_config = Path(rviz_config) if rviz_config else DEFAULT_RVIZ_CONFIG
     return _launch(
         "rviz2",
-        ["rviz2", "-d", str(rviz_config)],
+        ["vglrun", "rviz2", "-d", str(rviz_config)],
         RVIZ_LOG,
         kill_stale="rviz2",
         terminal=terminal,

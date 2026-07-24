@@ -25,12 +25,12 @@ def load_apartment_scene(world, render):
     )
 
     # Lights so the raytraced scene is not black
-    for i in range(1, 4):
+    for i in range(0, 4):
         create_prim(
             prim_path=f"/World/Ground/Light_{i}",
             prim_type="SphereLight",
             attributes={"inputs:intensity": 10000},
-            position=(-4 * i, 0, 2),
+            position=(2 - 4 * i, 0, 2),
         )
 
     viewports.set_camera_view(eye=np.array([-6.5, -2, 2]), target=np.array([-1, 1, 1]))

@@ -3,10 +3,10 @@
 
 Simulation side of the giskard demo (composition of the cram_vrb_lab building
 blocks; the giskard server and the demo notebooks live in this same directory):
-- publishes /stretch/joint_states, /odom, TF (odom->base_link->links), and the
-  head camera per --camera: /head_camera/image_raw (rgb8) and/or
-  /head_camera/depth/image_raw (32FC1, metres) with camera_info, stamped in
-  camera_color_optical_frame (that frame comes from the giskard server's URDF tf tree)
+- publishes /stretch/joint_states, /odom, TF (odom->base_link->links, plus the
+  fixed camera-frame chain as static tf), and the head camera per --camera:
+  /head_camera/image_raw (rgb8) and/or /head_camera/depth/image_raw (32FC1,
+  metres) with camera_info, stamped in camera_color_optical_frame
 - subscribes /stretch/cmd_vel (Twist, kinematic base with a 1 s watchdog),
   /stretch/joint_velocity_cmd (giskard's streamed velocities, integrated into
   position targets each sim step), /stretch/gripper_command (Float64)

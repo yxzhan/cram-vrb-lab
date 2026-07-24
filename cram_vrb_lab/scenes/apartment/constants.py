@@ -32,9 +32,15 @@ coincides with the Isaac world frame because the localization joint is identity
 (``map == odom``) and ``/odom`` reports the ground-truth pose.
 """
 
-APARTMENT_URDF_OFFSET_IN_USD = (9.5, -2.5, 0.0)
+APARTMENT_URDF_OFFSET_IN_USD = (9.526, -2.594, -0.0701)
 """Translation, in the (world-aligned) USD-origin frame, applied to
-``apartment.urdf`` after the yaw rotation to line its root up with the USD origin."""
+``apartment.urdf`` after the yaw rotation to line its root up with the USD origin.
+
+x/y refined by matching ``handle_cab10_m`` (URDF forward kinematics) against the
+``SM_Kitchen_10_Drawer_02/SM_Kitchen_Handle19`` prim's world-space bbox center in
+``apartmentICRA.usda``; the drawer body confirms the same x/y residual. z is left
+untouched: the two probes disagree there (link-origin vs bbox-center conventions),
+so vertical alignment should be judged in RViz, not from this measurement."""
 
 APARTMENT_URDF_YAW_IN_USD = math.pi
 """Rotation about Z applied to ``apartment.urdf`` to line it up with the USD origin;

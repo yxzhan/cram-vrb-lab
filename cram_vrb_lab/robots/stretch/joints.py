@@ -7,7 +7,9 @@ Float64MultiArray velocity command carries no joint names, only values in
 this order.
 """
 
+import math
 import os
+import xml.etree.ElementTree as ElementTree
 
 from cram_vrb_lab.paths import ASSETS_DIR
 
@@ -37,8 +39,10 @@ RGB_IMAGE_TOPIC = "/head_camera/image_raw"
 RGB_INFO_TOPIC = "/head_camera/camera_info"
 DEPTH_IMAGE_TOPIC = "/head_camera/depth/image_raw"
 DEPTH_INFO_TOPIC = "/head_camera/depth/camera_info"
-# Camera messages are stamped in this frame; it exists in the tf tree because
-# the giskard server publishes it from the (patched) URDF.
+# Camera messages are stamped in this frame; the sim node publishes it (and the
+# rest of the fixed camera-frame chain) as static tf so it stays available even
+# while the giskard server pauses its own tf during goal execution
+# (see StretchROS.publish_camera_static_tf).
 CAMERA_FRAME_ID = "camera_color_optical_frame"
 
 # Official URDF from the hello-robot/stretch_urdf submodule (SE3 with the DW3
@@ -92,3 +96,59 @@ def load_patched_urdf() -> str:
     mesh_dir = os.path.join(_STRETCH_URDF_DIR, "meshes")
     urdf = urdf.replace('filename="./meshes/', f'filename="{mesh_dir}/')
     return urdf
+
+
+# Physics link the head-camera frames hang off (published by the sim's per-step
+# tf); the fixed frames below it are what the sim republishes as static tf.
+HEAD_CAMERA_ROOT_LINK = "link_head_tilt"
+# The optical frames the head-camera images are stamped in; the point cloud is in
+# camera_color_optical_frame (see CAMERA_FRAME_ID).
+HEAD_CAMERA_OPTICAL_FRAMES = (
+    "camera_color_optical_frame",
+    "camera_depth_optical_frame",
+)
+
+
+def _rpy_to_quaternion(roll: float, pitch: float, yaw: float):
+    """URDF fixed-axis rpy (R = Rz(yaw) Ry(pitch) Rx(roll)) to (x, y, z, w)."""
+    cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+    cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+    cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
+    return (
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+        cr * cp * cy + sr * sp * sy,
+    )
+
+
+def head_camera_static_transforms():
+    """Fixed head-camera frames as ``(parent, child, (x,y,z), (qx,qy,qz,qw))``.
+
+    Sourced from the same patched URDF the giskard server parses, so the sim can
+    republish these frames (which giskard drops while executing a goal) with an
+    identity match to giskard's own tf -- never a conflicting second parent. Only
+    the chains from :data:`HEAD_CAMERA_ROOT_LINK` down to
+    :data:`HEAD_CAMERA_OPTICAL_FRAMES` are returned; the head link itself is
+    published by the sim's per-step tf and is not included.
+    """
+    root = ElementTree.fromstring(load_patched_urdf())
+    parent_joint = {}
+    for joint in root.findall("joint"):
+        origin = joint.find("origin")
+        xyz = tuple(float(v) for v in (origin.get("xyz", "0 0 0")).split())
+        rpy = tuple(float(v) for v in (origin.get("rpy", "0 0 0")).split())
+        parent_joint[joint.find("child").get("link")] = (
+            joint.find("parent").get("link"),
+            xyz,
+            _rpy_to_quaternion(*rpy),
+        )
+
+    transforms = {}
+    for leaf in HEAD_CAMERA_OPTICAL_FRAMES:
+        child = leaf
+        while child != HEAD_CAMERA_ROOT_LINK and child in parent_joint:
+            parent, xyz, quat = parent_joint[child]
+            transforms[child] = (parent, child, xyz, quat)
+            child = parent
+    return list(transforms.values())

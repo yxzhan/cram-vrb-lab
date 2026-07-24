@@ -23,7 +23,7 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import Float64, Float64MultiArray
-from tf2_ros import TransformBroadcaster
+from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 from cram_vrb_lab.paths import ASSETS_DIR
 from cram_vrb_lab.sim.ros_utils import (
@@ -48,6 +48,7 @@ from .joints import (
     RGB_IMAGE_TOPIC,
     RGB_INFO_TOPIC,
     VELOCITY_CMD_TOPIC,
+    head_camera_static_transforms,
 )
 
 STRETCH_USD_PATH = str(ASSETS_DIR / "stretch" / "stretch.usd")
@@ -93,6 +94,19 @@ def spawn_stretch(world, render, position=(-1.5, 0, 0.05)):
     arm_max_vel = 0.1   # m/s per segment
     stretch.set_max_joint_velocities(
         np.full((1, len(arm_dof)), arm_max_vel), joint_indices=arm_dof)
+
+    # --- Fix the gripper finger joint gains ---
+    # Same auto-generation problem as the arm: the tiny finger links get
+    # stiffness ~1.1 / damping ~4e-4. The velocity integrator caps the target
+    # lead at 0.02 rad (StretchROS.VEL_MAX_LEAD), so the drive torque on a
+    # streamed gripper goal is stiffness * 0.02 -- the same order as the
+    # fingers' own gravity load, and the fingers crawl. Raise the gains so the
+    # small lead produces authoritative torque.
+    finger_joints = ["joint_gripper_finger_left", "joint_gripper_finger_right"]
+    finger_dof = np.array([stretch.get_dof_index(n) for n in finger_joints])
+    stretch.set_gains(kps=np.full((1, len(finger_dof)), 200.0),
+                      kds=np.full((1, len(finger_dof)), 2.0),
+                      joint_indices=finger_dof)
 
     # --- Make the base kinematic ---
     # The differential-drive wheels have an in-place-rotation deadzone in
@@ -226,6 +240,8 @@ class StretchROS(Node):
                 CameraInfo, DEPTH_INFO_TOPIC, 10)
         self.pub_odom = self.create_publisher(Odometry, ODOM_TOPIC, 10)
         self.tf_broadcaster = TransformBroadcaster(self)
+        self.static_tf_broadcaster = StaticTransformBroadcaster(self)
+        self.publish_camera_static_tf()
 
     def cmd_vel_cb(self, msg):
         # Just latch the twist; integrate_base (called every sim step) applies it.
@@ -387,6 +403,28 @@ class StretchROS(Node):
                 msg.twist.twist.angular.z = dyaw / dt
         self._odom_prev = (t, float(p[0]), float(p[1]), yaw)
         self.pub_odom.publish(msg)
+
+    def publish_camera_static_tf(self):
+        """Publish the fixed head-camera frame chain as static tf.
+
+        The frames (camera_link ... camera_color_optical_frame /
+        camera_depth_optical_frame) hang off link_head_tilt, which the per-step
+        :meth:`publish_tf` already emits; the fixed frames below it normally come
+        from the giskard server, which drops them while executing a goal. Publishing
+        them here once (latched) keeps camera_color_optical_frame -- the frame the
+        head-camera images are stamped in -- available continuously.
+
+        The transforms come from the same patched URDF giskard parses, NOT from the
+        runtime USD prims: ``create_head_camera`` turns the camera_color_optical_frame
+        prim into a ``UsdGeom.Camera`` and rewrites its orientation, so its live
+        transform no longer carries the ROS optical rotation.
+        """
+        now = self.get_clock().now().to_msg()
+        tfs = [
+            make_tf(now, parent, child, xyz, quat)
+            for parent, child, xyz, quat in head_camera_static_transforms()
+        ]
+        self.static_tf_broadcaster.sendTransform(tfs)
 
     def publish_tf(self):
         # World pose of every link: (num_links, 7) = x, y, z, qx, qy, qz, qw.
