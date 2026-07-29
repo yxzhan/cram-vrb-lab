@@ -24,17 +24,15 @@ from semantic_digital_twin.world_description.shape_collection import ShapeCollec
 from semantic_digital_twin.world_description.world_entity import Body
 
 from .constants import (
+    APARTMENT_LAYOUT,
     CUBE_BODY_NAME,
     CUBE_COLOR,
     CUBE_POSE_TOPIC,
     CUBE_SIZE,
-    CUBE_START_POSITION,
     PEDESTAL_COLOR,
-    PEDESTAL_SIZE,
     PICK_PEDESTAL_BODY_NAME,
-    PICK_PEDESTAL_POSITION,
     PLACE_PEDESTAL_BODY_NAME,
-    PLACE_PEDESTAL_POSITION,
+    PropLayout,
 )
 
 
@@ -59,7 +57,7 @@ def _box_body(name, scale, color):
     )
 
 
-def add_props_to_twin(world):
+def add_props_to_twin(world, layout: PropLayout = APARTMENT_LAYOUT):
     """Add the cube and the two pedestals to ``world``; return the cube body.
 
     Idempotent: if the cube is already there (a re-run of the notebook cell
@@ -75,15 +73,16 @@ def add_props_to_twin(world):
         return existing[0]
 
     cube = _box_body(CUBE_BODY_NAME, (CUBE_SIZE,) * 3, CUBE_COLOR)
+    pedestal_size = layout.pedestal_size
     pedestals = [
-        (_box_body(PICK_PEDESTAL_BODY_NAME, PEDESTAL_SIZE, PEDESTAL_COLOR),
-         (*PICK_PEDESTAL_POSITION, PEDESTAL_SIZE[2] / 2)),
-        (_box_body(PLACE_PEDESTAL_BODY_NAME, PEDESTAL_SIZE, PEDESTAL_COLOR),
-         (*PLACE_PEDESTAL_POSITION, PEDESTAL_SIZE[2] / 2)),
+        (_box_body(PICK_PEDESTAL_BODY_NAME, pedestal_size, PEDESTAL_COLOR),
+         (*layout.pick_position, pedestal_size[2] / 2)),
+        (_box_body(PLACE_PEDESTAL_BODY_NAME, pedestal_size, PEDESTAL_COLOR),
+         (*layout.place_position, pedestal_size[2] / 2)),
     ]
 
     with world.modify_world():
-        for body, position in [(cube, CUBE_START_POSITION)] + pedestals:
+        for body, position in [(cube, layout.cube_start_position)] + pedestals:
             world.add_kinematic_structure_entity(body)
             world.add_connection(FixedConnection(
                 parent=world.root,

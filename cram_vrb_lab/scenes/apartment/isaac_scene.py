@@ -18,11 +18,11 @@ def load_apartment_scene(world, render):
     define_prim("/World/Ground", "Xform").GetReferences().AddReference(GRID_USD_PATH)
 
     # Apartment
-    # create_prim(
-    #     usd_path=APARTMENT_USD_PATH,
-    #     prim_path="/World/Apartment",
-    #     position=np.array(USD_PRIM_POSITION_IN_MAP),
-    # )
+    create_prim(
+        usd_path=APARTMENT_USD_PATH,
+        prim_path="/World/Apartment",
+        position=np.array(USD_PRIM_POSITION_IN_MAP),
+    )
 
     # Lights so the raytraced scene is not black
     for i in range(0, 4):

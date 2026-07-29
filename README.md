@@ -33,16 +33,23 @@ cram_vrb_lab/
 ├── sim/                # generic Isaac Sim infra: app bootstrap, ROS msg helpers
 ├── control/            # generic control infra: process launcher, giskard client/server helpers
 ├── robots/stretch/     # everything Stretch: joint/topic contract, sim node, giskard interface
+├── robots/panda/       # everything Panda: URDF patching, semantic model, sim node, giskard interface
 ├── scenes/apartment/   # everything apartment: asset paths + USD/URDF alignment, sim loader, giskard world
+├── scenes/empty/       # ground and lights, for a robot that needs no scenery
 └── scenes/props/       # manipulable props: a graspable cube + pedestals, in Isaac physics and in the twin
 ```
 
 Robot- and scene-specific facts each live in exactly one module: the joint-order
-wire contract in `robots/stretch/joints.py` (imported by both the sim node and
+wire contract in `robots/<robot>/joints.py` (imported by both the sim node and
 the giskard config) and the apartment placement in
 `scenes/apartment/constants.py` (imported by both the Isaac loader and the
 giskard world), so the rendered scene and giskard's collision world cannot
 drift apart.
+
+Adding a robot means adding one directory under `robots/`. The Panda is the
+worked example, and the smaller one: a joint/topic contract, a semantic model
+for the digital twin (`semantic_digital_twin` ships none for the Panda), a
+giskard world and interface config, and an Isaac Sim node.
 
 ## Quick start
 
@@ -51,11 +58,13 @@ git clone --recurse-submodules https://github.com/yxzhan/cram-vrb-lab.git
 # environment setup: see binder/Dockerfile (or run the image via binder/docker-compose.yml)
 ```
 
-Open `demos/stretch_pick_place_cram.ipynb` (kernel: **CRAM**) — it starts the
-simulation and the giskard server and runs the simplest full task, picking a
-cube off one pedestal and placing it on another. `demos/stretch_apartment_cram.ipynb`
-goes further, into the apartment and its drawers; for hand-built giskard motion
-goals use `demos/stretch_apartment_giskard.ipynb`.
+Open `demos/panda_pick_place_cram.ipynb` (kernel: **CRAM**) — it starts the
+simulation and the giskard server and runs the simplest full task end to end: a
+Franka Panda picks a cube off one stand and places it on another, ~3 mm from
+target. `demos/stretch_pick_place_cram.ipynb` is the same task on a mobile
+robot, `demos/stretch_apartment_cram.ipynb` goes further into the apartment and
+its drawers, and for hand-built giskard motion goals use
+`demos/stretch_apartment_giskard.ipynb`.
 
 Details and troubleshooting: `demos/README.md`.
 

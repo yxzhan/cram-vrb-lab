@@ -11,15 +11,21 @@ exercises the same giskard code path as physical hardware. Two ways to drive it:
 - **`stretch_apartment_cram.ipynb`** — high-level: **CRAM** plans (park arm,
   move torso, navigate, …). You say *what* to achieve and CRAM binds it to
   giskard motions at run time.
-- **`stretch_pick_place_cram.ipynb`** — the simplest manipulation task, and the
-  one to start from: grasp a cube off a pedestal, carry it 1.6 m, put it down.
-  The cube is a **real rigid body in Isaac** (`--props`), so the grasp has to
-  work in physics, not only in the twin; the sim publishes its true pose so
-  every step can be checked against what CRAM believes.
+- **`panda_pick_place_cram.ipynb`** — **the one to start from**: the simplest
+  manipulation task on the simplest robot. A Franka Panda bolted to the origin
+  of an empty scene grasps a cube off one stand and puts it on another. The cube
+  is a **real rigid body in Isaac**, so the grasp has to work in physics and not
+  only in the twin; the sim publishes its true pose, so every step can be checked
+  against what CRAM believes.
+- **`stretch_pick_place_cram.ipynb`** — the same task on the Stretch, in the
+  apartment: grasp a cube off a pedestal, drive 1.6 m holding it, put it down.
+  Everything the Panda demo does plus a mobile base, a telescoping arm and a
+  gripper whose pads swing on an arc — which is why it is the *second* one to
+  read.
 
 The demo scripts are thin composition layers over the `cram_vrb_lab` package:
-robot-specific code lives in `cram_vrb_lab/robots/stretch/`, scene-specific code
-in `cram_vrb_lab/scenes/apartment/`, generic infrastructure in
+robot-specific code lives in `cram_vrb_lab/robots/<robot>/`, scene-specific code
+in `cram_vrb_lab/scenes/<scene>/`, generic infrastructure in
 `cram_vrb_lab/sim/` and `cram_vrb_lab/control/`. Purely additive integration: no
 changes to giskardpy core or semantic_digital_twin.
 
@@ -91,22 +97,37 @@ clients:
   `cram_vrb_lab.robots.stretch.joints.CONTROLLED_JOINTS` (the velocity message
   carries no joint names; giskard side and sim side must match — both import
   this single list).
-- **Manipulable props** (`--props`, off by default because the pedestals stand
-  in floor the apartment demos navigate through): a graspable cube on a
-  pedestal plus a second pedestal to carry it to. Isaac gets rigid bodies with
-  mass and friction, the twin gets matching boxes, and both are built from the
-  one set of numbers in `cram_vrb_lab/scenes/props/constants.py` — the
-  apartment's USD/URDF alignment is only approximate, so props that hung off
-  apartment furniture would confuse a modelling error with a grasp failure. The
-  sim publishes the cube's true pose on `/props/pick_cube_pose` and as the tf
-  frame `pick_cube_gt`, which is the only way to tell a real grasp from CRAM
-  merely believing it grasped (`AttachNode` moves the twin's cube regardless).
-- **Gripper aperture** (`cram_vrb_lab/robots/stretch/gripper.py`): the semantic
-  Stretch model's `GripperState.OPEN` is finger angle 0.109 rad, which parts the
-  SG3 pads by only 3.6 cm — narrower than most things worth grasping, and the
-  grasp then fails for reasons that look like reach or approach-direction
-  problems. `open_gripper_to(robot, gap)` redefines that state in metres of pad
-  gap, on the robot instance, without touching the vendored model.
+- **Manipulable props** (`cram_vrb_lab/scenes/props/`, on the Stretch side behind
+  `--props` because the pedestals stand in floor the apartment demos navigate
+  through): a graspable cube on a pedestal plus a second pedestal to carry it
+  to. Isaac gets rigid bodies with mass and friction, the twin gets matching
+  boxes, and both are built from one `PropLayout` — the apartment's USD/URDF
+  alignment is only approximate, so props hung off apartment furniture would
+  confuse a modelling error with a grasp failure. The sim publishes the cube's
+  true pose on `/props/pick_cube_pose` and as the tf frame `pick_cube_gt`, which
+  is the only way to tell a real grasp from CRAM merely believing it grasped
+  (`AttachNode` moves the twin's cube regardless). One layout per scene:
+  `APARTMENT_LAYOUT` for the Stretch, `PANDA_LAYOUT` for the Panda's workspace.
+- **The Panda** (`cram_vrb_lab/robots/panda/`) is built entirely from the stock
+  `panda_arm_hand.urdf` that ships with Isaac's URDF importer — imported into the
+  stage at startup, so no converted USD is checked in, and parsed into the same
+  description giskard and the twin plan against. `semantic_model.py` supplies the
+  `Panda` robot description that `semantic_digital_twin` has no model for.
+- **Gripper aperture.** Both grippers needed their open width corrected, and in
+  both cases a too-narrow hand looks exactly like a reach or approach-direction
+  failure. For the Stretch (`robots/stretch/gripper.py`) the semantic model's
+  `GripperState.OPEN` is finger angle 0.109 rad, which parts the SG3 pads by only
+  3.6 cm — narrower than the 5 cm cube; `open_gripper_to(robot, gap)` redefines
+  that state in metres of pad gap, on the robot instance, without touching the
+  vendored model. The Panda's hand sets its own `GRIPPER_OPEN_TRAVEL`.
+- **Closing on an object** (`robots/panda/motions.py`). A gripper-close is a
+  joint-position goal, and under closed-loop control it is checked against the
+  *measured* finger positions — which a hand closing on something rigid never
+  reaches, so the grasp hangs forever holding the object. `PandaMoveGripper` ends
+  the close on "position reached **or** pushing for 3 s". The grip then has to
+  survive the gap between giskard goals, which is why
+  `StreamedVelocityIntegrator` lets nominated joints keep their leading target
+  instead of snapping it onto the measured position.
 
 ## One-time setup (already baked into the Docker image)
 
@@ -146,11 +167,18 @@ first cell calls `cram_vrb_lab.control.launcher.start_isaac_sim()` /
   plans (park arms, move torso, gripper, navigate).
 - `stretch_pick_place_cram.ipynb` — CRAM pick-and-place on the props;
   starts the sim with `start_isaac_sim(props=True)`.
+- `panda_pick_place_cram.ipynb` — **the pick-and-place that is verified working
+  end to end.** A Franka Panda bolted to the origin of an otherwise empty scene,
+  grasping a cube off one stand and placing it on another; a validated run ends
+  ~3 mm from the target. Its own sim and server scripts
+  (`panda_pick_place_sim.py`, `panda_pick_place_giskard_server.py`) and its own
+  topics, so it can run alongside the Stretch demos.
 
 Manual start (source `/opt/ros/jazzy/setup.bash` and
 `ros2_ws/install/setup.bash` in every terminal):
 
 1. **Isaac Sim**: `binder/isaacsim_python_wrapper.sh demos/stretch_apartment_sim.py`
+   (or `demos/panda_pick_place_sim.py`)
 2. **giskard server** (wait for the `giskard is ready` log line; it also launches
    the static `map→odom` localization stand-in):
    ```bash

@@ -26,6 +26,7 @@ from std_msgs.msg import Float64, Float64MultiArray
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 from cram_vrb_lab.paths import ASSETS_DIR
+from cram_vrb_lab.sim.velocity_integrator import StreamedVelocityIntegrator
 from cram_vrb_lab.sim.ros_utils import (
     as_np,
     build_camera_info,
@@ -196,18 +197,10 @@ class StretchROS(Node):
         # Streamed joint velocity commands (giskard closed-loop control):
         # integrated into position targets each sim step, see
         # integrate_joint_velocities.
-        self.VEL_CMD_TIMEOUT = 0.5   # s without a message -> hold position
-        self.VEL_MAX_LEAD = 0.02     # rad/m: max target lead over measured
-        self.vel_cmd_dof = np.array(
-            [robot.get_dof_index(j) for j in CONTROLLED_JOINTS])
-        dof_limits = robot.get_dof_limits()[0]
-        self._vel_dof_lower = dof_limits[self.vel_cmd_dof, 0]
-        self._vel_dof_upper = dof_limits[self.vel_cmd_dof, 1]
-        self._vel_cmd = None
-        self._vel_cmd_time = None
-        self._vel_targets = None
-        self._vel_was_zero = None
-        self._vel_last_tick = None
+        self.integrator = StreamedVelocityIntegrator(
+            robot, CONTROLLED_JOINTS,
+            holding_joints=["joint_gripper_finger_left",
+                            "joint_gripper_finger_right"])
 
         # TF: link names and the base link index
         self.body_names = list(robot.body_names)
@@ -250,63 +243,17 @@ class StretchROS(Node):
         self._cmd_time = time.time()
 
     def joint_vel_cmd_cb(self, msg):
-        if len(msg.data) != len(self.vel_cmd_dof):
+        if not self.integrator.accept(msg.data):
             self.get_logger().warning(
                 f"joint_velocity_cmd has {len(msg.data)} values, expected "
-                f"{len(self.vel_cmd_dof)}; dropping", throttle_duration_sec=5.0)
-            return
-        self._vel_cmd = np.asarray(msg.data, dtype=float)
-        self._vel_cmd_time = time.time()
+                f"{len(CONTROLLED_JOINTS)}; dropping", throttle_duration_sec=5.0)
 
     def integrate_joint_velocities(self, dt):
-        """Integrate streamed joint velocities into position targets (called
-        every sim step, like integrate_base). Silence beyond VEL_CMD_TIMEOUT
-        holds position (the drives latch the last targets).
-
-        Zero-velocity joints hold a FIXED target that is snapped to the
-        measured position once, on the transition to zero (this kills the
-        end-of-goal overshoot from a leading target). The target must NOT
-        keep following the measured position while the velocity stays zero:
-        with target == measured the position drive exerts no force, so a
-        gravity-loaded joint (joint_lift) sags a little every step and the
-        following target ratchets it all the way down.
-
-        Integration uses measured WALL-CLOCK time, not the nominal rendering
-        dt: giskard's QP plans in wall time, while a loaded sim steps slower
-        than its nominal rate. Integrating the nominal dt executes commands
-        at a load-dependent fraction of the commanded speed, which the
-        controller perceives as lag and answers with overshoot."""
-        now = time.time()
-        wall_dt, self._vel_last_tick = (
-            (min(now - self._vel_last_tick, 0.2), now)
-            if self._vel_last_tick is not None else (dt, now)
-        )
-        if self._vel_cmd is None:
-            return
-        if now - self._vel_cmd_time > self.VEL_CMD_TIMEOUT:
-            self._vel_targets = None
-            self._vel_was_zero = None
-            return
-        dt = wall_dt
-        measured = self.robot.get_joint_positions()[0][self.vel_cmd_dof]
-        if self._vel_targets is None:
-            self._vel_targets = measured.copy()
-            self._vel_was_zero = np.ones(len(self.vel_cmd_dof), dtype=bool)
-        zero = self._vel_cmd == 0.0
-        newly_zero = zero & ~self._vel_was_zero
-        # moving joints: integrate, with an anti-windup clamp around measured
-        moving = np.clip(self._vel_targets + self._vel_cmd * dt,
-                         measured - self.VEL_MAX_LEAD,
-                         measured + self.VEL_MAX_LEAD)
-        # zero-velocity joints: keep the held target (snap once when entering)
-        target = np.where(zero,
-                          np.where(newly_zero, measured, self._vel_targets),
-                          moving)
-        target = np.clip(target, self._vel_dof_lower, self._vel_dof_upper)
-        self._vel_was_zero = zero
-        self._vel_targets = target
-        self.robot.set_joint_position_targets(
-            target.reshape(1, -1), joint_indices=self.vel_cmd_dof)
+        """Integrate streamed joint velocities into position targets, called
+        every sim step like :meth:`integrate_base`. See
+        :class:`~cram_vrb_lab.sim.velocity_integrator.StreamedVelocityIntegrator`
+        for why this is not a plain Euler step."""
+        self.integrator.step(dt)
 
     def integrate_base(self, dt):
         """Kinematic base: dead-reckon the latched twist into the base pose and

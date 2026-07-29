@@ -26,35 +26,33 @@ from tf2_ros import TransformBroadcaster
 from cram_vrb_lab.sim.ros_utils import make_tf
 
 from .constants import (
+    APARTMENT_LAYOUT,
     CUBE_COLOR,
     CUBE_FRICTION,
     CUBE_GROUND_TRUTH_FRAME,
     CUBE_MASS,
     CUBE_POSE_TOPIC,
     CUBE_SIZE,
-    CUBE_START_POSITION,
     PEDESTAL_COLOR,
-    PEDESTAL_SIZE,
-    PICK_PEDESTAL_POSITION,
-    PLACE_PEDESTAL_POSITION,
     PROPS_FRAME_ID,
+    PropLayout,
 )
 
 PROPS_ROOT = "/World/Props"
 
 
-def _pedestal(name, xy):
+def _pedestal(name, xy, size):
     """One static pedestal, centred on ``xy``, standing on the floor."""
     return FixedCuboid(
         prim_path=f"{PROPS_ROOT}/{name}",
         name=name,
-        position=np.array([xy[0], xy[1], PEDESTAL_SIZE[2] / 2]),
-        scale=np.array(PEDESTAL_SIZE),
+        position=np.array([xy[0], xy[1], size[2] / 2]),
+        scale=np.array(size),
         color=np.array(PEDESTAL_COLOR),
     )
 
 
-def spawn_props(world, render):
+def spawn_props(world, render, layout: PropLayout = APARTMENT_LAYOUT):
     """Spawn the two pedestals and the graspable cube; return the cube prim.
 
     The cube is dropped in resting exactly on the pick pedestal's top face and
@@ -63,8 +61,8 @@ def spawn_props(world, render):
     """
     define_prim(PROPS_ROOT, "Xform")
 
-    _pedestal("pick_pedestal", PICK_PEDESTAL_POSITION)
-    _pedestal("place_pedestal", PLACE_PEDESTAL_POSITION)
+    _pedestal("pick_pedestal", layout.pick_position, layout.pedestal_size)
+    _pedestal("place_pedestal", layout.place_position, layout.pedestal_size)
 
     # Isaac averages the two materials in a contact, so the cube alone cannot set
     # the friction of the finger/cube pair -- it can only pull the average up.
@@ -79,7 +77,7 @@ def spawn_props(world, render):
     cube = DynamicCuboid(
         prim_path=f"{PROPS_ROOT}/pick_cube",
         name="pick_cube",
-        position=np.array(CUBE_START_POSITION),
+        position=np.array(layout.cube_start_position),
         scale=np.array([CUBE_SIZE] * 3),
         color=np.array(CUBE_COLOR),
         mass=CUBE_MASS,
@@ -90,8 +88,8 @@ def spawn_props(world, render):
     for _ in range(30):  # let the cube settle onto the pedestal
         world.step(render=render)
 
-    print(f"Props ready: cube at {CUBE_START_POSITION}, pedestals at "
-          f"{PICK_PEDESTAL_POSITION} and {PLACE_PEDESTAL_POSITION}.")
+    print(f"Props ready: cube at {layout.cube_start_position}, pedestals at "
+          f"{layout.pick_position} and {layout.place_position}.")
     return cube
 
 

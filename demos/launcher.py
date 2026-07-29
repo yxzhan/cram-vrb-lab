@@ -34,6 +34,10 @@ DEFAULT_SIM_SCRIPT = REPO / "demos" / "stretch_apartment_sim.py"
 DEFAULT_SERVER_SCRIPT = REPO / "demos" / "stretch_apartment_giskard_server.py"
 DEFAULT_RVIZ_CONFIG = REPO / "demos" / "stretch.rviz"
 
+PANDA_SIM_SCRIPT = REPO / "demos" / "panda_pick_place_sim.py"
+PANDA_SERVER_SCRIPT = REPO / "demos" / "panda_pick_place_giskard_server.py"
+PANDA_SIM_MARKER = "PandaROS node ready."
+
 # Sourced before the command in terminal mode: a fresh gnome-terminal shell does
 # not inherit the kernel's sourced ROS environment (the background mode does).
 _SOURCE = (
