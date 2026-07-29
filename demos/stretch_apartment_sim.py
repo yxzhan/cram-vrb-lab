@@ -10,9 +10,13 @@ blocks; the giskard server and the demo notebooks live in this same directory):
 - subscribes /stretch/cmd_vel (Twist, kinematic base with a 1 s watchdog),
   /stretch/joint_velocity_cmd (giskard's streamed velocities, integrated into
   position targets each sim step), /stretch/gripper_command (Float64)
+- with --props: spawns the pick-and-place props (a graspable cube on a pedestal
+  plus a second pedestal to carry it to) and publishes the cube's ground-truth
+  pose on /props/pick_cube_pose
 
 Run with the Isaac Sim python (or from the demo notebooks):
-    binder/isaacsim_python_wrapper.sh demos/stretch_apartment_sim.py [--camera MODE]
+    binder/isaacsim_python_wrapper.sh demos/stretch_apartment_sim.py \
+        [--camera MODE] [--props]
 where MODE is rgb (default), depth, both, or none.
 """
 
@@ -23,11 +27,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cram_vrb_lab.sim.isaac_app import (
     create_simulation_app,
-    parse_camera_args,
+    parse_scene_args,
     render_enabled,
 )
 
-CAMERA_MODE, WANT_RGB, WANT_DEPTH = parse_camera_args()
+ARGS = parse_scene_args()
 simulation_app = create_simulation_app()  # must run before any isaacsim.core import
 RENDER = render_enabled()
 
@@ -40,6 +44,7 @@ my_world = World(stage_units_in_meters=1.0, physics_dt=1 / 200, rendering_dt=8 /
 my_world.reset()
 
 from cram_vrb_lab.scenes.apartment.isaac_scene import load_apartment_scene
+from cram_vrb_lab.scenes.props.isaac_props import PropsROS, spawn_props
 from cram_vrb_lab.robots.stretch.isaac_node import (
     StretchROS,
     create_head_camera,
@@ -48,8 +53,9 @@ from cram_vrb_lab.robots.stretch.isaac_node import (
 
 load_apartment_scene(my_world, RENDER)
 stretch = spawn_stretch(my_world, RENDER)
-head_cam = (create_head_camera(my_world, RENDER, want_depth=WANT_DEPTH)
-            if CAMERA_MODE != "none" else None)
+cube = spawn_props(my_world, RENDER) if ARGS.props else None
+head_cam = (create_head_camera(my_world, RENDER, want_depth=ARGS.want_depth)
+            if ARGS.camera != "none" else None)
 
 import rclpy
 
@@ -57,7 +63,8 @@ if not rclpy.ok():
     rclpy.init(args=None)
 
 stretch_node = StretchROS(stretch, head_cam=head_cam,
-                          publish_rgb=WANT_RGB, publish_depth=WANT_DEPTH)
+                          publish_rgb=ARGS.want_rgb, publish_depth=ARGS.want_depth)
+props_node = PropsROS(cube) if cube is not None else None
 print("StretchROS node ready.")
 
 try:
@@ -75,9 +82,13 @@ try:
         stretch_node.publish_tf()
         stretch_node.publish_odom()
         stretch_node.publish_camera()
+        if props_node is not None:
+            props_node.publish_props()
 except KeyboardInterrupt:
     pass
 finally:
     stretch_node.destroy_node()
+    if props_node is not None:
+        props_node.destroy_node()
     rclpy.shutdown()
     simulation_app.close()

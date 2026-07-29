@@ -66,6 +66,49 @@ def add_external_collision_avoidance(
     return node
 
 
+def add_pointing(
+    msc,
+    world,
+    goal_point,
+    tip_link: str = "camera_color_optical_frame",
+    root_link: str = "base_link",
+    pointing_axis=None,
+    max_velocity: float = 0.3,
+):
+    """Add a persistent camera-pointing goal to the motion statechart `msc`.
+
+    Unlike CRAM's REAL execution (which sequences every motion), a giskard task
+    added straight to the chart runs *concurrently* with the other goals -- the
+    same way :func:`add_external_collision_avoidance` does -- so the camera keeps
+    tracking `goal_point` for the whole motion instead of only before it.
+
+    `goal_point` is a ``Point3`` in some world frame. Only the chain between
+    `root_link` and `tip_link` moves to satisfy it: the default ``base_link`` root
+    keeps the motion to the head (pan/tilt); pass ``world.root`` to let the base
+    turn too. `pointing_axis` is the tip axis aimed at the point (default: the
+    camera's +Z optical axis). Returns the added node.
+    """
+    from giskardpy.motion_statechart.tasks.pointing import Pointing
+    from semantic_digital_twin.spatial_types import Vector3
+
+    tip = world.get_body_by_name(tip_link)
+    if pointing_axis is None:
+        pointing_axis = Vector3.Z()
+    # Pointing.build transforms the axis into the tip frame, so it must carry a
+    # reference frame -- the axis is expressed in the tip link (matching giskard's
+    # own LookingMotion, which sets forward_facing_axis.reference_frame = camera root).
+    pointing_axis.reference_frame = tip
+    node = Pointing(
+        root_link=world.get_body_by_name(root_link),
+        tip_link=tip,
+        goal_point=goal_point,
+        pointing_axis=pointing_axis,
+        max_velocity=max_velocity,
+    )
+    msc.add_node(node)
+    return node
+
+
 def connect(node_name: str = "giskard_demo_client"):
     rospy.init_node(node_name)
     # Join the spinner thread and destroy the node at interpreter exit;

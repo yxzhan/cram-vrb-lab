@@ -5,3 +5,4 @@ __pycache__/
 # cognitive_robot_abstract_machine/.github/docker/setup_ros_workspace.sh (see README)
 ros2_ws/
 .ipynb_checkpoints/
+iai_apartment/

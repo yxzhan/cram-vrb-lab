@@ -31,12 +31,13 @@ def copy_kit_cache():
         shutil.copytree(source_dir, target_dir)
 
 
-def parse_camera_args():
-    """Parse ``--camera`` (and strip it from ``sys.argv`` before SimulationApp,
-    which parses argv too).
+def parse_scene_args():
+    """Parse the scene flags (and strip them from ``sys.argv`` before
+    SimulationApp, which parses argv too).
 
-    :return: ``(camera_mode, want_rgb, want_depth)`` where camera_mode is one of
-        ``rgb`` / ``depth`` / ``both`` / ``none``.
+    :return: a namespace with ``camera`` (``rgb`` / ``depth`` / ``both`` /
+        ``none``), the derived ``want_rgb`` / ``want_depth`` booleans, and
+        ``props``.
     """
     parser = argparse.ArgumentParser(description="Isaac Sim scene")
     parser.add_argument(
@@ -46,10 +47,18 @@ def parse_camera_args():
         help="head-camera mode: publish the rgb image, the depth image, both, or "
         "run no camera at all (default: rgb, or none when ISAAC_NO_CAMERA=1).",
     )
+    parser.add_argument(
+        "--props",
+        action="store_true",
+        help="spawn the pick-and-place props (a graspable cube on a pedestal, "
+        "plus a second pedestal to carry it to). Off by default: the pedestals "
+        "stand in floor the other demos navigate through.",
+    )
     args, unknown_args = parser.parse_known_args()
-    sys.argv = sys.argv[:1] + unknown_args  # hide --camera from SimulationApp
-    mode = args.camera
-    return mode, mode in ("rgb", "both"), mode in ("depth", "both")
+    sys.argv = sys.argv[:1] + unknown_args  # hide the scene flags from SimulationApp
+    args.want_rgb = args.camera in ("rgb", "both")
+    args.want_depth = args.camera in ("depth", "both")
+    return args
 
 
 def create_simulation_app():

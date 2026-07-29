@@ -11,6 +11,11 @@ exercises the same giskard code path as physical hardware. Two ways to drive it:
 - **`stretch_apartment_cram.ipynb`** — high-level: **CRAM** plans (park arm,
   move torso, navigate, …). You say *what* to achieve and CRAM binds it to
   giskard motions at run time.
+- **`stretch_pick_place_cram.ipynb`** — the simplest manipulation task, and the
+  one to start from: grasp a cube off a pedestal, carry it 1.6 m, put it down.
+  The cube is a **real rigid body in Isaac** (`--props`), so the grasp has to
+  work in physics, not only in the twin; the sim publishes its true pose so
+  every step can be checked against what CRAM believes.
 
 The demo scripts are thin composition layers over the `cram_vrb_lab` package:
 robot-specific code lives in `cram_vrb_lab/robots/stretch/`, scene-specific code
@@ -86,6 +91,22 @@ clients:
   `cram_vrb_lab.robots.stretch.joints.CONTROLLED_JOINTS` (the velocity message
   carries no joint names; giskard side and sim side must match — both import
   this single list).
+- **Manipulable props** (`--props`, off by default because the pedestals stand
+  in floor the apartment demos navigate through): a graspable cube on a
+  pedestal plus a second pedestal to carry it to. Isaac gets rigid bodies with
+  mass and friction, the twin gets matching boxes, and both are built from the
+  one set of numbers in `cram_vrb_lab/scenes/props/constants.py` — the
+  apartment's USD/URDF alignment is only approximate, so props that hung off
+  apartment furniture would confuse a modelling error with a grasp failure. The
+  sim publishes the cube's true pose on `/props/pick_cube_pose` and as the tf
+  frame `pick_cube_gt`, which is the only way to tell a real grasp from CRAM
+  merely believing it grasped (`AttachNode` moves the twin's cube regardless).
+- **Gripper aperture** (`cram_vrb_lab/robots/stretch/gripper.py`): the semantic
+  Stretch model's `GripperState.OPEN` is finger angle 0.109 rad, which parts the
+  SG3 pads by only 3.6 cm — narrower than most things worth grasping, and the
+  grasp then fails for reasons that look like reach or approach-direction
+  problems. `open_gripper_to(robot, gap)` redefines that state in metres of pad
+  gap, on the robot instance, without touching the vendored model.
 
 ## One-time setup (already baked into the Docker image)
 
@@ -123,6 +144,8 @@ first cell calls `cram_vrb_lab.control.launcher.start_isaac_sim()` /
   the apartment.
 - `stretch_apartment_cram.ipynb` — the same robot driven by high-level CRAM
   plans (park arms, move torso, gripper, navigate).
+- `stretch_pick_place_cram.ipynb` — CRAM pick-and-place on the props;
+  starts the sim with `start_isaac_sim(props=True)`.
 
 Manual start (source `/opt/ros/jazzy/setup.bash` and
 `ros2_ws/install/setup.bash` in every terminal):

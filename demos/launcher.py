@@ -100,7 +100,7 @@ def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True)
 
 
 def start_isaac_sim(sim_script=None, marker="StretchROS node ready.",
-                    terminal=False, timeout=900, camera=None):
+                    terminal=False, timeout=900, camera=None, props=False):
     """Launch an Isaac Sim scene script; wait for its ready marker.
 
     First startup can take a few minutes (shader compilation).
@@ -110,6 +110,9 @@ def start_isaac_sim(sim_script=None, marker="StretchROS node ready.",
     :param camera: head-camera mode passed as ``--camera``
         (``"rgb"`` / ``"depth"`` / ``"both"`` / ``"none"``); None uses the
         script's default.
+    :param props: pass ``--props`` to spawn the pick-and-place props (cube and
+        pedestals). Off by default; the pedestals stand in floor the other demos
+        navigate through.
     """
     sim_script = Path(sim_script) if sim_script else DEFAULT_SIM_SCRIPT
     args = [
@@ -118,6 +121,8 @@ def start_isaac_sim(sim_script=None, marker="StretchROS node ready.",
     ]
     if camera is not None:
         args += ["--camera", camera]
+    if props:
+        args += ["--props"]
     return start(
         "isaac sim",
         args,
