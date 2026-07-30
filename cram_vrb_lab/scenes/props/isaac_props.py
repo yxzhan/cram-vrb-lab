@@ -1,9 +1,8 @@
 """Pick-and-place props on the Isaac Sim side: the physics the gripper has to beat.
 
-:func:`spawn_props` builds the two pedestals as static colliders and the cube as
-a rigid body with friction and mass, so nothing about the grasp is faked --
-whether the cube comes off the pedestal is decided by contact forces between the
-Stretch's fingers and the cube.
+:func:`spawn_props` builds the cube as a rigid body with friction and mass, so
+nothing about the grasp is faked -- whether the cube comes off its surface is
+decided by contact forces between the robot's fingers and the cube.
 
 :class:`PropsROS` publishes the cube's true pose. The digital twin tracks where
 CRAM *believes* the cube is; after a grasp attempt the belief and the physics can
@@ -18,7 +17,7 @@ disagreement is the measurement this demo is after.
 import numpy as np
 from geometry_msgs.msg import PoseStamped
 from isaacsim.core.api.materials import PhysicsMaterial
-from isaacsim.core.api.objects import DynamicCuboid, FixedCuboid
+from isaacsim.core.api.objects import DynamicCuboid
 from isaacsim.core.utils.prims import define_prim
 from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
@@ -33,7 +32,6 @@ from .constants import (
     CUBE_MASS,
     CUBE_POSE_TOPIC,
     CUBE_SIZE,
-    PEDESTAL_COLOR,
     PROPS_FRAME_ID,
     PropLayout,
 )
@@ -41,33 +39,20 @@ from .constants import (
 PROPS_ROOT = "/World/Props"
 
 
-def _pedestal(name, xy, size):
-    """One static pedestal, centred on ``xy``, standing on the floor."""
-    return FixedCuboid(
-        prim_path=f"{PROPS_ROOT}/{name}",
-        name=name,
-        position=np.array([xy[0], xy[1], size[2] / 2]),
-        scale=np.array(size),
-        color=np.array(PEDESTAL_COLOR),
-    )
-
-
 def spawn_props(world, render, layout: PropLayout = APARTMENT_LAYOUT):
-    """Spawn the two pedestals and the graspable cube; return the cube prim.
+    """Spawn the graspable cube and return its prim.
 
-    The cube is dropped in resting exactly on the pick pedestal's top face and
-    then settled for a few physics steps, so it starts the demo at rest rather
-    than mid-bounce.
+    The cube is released just above the surface the scene provides and falls onto
+    it, then settled for enough physics steps to start the demo at rest rather
+    than mid-bounce. The pose it actually settled at is printed: the surface
+    belongs to the scene, so that is the only way to learn its real height.
     """
     define_prim(PROPS_ROOT, "Xform")
 
-    _pedestal("pick_pedestal", layout.pick_position, layout.pedestal_size)
-    _pedestal("place_pedestal", layout.place_position, layout.pedestal_size)
-
     # Isaac averages the two materials in a contact, so the cube alone cannot set
     # the friction of the finger/cube pair -- it can only pull the average up.
-    # Restitution 0 keeps the cube from hopping off the pedestal when a finger
-    # brushes it on approach.
+    # Restitution 0 keeps the cube from bouncing when it lands, and from hopping
+    # away when a finger brushes it on approach.
     cube_material = PhysicsMaterial(
         prim_path=f"{PROPS_ROOT}/pick_cube_material",
         static_friction=CUBE_FRICTION,
@@ -85,11 +70,14 @@ def spawn_props(world, render, layout: PropLayout = APARTMENT_LAYOUT):
     )
 
     world.reset()
-    for _ in range(30):  # let the cube settle onto the pedestal
+    # Long enough for a dropped cube to land and stop bouncing, not just for one
+    # that was spawned already resting.
+    for _ in range(120):
         world.step(render=render)
 
-    print(f"Props ready: cube at {layout.cube_start_position}, pedestals at "
-          f"{layout.pick_position} and {layout.place_position}.")
+    print(f"Props ready: cube spawned at {layout.cube_start_position}, "
+          f"settled at {tuple(round(float(v), 4) for v in cube.get_world_pose()[0])} "
+          f"(expected surface z={layout.surface_z}).")
     return cube
 
 

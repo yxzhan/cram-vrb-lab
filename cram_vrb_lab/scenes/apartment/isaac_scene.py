@@ -12,8 +12,13 @@ from isaacsim.core.utils.prims import create_prim, define_prim
 from .constants import APARTMENT_USD_PATH, GRID_USD_PATH, USD_PRIM_POSITION_IN_MAP
 
 
-def load_apartment_scene(world, render):
-    """Ground grid, the apartment USD, lights, and the default camera view."""
+def load_apartment_scene(world, render, camera_eye=None, camera_target=None):
+    """Ground grid, the apartment USD, lights, and the default camera view.
+
+    :param camera_eye: viewport camera position; defaults to the wide shot that
+        frames the Stretch demos.
+    :param camera_target: what the viewport looks at.
+    """
     # Ground
     define_prim("/World/Ground", "Xform").GetReferences().AddReference(GRID_USD_PATH)
 
@@ -33,7 +38,10 @@ def load_apartment_scene(world, render):
             position=(2 - 4 * i, 0, 2),
         )
 
-    viewports.set_camera_view(eye=np.array([-6.5, -2, 2]), target=np.array([-1, 1, 1]))
+    viewports.set_camera_view(
+        eye=np.array(camera_eye if camera_eye is not None else [-6.5, -2, 2]),
+        target=np.array(camera_target if camera_target is not None else [-1, 1, 1]),
+    )
 
     for _ in range(30):
         world.step(render=render)

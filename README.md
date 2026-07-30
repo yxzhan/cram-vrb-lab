@@ -36,7 +36,7 @@ cram_vrb_lab/
 ├── robots/panda/       # everything Panda: URDF patching, semantic model, sim node, giskard interface
 ├── scenes/apartment/   # everything apartment: asset paths + USD/URDF alignment, sim loader, giskard world
 ├── scenes/empty/       # ground and lights, for a robot that needs no scenery
-└── scenes/props/       # manipulable props: a graspable cube + pedestals, in Isaac physics and in the twin
+└── scenes/props/       # the manipulable cube, in Isaac physics and in the twin
 ```
 
 Robot- and scene-specific facts each live in exactly one module: the joint-order
@@ -60,8 +60,8 @@ git clone --recurse-submodules https://github.com/yxzhan/cram-vrb-lab.git
 
 Open `demos/panda_pick_place_cram.ipynb` (kernel: **CRAM**) — it starts the
 simulation and the giskard server and runs the simplest full task end to end: a
-Franka Panda picks a cube off one stand and places it on another, ~3 mm from
-target. `demos/stretch_pick_place_cram.ipynb` is the same task on a mobile
+Franka Panda mounted in the apartment picks a cube off the table it is bolted to
+and puts it down further along. `demos/stretch_pick_place_cram.ipynb` is the same task on a mobile
 robot, `demos/stretch_apartment_cram.ipynb` goes further into the apartment and
 its drawers, and for hand-built giskard motion goals use
 `demos/stretch_apartment_giskard.ipynb`.

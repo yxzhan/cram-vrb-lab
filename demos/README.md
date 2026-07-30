@@ -12,16 +12,17 @@ exercises the same giskard code path as physical hardware. Two ways to drive it:
   move torso, navigate, …). You say *what* to achieve and CRAM binds it to
   giskard motions at run time.
 - **`panda_pick_place_cram.ipynb`** — **the one to start from**: the simplest
-  manipulation task on the simplest robot. A Franka Panda bolted to the origin
-  of an empty scene grasps a cube off one stand and puts it on another. The cube
-  is a **real rigid body in Isaac**, so the grasp has to work in physics and not
-  only in the twin; the sim publishes its true pose, so every step can be checked
-  against what CRAM believes.
+  manipulation task on the simplest robot. A Franka Panda bolted to a table in
+  the apartment grasps a cube off that table and puts it down further along it.
+  The cube is a **real rigid body in Isaac**, so the grasp has to work in physics
+  and not only in the twin; the sim publishes its true pose, so every step can be
+  checked against what CRAM believes.
 - **`stretch_pick_place_cram.ipynb`** — the same task on the Stretch, in the
-  apartment: grasp a cube off a pedestal, drive 1.6 m holding it, put it down.
-  Everything the Panda demo does plus a mobile base, a telescoping arm and a
-  gripper whose pads swing on an arc — which is why it is the *second* one to
-  read.
+  apartment: grasp the cube, drive 1.6 m holding it, put it down. Everything the
+  Panda demo does plus a mobile base, a telescoping arm and a gripper whose pads
+  swing on an arc — which is why it is the *second* one to read. **Its cube now
+  lands on the apartment floor** rather than on the 0.7 m posts it used to stand
+  on, and its standing positions and grasp have not been re-tuned for that.
 
 The demo scripts are thin composition layers over the `cram_vrb_lab` package:
 robot-specific code lives in `cram_vrb_lab/robots/<robot>/`, scene-specific code
@@ -97,17 +98,19 @@ clients:
   `cram_vrb_lab.robots.stretch.joints.CONTROLLED_JOINTS` (the velocity message
   carries no joint names; giskard side and sim side must match — both import
   this single list).
-- **Manipulable props** (`cram_vrb_lab/scenes/props/`, on the Stretch side behind
-  `--props` because the pedestals stand in floor the apartment demos navigate
-  through): a graspable cube on a pedestal plus a second pedestal to carry it
-  to. Isaac gets rigid bodies with mass and friction, the twin gets matching
-  boxes, and both are built from one `PropLayout` — the apartment's USD/URDF
-  alignment is only approximate, so props hung off apartment furniture would
-  confuse a modelling error with a grasp failure. The sim publishes the cube's
-  true pose on `/props/pick_cube_pose` and as the tf frame `pick_cube_gt`, which
-  is the only way to tell a real grasp from CRAM merely believing it grasped
+- **The manipulable cube** (`cram_vrb_lab/scenes/props/`, on the Stretch side
+  behind `--props`): Isaac gets a rigid body with mass and friction, the twin
+  gets a matching box, and both are built from one `PropLayout`. There are no
+  pedestals — the cube is released just above the surface it should land on and
+  physics settles it onto whatever the scene provides, so `spawn_props` prints
+  the pose it actually settled at. That printout is the only way to learn the
+  real height of a surface that belongs to the scene rather than to this code,
+  and if that surface is not in the environment description either, giskard
+  plans as though nothing were under the cube. The sim publishes the cube's true
+  pose on `/props/pick_cube_pose` and as the tf frame `pick_cube_gt`, which is
+  the only way to tell a real grasp from CRAM merely believing it grasped
   (`AttachNode` moves the twin's cube regardless). One layout per scene:
-  `APARTMENT_LAYOUT` for the Stretch, `PANDA_LAYOUT` for the Panda's workspace.
+  `APARTMENT_LAYOUT` for the Stretch, `PANDA_APARTMENT_LAYOUT` for the Panda.
 - **The Panda** (`cram_vrb_lab/robots/panda/`) is built entirely from the stock
   `panda_arm_hand.urdf` that ships with Isaac's URDF importer — imported into the
   stage at startup, so no converted USD is checked in, and parsed into the same
@@ -167,10 +170,9 @@ first cell calls `cram_vrb_lab.control.launcher.start_isaac_sim()` /
   plans (park arms, move torso, gripper, navigate).
 - `stretch_pick_place_cram.ipynb` — CRAM pick-and-place on the props;
   starts the sim with `start_isaac_sim(props=True)`.
-- `panda_pick_place_cram.ipynb` — **the pick-and-place that is verified working
-  end to end.** A Franka Panda bolted to the origin of an otherwise empty scene,
-  grasping a cube off one stand and placing it on another; a validated run ends
-  ~3 mm from the target. Its own sim and server scripts
+- `panda_pick_place_cram.ipynb` — a Franka Panda mounted on a table in the
+  apartment, grasping a cube off that table and placing it down further along.
+  Its own sim and server scripts
   (`panda_pick_place_sim.py`, `panda_pick_place_giskard_server.py`) and its own
   topics, so it can run alongside the Stretch demos.
 

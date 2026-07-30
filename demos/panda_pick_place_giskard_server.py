@@ -1,15 +1,16 @@
 #!/usr/bin/env python
-"""Giskard motion-control server for the Panda in the Isaac Sim empty scene
+"""Giskard motion-control server for the Panda mounted in the Isaac Sim apartment
 (panda_pick_place_sim.py).
 
 Same closed-loop shape as the Stretch server, minus everything the mobile base
-brought with it: the robot root is fixed to ``map``, so there is no localization
-transform to wait for and no odometry to sync. Giskard reads
+brought with it: the robot root is fixed to ``map`` at its mounting pose, so there
+is no localization transform to wait for and no odometry to sync. Giskard reads
 ``/panda/joint_states`` and streams joint velocities back.
 
-The props are not part of this world config. The notebook adds them over
-``/world_sync`` once it is connected, which keeps the scene giskard avoids
-collisions in identical to the one Isaac renders.
+``WorldWithPandaConfig`` merges the apartment in beside the arm, so collision
+avoidance covers the room. The cube is not part of that world config: the notebook
+adds it over ``/world_sync`` once it is connected, which keeps the scene giskard
+avoids collisions in identical to the one Isaac renders.
 
 Run with the cognitive_robot_abstract_machine venv python, with ROS jazzy and the
 ros2_ws overlay sourced (see README.md).

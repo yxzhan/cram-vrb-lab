@@ -10,9 +10,8 @@ blocks; the giskard server and the demo notebooks live in this same directory):
 - subscribes /stretch/cmd_vel (Twist, kinematic base with a 1 s watchdog),
   /stretch/joint_velocity_cmd (giskard's streamed velocities, integrated into
   position targets each sim step), /stretch/gripper_command (Float64)
-- with --props: spawns the pick-and-place props (a graspable cube on a pedestal
-  plus a second pedestal to carry it to) and publishes the cube's ground-truth
-  pose on /props/pick_cube_pose
+- with --props: spawns the graspable pick-and-place cube and publishes its
+  ground-truth pose on /props/pick_cube_pose
 
 Run with the Isaac Sim python (or from the demo notebooks):
     binder/isaacsim_python_wrapper.sh demos/stretch_apartment_sim.py \

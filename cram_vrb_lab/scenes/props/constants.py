@@ -1,8 +1,8 @@
-"""Geometry of the pick-and-place props: one graspable cube and two pedestals.
+"""Geometry of the pick-and-place prop: one graspable cube.
 
 The smallest scene that answers "can this robot actually pick something up and
-put it somewhere else": a cube sitting on a pedestal, and a second pedestal to
-carry it to.
+put it somewhere else": a cube resting on a surface, and a second place on that
+surface to carry it to.
 
 The props are deliberately *not* part of any environment asset.
 ``apartmentICRA.usda`` (what Isaac renders) and ``apartment.urdf`` (what the twin
@@ -23,8 +23,14 @@ frame (see
 :data:`cram_vrb_lab.scenes.apartment.constants.USD_PRIM_POSITION_IN_MAP`).
 """
 
+import math
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
+
+from cram_vrb_lab.scenes.apartment.constants import (
+    PANDA_BASE_POSITION_IN_MAP,
+    PANDA_BASE_YAW_IN_MAP,
+)
 
 CUBE_SIZE = 0.05
 """Edge length [m] of the graspable cube.
@@ -38,7 +44,7 @@ CUBE_GRIPPER_GAP = 0.09
 """Pad gap [m] to open the Stretch's gripper to before going for the cube.
 
 Two centimetres of clearance either side of :data:`CUBE_SIZE`, enough that small
-errors in the approach do not knock the cube off its pedestal. The Stretch's
+errors in the approach do not knock the cube off its surface. The Stretch's
 default ``GripperState.OPEN`` is far too narrow for that; see
 :mod:`cram_vrb_lab.robots.stretch.gripper`. The Panda hand cannot open this wide
 and sets its own width in
@@ -49,7 +55,7 @@ CUBE_MASS = 0.05
 """[kg]. Light enough that the friction of a two-finger pinch carries it."""
 
 CUBE_COLOR = (0.85, 0.15, 0.15)
-"""RGB, so the cube is obvious against the grey pedestals in the viewport."""
+"""RGB, so the cube is obvious against the surface it sits on."""
 
 CUBE_FRICTION = 1.2
 """Static friction of the cube's physics material.
@@ -59,13 +65,8 @@ lifts the finger/cube pair to a coefficient where a light pinch does not let the
 cube slide out during the carry.
 """
 
-PEDESTAL_COLOR = (0.4, 0.4, 0.45)
-
 CUBE_BODY_NAME = "pick_cube"
 """Name of the cube's body in the digital twin."""
-
-PICK_PEDESTAL_BODY_NAME = "pick_pedestal"
-PLACE_PEDESTAL_BODY_NAME = "place_pedestal"
 
 CUBE_POSE_TOPIC = "/props/pick_cube_pose"
 """Ground-truth cube pose published by the sim (a stand-in for perception).
@@ -91,64 +92,109 @@ publishes the same static ``map -> odom`` identity, so the name still holds.
 
 @dataclass(frozen=True)
 class PropLayout:
-    """Where the props stand in one particular scene.
+    """Where the cube starts and where it is meant to end up, in one scene.
 
-    Kept apart from the cube's own geometry because the two demo scenes place
-    them completely differently: the Stretch drives up to pedestals standing on
-    an apartment floor, the Panda reaches short stands parked inside its own
-    workspace.
+    Kept apart from the cube's own geometry because each demo works at a
+    different place and height. The cube is always released just above the
+    surface it should land on and settled by physics, so what it actually rests
+    on is whatever the scene provides -- a table, a counter, the floor.
     """
 
-    pedestal_size: Tuple[float, float, float]
-    """(x, y, z) extents [m] of each pedestal. The top face is at z = extent z."""
-
     pick_position: Tuple[float, float]
-    """(x, y) of the pedestal the cube starts on."""
+    """(x, y) the cube starts at."""
 
     place_position: Tuple[float, float]
-    """(x, y) of the pedestal the cube is carried to."""
+    """(x, y) the cube is carried to."""
+
+    surface_z: float = 0.0
+    """Height [m] of the surface the cube rests on."""
+
+    drop_height: float = 0.03
+    """How far [m] above the resting height the cube is spawned.
+
+    The exact height of a surface that comes from the scene's own geometry is not
+    known here, so the cube is released just above where it is expected to land
+    and physics settles it. :func:`~cram_vrb_lab.scenes.props.isaac_props.spawn_props`
+    prints where it ended up, which is the only way to learn that surface's true
+    height.
+    """
 
     @property
-    def pedestal_top_z(self) -> float:
-        """Height [m] of the pedestal top faces, i.e. the cube's resting surface."""
-        return self.pedestal_size[2]
+    def cube_rest_z(self) -> float:
+        """Height [m] of the cube's centre once it is resting."""
+        return self.surface_z + CUBE_SIZE / 2
 
     @property
     def cube_start_position(self) -> Tuple[float, float, float]:
-        """Cube centre when it is resting on the pick pedestal."""
-        return (*self.pick_position, self.pedestal_top_z + CUBE_SIZE / 2)
+        """Where the cube is spawned -- above the surface, so it falls onto it."""
+        return (*self.pick_position, self.cube_rest_z + self.drop_height)
 
     @property
     def cube_target_position(self) -> Tuple[float, float, float]:
-        """Cube centre when it has been placed on the place pedestal."""
-        return (*self.place_position, self.pedestal_top_z + CUBE_SIZE / 2)
+        """Cube centre once placed, i.e. resting on the surface."""
+        return (*self.place_position, self.cube_rest_z)
 
 
 APARTMENT_LAYOUT = PropLayout(
-    pedestal_size=(0.05, 0.05, 0.7),
     # North of the Stretch's spawn at (-1.5, 0) rather than south of it: with the
-    # pedestals on the south side the robot ended up boxed in between them and
-    # had no clear lane to its standing position. Thin posts rather than tables,
-    # so the gripper cannot catch a table edge on the way in.
+    # props on the south side the robot ended up boxed in between them and had no
+    # clear lane to its standing position.
     pick_position=(-1.0, 0.6),
     # 1.6 m away, so the base has to drive while holding the cube. That drive is
     # what makes the Stretch demo a transport test rather than a grasp test.
     place_position=(-2.6, 0.6),
 )
-"""Props for the Stretch in the apartment: two posts it drives between."""
+"""Cube positions for the Stretch in the apartment.
 
-PANDA_LAYOUT = PropLayout(
-    # Waist-height stands for a robot bolted to the floor: the Panda's parked
-    # tool frame sits at z = 0.487, so a 0.3 m stand puts the cube comfortably
-    # below it and leaves room to lift.
-    pedestal_size=(0.12, 0.12, 0.3),
-    # Both stands 0.49 m from the base, well inside the 0.85 m reach and far
-    # enough out that the arm is not folded back on itself. Left and right of
-    # centre, so the transfer is a real motion rather than a nudge.
-    pick_position=(0.45, -0.2),
-    place_position=(0.45, 0.2),
+..warning::
+   ``surface_z`` is the apartment floor, so the cube lands on the floor rather
+   than at gripper height. This demo used to stand it on 0.7 m posts; those went
+   away with the pedestal support, and the Stretch's standing positions and
+   grasp have not been re-tuned for a cube on the floor."""
+
+PANDA_REACH_OFFSETS = ((0.45, -0.2), (0.45, 0.2))
+"""Pick and place positions in the Panda's **own base frame**, as (x, y).
+
+Both 0.49 m from the base, well inside the 0.85 m reach and far enough out that
+the arm is not folded back on itself; left and right of centre, so the transfer
+is a real motion rather than a nudge. Kept in the robot frame so the layout
+follows the arm wherever the scene puts it.
+"""
+
+
+def panda_layout_at(base_position, base_yaw: float) -> PropLayout:
+    """The Panda's prop layout for a base standing at ``base_position`` [m] with
+    ``base_yaw`` [rad], both in ``map``.
+
+    The arm is bolted to a table and works on that table, so ``surface_z`` is
+    simply the height the base is mounted at. The table itself comes from the
+    apartment USD and is not modelled here.
+
+    Rotating :data:`PANDA_REACH_OFFSETS` into ``map`` rather than writing map
+    coordinates down keeps the cube in front of the arm by construction, so
+    moving the robot cannot silently move it out of reach.
+    """
+    cos_yaw, sin_yaw = math.cos(base_yaw), math.sin(base_yaw)
+
+    def to_map(offset):
+        x, y = offset
+        return (
+            base_position[0] + cos_yaw * x - sin_yaw * y,
+            base_position[1] + sin_yaw * x + cos_yaw * y,
+        )
+
+    pick_offset, place_offset = PANDA_REACH_OFFSETS
+    return PropLayout(
+        pick_position=to_map(pick_offset),
+        place_position=to_map(place_offset),
+        surface_z=base_position[2],
+    )
+
+
+PANDA_APARTMENT_LAYOUT = panda_layout_at(
+    PANDA_BASE_POSITION_IN_MAP, PANDA_BASE_YAW_IN_MAP
 )
-"""Props for the Panda in the empty scene: two stands inside its workspace."""
+"""Props for the Panda mounted in the apartment: just the cube, on its table."""
 
 # --- The Stretch's standing positions -------------------------------------
 #
@@ -157,8 +203,8 @@ PANDA_LAYOUT = PropLayout(
 # y = -0.935 fully extended, at z = 0.11 + joint_lift -- so the arm reaches out
 # of the base's RIGHT side and the base must be parked with the cube abeam, not
 # in front of it. Standing 0.75 m to the cube's +y side puts the arm at roughly
-# 2/3 extension, comfortably inside both limits, and leaves the pedestal clear of
-# the base footprint.
+# 2/3 extension, comfortably inside both limits, and leaves the cube clear of the
+# base footprint.
 #
 # The same kinematics fix which way the gripper may come at the cube. At the
 # natural posture (wrist yaw 0) the tool frame's axes in base_link are
@@ -179,22 +225,22 @@ PICK_BASE_POSITION = (
     APARTMENT_LAYOUT.pick_position[0],
     APARTMENT_LAYOUT.pick_position[1] + BASE_STANDOFF,
 )
-"""Where to park the base to reach the cube on the pick pedestal."""
+"""Where to park the base to reach the cube at the pick position."""
 
 PLACE_BASE_POSITION = (
     APARTMENT_LAYOUT.place_position[0],
     APARTMENT_LAYOUT.place_position[1] + BASE_STANDOFF,
 )
-"""Where to park the base to reach the place pedestal. Same y as
+"""Where to park the base to reach the place position. Same y as
 :data:`PICK_BASE_POSITION`, so the drive between them runs straight along a lane
-that clears both pedestals."""
+that clears both."""
 
 APPROACH_WAYPOINT = (-2.0, PICK_BASE_POSITION[1])
 """Waypoint to drive through on the way from the spawn to the pick position.
 
 There is no path planning here -- ``DifferentialDriveBaseGoal`` drives roughly
 straight at its target -- and the straight line from the Stretch's spawn at
-``(-1.5, 0)`` to :data:`PICK_BASE_POSITION` shaves the pick pedestal's near
-corner. Going west first and then east along the standing lane clears both
-pedestals by a wide margin.
+``(-1.5, 0)`` to :data:`PICK_BASE_POSITION` cuts the corner at the pick
+position. Going west first and then east along the standing lane clears both by
+a wide margin.
 """

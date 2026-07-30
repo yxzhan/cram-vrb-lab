@@ -1,10 +1,14 @@
 #!/usr/bin/env python
-"""Isaac Sim empty scene with a Franka Panda and the pick-and-place props.
+"""Isaac Sim apartment scene with a Franka Panda and the pick-and-place props.
 
-Simulation side of the Panda demo. Deliberately the smallest scene that can
-answer "does the grasp work": a bolted-down 7-DoF arm, two stands, and a cube.
-No apartment, no mobile base, no cameras -- the Stretch demos cover those, and
-each of them is a way for a grasp to fail that has nothing to do with grasping.
+Simulation side of the Panda demo: a 7-DoF arm mounted at working height inside
+the apartment, two stands within its reach, and a cube. No mobile base and no
+cameras -- the Stretch demos cover those, and each is a way for a grasp to fail
+that has nothing to do with grasping.
+
+Where the arm stands comes from
+:data:`cram_vrb_lab.scenes.apartment.constants.PANDA_BASE_POSITION_IN_MAP`, which
+the giskard world config reads too.
 
 - publishes /panda/joint_states and the cube's ground-truth pose on
   /props/pick_cube_pose (plus the pick_cube_gt tf frame)
@@ -35,13 +39,22 @@ my_world = World(stage_units_in_meters=1.0, physics_dt=1 / 200, rendering_dt=8 /
 my_world.reset()
 
 from cram_vrb_lab.robots.panda.isaac_node import PandaROS, move_to_park, spawn_panda
-from cram_vrb_lab.scenes.empty.isaac_scene import load_empty_scene
-from cram_vrb_lab.scenes.props.constants import PANDA_LAYOUT
+from cram_vrb_lab.scenes.apartment.isaac_scene import load_apartment_scene
+from cram_vrb_lab.scenes.apartment.constants import PANDA_BASE_POSITION_IN_MAP
+from cram_vrb_lab.scenes.props.constants import PANDA_APARTMENT_LAYOUT
 from cram_vrb_lab.scenes.props.isaac_props import PropsROS, spawn_props
 
-load_empty_scene(my_world, RENDER)
+# Framed on the arm's workspace rather than on the apartment as a whole: the
+# props are 5 cm objects and the default wide shot leaves them a few pixels.
+load_apartment_scene(
+    my_world, RENDER,
+    camera_eye=[PANDA_BASE_POSITION_IN_MAP[0] - 1.4,
+                PANDA_BASE_POSITION_IN_MAP[1] - 1.4,
+                PANDA_BASE_POSITION_IN_MAP[2] + 1.0],
+    camera_target=PANDA_APARTMENT_LAYOUT.cube_start_position,
+)
 panda = spawn_panda(my_world, RENDER)
-cube = spawn_props(my_world, RENDER, layout=PANDA_LAYOUT)
+cube = spawn_props(my_world, RENDER, layout=PANDA_APARTMENT_LAYOUT)
 move_to_park(panda, my_world, RENDER)  # last: spawn_props resets the world
 
 import rclpy

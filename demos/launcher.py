@@ -19,6 +19,12 @@ import sys
 import time
 from pathlib import Path
 
+try:
+    from sidecar import Sidecar
+except ImportError:
+    pass
+    # print("Sidecar not available!")
+
 from cram_vrb_lab.paths import REPO_DIR as REPO
 
 # ROS 2 discovery, matched to the sim scripts so the notebook kernel sees the topics.
@@ -114,9 +120,8 @@ def start_isaac_sim(sim_script=None, marker="StretchROS node ready.",
     :param camera: head-camera mode passed as ``--camera``
         (``"rgb"`` / ``"depth"`` / ``"both"`` / ``"none"``); None uses the
         script's default.
-    :param props: pass ``--props`` to spawn the pick-and-place props (cube and
-        pedestals). Off by default; the pedestals stand in floor the other demos
-        navigate through.
+    :param props: pass ``--props`` to spawn the pick-and-place cube. Off by
+        default; only the pick-and-place demos use it.
     """
     sim_script = Path(sim_script) if sim_script else DEFAULT_SIM_SCRIPT
     args = [
@@ -175,3 +180,54 @@ def stop(patterns=None):
     for pattern in patterns:
         subprocess.run(["pkill", "-f", pattern], stdout=subprocess.DEVNULL)
     print("stopped isaac sim + giskard server + rviz")
+
+
+def display_desktop(anchor="split-right"):
+    """
+    Display the remote desktop in a JupyterLab Sidecar tab.
+    
+    Args:
+        anchor (str): Where the Sidecar tab will be placed. Options:
+                    'split-right', 'split-left', 'split-top', 'split-bottom',
+                    'tab-before', 'tab-after'
+    """
+    try:
+        jupyterhub_user = os.environ["JUPYTERHUB_USER"]
+        domain_name = os.environ["BINDER_LAUNCH_HOST"]
+        domain_name = domain_name.replace("binder", "jupyter")
+    except KeyError:
+        jupyterhub_user = None
+        domain_name = "http://localhost:8888"
+    url_prefix = f"{domain_name}/user/{jupyterhub_user}" if jupyterhub_user is not None else ''
+
+    remote_desktop_url = f"{url_prefix}/desktop"
+
+    display(widgets.HTML(
+        value=f'<a href="{remote_desktop_url}"  class="jupyter-button" style="color: #fff;background-color: #1976d2;" target="_blank">Open Desktop in new Tab</a>',
+    ))
+    
+    sc = Sidecar(title='Desktop', anchor=anchor)
+    with sc:
+        # The inserted custom HTML and CSS snippets are to make the tab resizable
+        display(HTML(f"""
+            <style>
+            body.p-mod-override-cursor div.iframe-widget {{
+                position: relative;
+                pointer-events: none;
+            }}
+
+            body.p-mod-override-cursor div.iframe-widget:before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: transparent;
+            }}
+            </style>
+            <div class="iframe-widget" style="width: calc(100% + 10px);height:100%;">
+                <iframe src="{remote_desktop_url}" width="100%" height="100%"></iframe>
+            </div>
+        """))
+

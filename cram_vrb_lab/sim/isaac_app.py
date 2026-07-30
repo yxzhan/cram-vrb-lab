@@ -50,9 +50,8 @@ def parse_scene_args():
     parser.add_argument(
         "--props",
         action="store_true",
-        help="spawn the pick-and-place props (a graspable cube on a pedestal, "
-        "plus a second pedestal to carry it to). Off by default: the pedestals "
-        "stand in floor the other demos navigate through.",
+        help="spawn the graspable cube for the pick-and-place task. Off by "
+        "default: it is only used by the pick-and-place demos.",
     )
     args, unknown_args = parser.parse_known_args()
     sys.argv = sys.argv[:1] + unknown_args  # hide the scene flags from SimulationApp

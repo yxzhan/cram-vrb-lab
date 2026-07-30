@@ -21,6 +21,19 @@ import time
 
 import numpy as np
 
+
+def dof_indices(robot, joint_names):
+    """Indices of ``joint_names`` into the articulation's joint-state arrays.
+
+    Resolved through ``robot.dof_names`` rather than ``robot.get_dof_index()``:
+    the two orderings are not always the same, and ``dof_names`` is the one that
+    matches ``get_joint_positions()`` and ``set_joint_position_targets()``.
+    Getting this wrong writes each joint's command into some other joint, which
+    looks like a wildly mistuned robot rather than an indexing bug.
+    """
+    order = {name: index for index, name in enumerate(robot.dof_names)}
+    return np.array([order[name] for name in joint_names])
+
 MAX_LEAD = 0.02
 """How far [rad or m] a target may lead the measured position.
 
@@ -58,9 +71,7 @@ class StreamedVelocityIntegrator:
     def __init__(self, robot, joint_names, holding_joints=()):
         self.robot = robot
         self.joint_names = list(joint_names)
-        self.dof_indices = np.array(
-            [robot.get_dof_index(name) for name in self.joint_names]
-        )
+        self.dof_indices = dof_indices(robot, self.joint_names)
         self._holds_target = np.array(
             [name in set(holding_joints) for name in self.joint_names]
         )

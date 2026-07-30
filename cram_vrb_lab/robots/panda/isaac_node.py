@@ -7,9 +7,10 @@
   velocities and gripper commands on the topics in
   :mod:`cram_vrb_lab.robots.panda.joints`.
 
-Nothing here publishes odometry or tf: the Panda is bolted to the world origin,
-which is exactly what giskard's :class:`~cram_vrb_lab.robots.panda.giskard_config.WorldWithPandaConfig`
-assumes, so ``map`` and the robot base are the same frame by construction.
+Nothing here publishes odometry or tf: the Panda does not move, and its base
+pose is a shared constant rather than something measured, so giskard's
+:class:`~cram_vrb_lab.robots.panda.giskard_config.WorldWithPandaConfig` already
+knows where the arm stands.
 
 .. warning::
    Import only after :func:`cram_vrb_lab.sim.isaac_app.create_simulation_app`
@@ -20,12 +21,19 @@ import tempfile
 
 import numpy as np
 import omni.kit.commands
-from isaacsim.core.prims import Articulation
+from isaacsim.core.prims import Articulation, XFormPrim
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64, Float64MultiArray
 
-from cram_vrb_lab.sim.velocity_integrator import StreamedVelocityIntegrator
+from cram_vrb_lab.scenes.apartment.constants import (
+    PANDA_BASE_ORIENTATION_WXYZ,
+    PANDA_BASE_POSITION_IN_MAP,
+)
+from cram_vrb_lab.sim.velocity_integrator import (
+    StreamedVelocityIntegrator,
+    dof_indices,
+)
 
 from .joints import (
     ARM_JOINTS,
@@ -49,20 +57,45 @@ a commanded pose is actually held."""
 
 ARM_DRIVE_DAMPING = 1.0e4
 
-FINGER_DRIVE_STIFFNESS = 1.0e4
-"""[N/m]. Together with ``StreamedVelocityIntegrator.MAX_LEAD`` this sets the
-grip force: the target may lead the measured position by 0.02 m, so a closing
-finger pushes with up to ~200 N -- ample for the 50 g cube, and the finger stops
-on contact rather than crushing through."""
+FINGER_DRIVE_STIFFNESS = 400.0
+FINGER_DRIVE_DAMPING = 40.0
+"""Finger drive gains, [N/m] and [N/(m/s)].
 
-FINGER_DRIVE_DAMPING = 1.0e3
+Taken from NVIDIA's own Franka setup
+(``omni.physxdemos.utils.franka_helpers.get_default_franka_parameters``), which
+is what the official Franka USD is built with. Reproducing them is the whole
+reason the imported robot behaves like the shipped asset.
+
+A URDF describes geometry, mass and limits; it says **nothing about drives**. So
+the importer derives gains from link inertias, and a Franka finger weighs 14 g:
+whatever it derives, and anything sized for the arm, leaves the fingers
+oscillating like a spring. Sizing the damping analytically does not rescue it
+either -- critical damping for a 14 g mass at this stiffness works out around 5,
+and at that value the fingers still ring, because the drive is fighting the
+articulation's effective inertia rather than the bare link's.
+
+Together with ``StreamedVelocityIntegrator.MAX_LEAD`` the stiffness also sets
+the grip force: the target may lead the measured position by 0.02 m, so a
+blocked finger pushes with about 8 N -- inside the joint's own 20 N effort
+limit, and far above the 0.5 N the cube's weight needs.
+"""
 
 
-def spawn_panda(world, render):
+def spawn_panda(
+    world,
+    render,
+    position=PANDA_BASE_POSITION_IN_MAP,
+    orientation=PANDA_BASE_ORIENTATION_WXYZ,
+):
     """Import the Panda into the open stage and return its Articulation.
 
-    The robot lands at the world origin with its base fixed, matching the
-    identity ``map -> panda_link0`` connection the giskard world config builds.
+    The base is placed on the *prim*, before physics ever runs, and matches the
+    posed ``map -> panda_link0`` connection
+    :class:`~cram_vrb_lab.robots.panda.giskard_config.WorldWithPandaConfig`
+    builds -- both read the same constants, so the arm giskard plans for stands
+    where Isaac renders it.
+
+    :param orientation: quaternion in Isaac's ``(w, x, y, z)`` order.
     """
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".urdf", prefix="panda_patched_", delete=False
@@ -81,6 +114,12 @@ def spawn_panda(world, render):
     # The collision meshes that ship with the description are already convex
     # hulls per link, so nothing needs decomposing.
     import_config.convex_decomp = False
+    # A finger's collision hull overlaps the hand it is mounted on, so with
+    # self-collision enabled the solver spends every step pushing the two apart
+    # and the fingers sit in a spring-like tremor. Nothing here needs the robot
+    # to avoid itself: giskard plans the motions, and the demos' collision
+    # avoidance runs against the environment.
+    import_config.self_collision = False
 
     articulation_root = omni.kit.commands.execute(
         "URDFParseAndImportFile",
@@ -89,6 +128,15 @@ def spawn_panda(world, render):
         get_articulation_root=True,
     )[1]
     print(f"Panda imported from {urdf_path} to {articulation_root}")
+
+    # Placed on the prim rather than through the physics view: the base is fixed
+    # to the world where the prim stands when physics starts, and that is also
+    # the pose a later world.reset() restores.
+    XFormPrim(PANDA_PRIM_PATH).set_world_poses(
+        np.array([position], dtype=float), np.array([orientation], dtype=float)
+    )
+    print(f"Panda placed at {tuple(round(v, 4) for v in position)} "
+          f"quat(wxyz) {orientation}")
 
     # Reset before wrapping: the freshly imported prims are not in the physics
     # scene yet, and Articulation reads its link metadata in its constructor --
@@ -102,35 +150,36 @@ def spawn_panda(world, render):
     for _ in range(10):
         world.step(render=render)
 
-    arm_dof = np.array([panda.get_dof_index(name) for name in ARM_JOINTS])
+    print("Panda imported and wrapped; call move_to_park once the scene is built.")
+    return panda
+
+
+def move_to_park(panda, world, render):
+    """Set the drive gains and put the arm in its park pose with the hand open.
+
+    .. warning::
+       Call this **last**, after everything else in the scene has been spawned.
+       ``world.reset()`` re-initializes the physics view: it restores both the
+       state physics started from (every joint at zero, which for a Panda means
+       folded flat with the wrist on a limit) *and* the drive parameters
+       authored on the prims. Anything that spawns a body resets --
+       ``spawn_props`` does -- so gains and poses set before it are silently
+       thrown away, and the robot runs on the importer's derived gains while
+       looking like it is running on yours.
+    """
+    arm_dof = dof_indices(panda, ARM_JOINTS)
+    finger_dof = dof_indices(panda, FINGER_JOINTS)
+
     panda.set_gains(
         kps=np.full((1, len(arm_dof)), ARM_DRIVE_STIFFNESS),
         kds=np.full((1, len(arm_dof)), ARM_DRIVE_DAMPING),
         joint_indices=arm_dof,
     )
-    finger_dof = np.array([panda.get_dof_index(name) for name in FINGER_JOINTS])
     panda.set_gains(
         kps=np.full((1, len(finger_dof)), FINGER_DRIVE_STIFFNESS),
         kds=np.full((1, len(finger_dof)), FINGER_DRIVE_DAMPING),
         joint_indices=finger_dof,
     )
-
-    print("Panda ready")
-    return panda
-
-
-def move_to_park(panda, world, render):
-    """Put the arm in its park pose with the hand open.
-
-    .. warning::
-       Call this **after** everything else in the scene has been spawned. A
-       zero-joint Panda stands folded flat with its wrist on a limit, so the
-       pose has to be set -- but ``world.reset()`` restores the state physics
-       started from, and anything else that spawns a body (``spawn_props``)
-       resets too. Setting the pose earlier would simply be undone.
-    """
-    arm_dof = np.array([panda.get_dof_index(name) for name in ARM_JOINTS])
-    finger_dof = np.array([panda.get_dof_index(name) for name in FINGER_JOINTS])
 
     positions = panda.get_joint_positions()
     positions[0, arm_dof] = PARK_CONFIGURATION
@@ -153,9 +202,7 @@ class PandaROS(Node):
     def __init__(self, robot):
         super().__init__("panda_ros")
         self.robot = robot
-        self.finger_dof = np.array(
-            [robot.get_dof_index(name) for name in FINGER_JOINTS]
-        )
+        self.finger_dof = dof_indices(robot, FINGER_JOINTS)
         self.integrator = StreamedVelocityIntegrator(
             robot, CONTROLLED_JOINTS, holding_joints=FINGER_JOINTS
         )

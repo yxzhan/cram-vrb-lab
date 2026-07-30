@@ -26,7 +26,10 @@ from std_msgs.msg import Float64, Float64MultiArray
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 from cram_vrb_lab.paths import ASSETS_DIR
-from cram_vrb_lab.sim.velocity_integrator import StreamedVelocityIntegrator
+from cram_vrb_lab.sim.velocity_integrator import (
+    StreamedVelocityIntegrator,
+    dof_indices,
+)
 from cram_vrb_lab.sim.ros_utils import (
     as_np,
     build_camera_info,
@@ -53,6 +56,8 @@ from .joints import (
 )
 
 STRETCH_USD_PATH = str(ASSETS_DIR / "stretch" / "stretch.usd")
+# STRETCH_USD_PATH = str(ASSETS_DIR / "stretch_urdf/stretch_urdf/SE3/stretch_description_SE3_eoa_wrist_dw3_tool_sg3_pro/stretch_description_SE3_eoa_wrist_dw3_tool_sg3_pro.usd")
+
 
 # The head camera sits deep inside the Stretch link tree.
 HEAD_CAM_PRIM = ("/World/stretch/link_head_tilt/camera_bottom_screw_frame/"
@@ -61,7 +66,20 @@ CAMERA_RESOLUTION = (640, 360)
 
 
 def spawn_stretch(world, render, position=(-1.5, 0, 0.05)):
-    """Load the Stretch USD, tune its drives, and return the Articulation."""
+    """Load the Stretch USD, tune its drives, and return the Articulation.
+
+    .. note::
+       This robot comes from a USD, unlike the Panda
+       (:func:`cram_vrb_lab.robots.panda.isaac_node.spawn_panda`), which the sim
+       builds from the very URDF giskard and the twin plan against. Importing the
+       Stretch URDF instead does work as far as the articulation goes -- all 14
+       DOFs, the camera-frame chain and the patched gripper limits come through
+       -- but the URDF carries no drive parameters, and the gains the importer
+       derives cannot hold the arm: joint_lift sags to the bottom of its travel
+       under the arm's weight and the wrist droops onto its limit. The USD
+       carries hand-tuned drives that would have to be reproduced joint by joint
+       first.
+    """
     create_prim(
         usd_path=STRETCH_USD_PATH,
         prim_path="/World/stretch",
@@ -82,7 +100,7 @@ def spawn_stretch(world, render, position=(-1.5, 0, 0.05)):
     # back instead of holding. Raise the PD gains to values comparable to the
     # hand-tuned joint_lift (stiffness 50000 / damping 300).
     arm_joints = ["joint_arm_l0", "joint_arm_l1", "joint_arm_l2", "joint_arm_l3"]
-    arm_dof = np.array([stretch.get_dof_index(n) for n in arm_joints])
+    arm_dof = dof_indices(stretch, arm_joints)
 
     kps = np.full((1, len(arm_dof)), 1.0e4)   # stiffness [N/m]
     kds = np.full((1, len(arm_dof)), 2.0e2)   # damping  [N/(m/s)]
@@ -92,19 +110,18 @@ def spawn_stretch(world, render, position=(-1.5, 0, 0.05)):
     stretch.set_max_efforts(np.full((1, len(arm_dof)), 200.0), joint_indices=arm_dof)
 
     # Cap the speed so the arm extends/retracts gently (URDF default is 1.0 m/s).
-    arm_max_vel = 0.1   # m/s per segment
     stretch.set_max_joint_velocities(
-        np.full((1, len(arm_dof)), arm_max_vel), joint_indices=arm_dof)
+        np.full((1, len(arm_dof)), 0.1), joint_indices=arm_dof)
 
     # --- Fix the gripper finger joint gains ---
     # Same auto-generation problem as the arm: the tiny finger links get
     # stiffness ~1.1 / damping ~4e-4. The velocity integrator caps the target
-    # lead at 0.02 rad (StretchROS.VEL_MAX_LEAD), so the drive torque on a
-    # streamed gripper goal is stiffness * 0.02 -- the same order as the
-    # fingers' own gravity load, and the fingers crawl. Raise the gains so the
-    # small lead produces authoritative torque.
-    finger_joints = ["joint_gripper_finger_left", "joint_gripper_finger_right"]
-    finger_dof = np.array([stretch.get_dof_index(n) for n in finger_joints])
+    # lead at MAX_LEAD (0.02 rad), so the drive torque on a streamed gripper goal
+    # is stiffness * 0.02 -- the same order as the fingers' own gravity load, and
+    # the fingers crawl. Raise the gains so the small lead produces authoritative
+    # torque.
+    finger_dof = dof_indices(
+        stretch, ["joint_gripper_finger_left", "joint_gripper_finger_right"])
     stretch.set_gains(kps=np.full((1, len(finger_dof)), 200.0),
                       kds=np.full((1, len(finger_dof)), 2.0),
                       joint_indices=finger_dof)
@@ -117,9 +134,9 @@ def spawn_stretch(world, render, position=(-1.5, 0, 0.05)):
     # physics, the ROS node integrates the commanded twist into the base pose and
     # teleports base_link there every step (StretchROS.integrate_base). Undrive the
     # wheels (kp=kd=0, zero friction) so their cosmetic spin adds no reaction.
-    wheel_dof = np.array([stretch.get_dof_index("joint_left_wheel"),
-                          stretch.get_dof_index("joint_right_wheel")])
-    stretch.set_gains(kps=np.zeros((1, 2)), kds=np.zeros((1, 2)), joint_indices=wheel_dof)
+    wheel_dof = dof_indices(stretch, ["joint_left_wheel", "joint_right_wheel"])
+    stretch.set_gains(kps=np.zeros((1, 2)), kds=np.zeros((1, 2)),
+                      joint_indices=wheel_dof)
     stretch.set_friction_coefficients(np.zeros((1, 2)), joint_indices=wheel_dof)
 
     for _ in range(3):
@@ -168,16 +185,15 @@ class StretchROS(Node):
         self.publish_depth = publish_depth
 
         # Gripper finger DOFs for the gripper command topic.
-        self.finger_dof = np.array(
-            [robot.get_dof_index("joint_gripper_finger_left"),
-             robot.get_dof_index("joint_gripper_finger_right")])
+        self.finger_dof = dof_indices(
+            robot, ["joint_gripper_finger_left", "joint_gripper_finger_right"])
 
         # Differential base geometry (for the cosmetic wheel spin only -- the
         # base is driven kinematically, see integrate_base).
         self.wheel_base = 0.3407
         self.wheel_radius = 0.051
-        self.wheel_dof = np.array([robot.get_dof_index("joint_left_wheel"),
-                                   robot.get_dof_index("joint_right_wheel")])
+        self.wheel_dof = dof_indices(
+            robot, ["joint_left_wheel", "joint_right_wheel"])
 
         # Internal commanded base pose for kinematic dead-reckoning, seeded from
         # the robot's current world pose; integrate_base advances it from cmd_vel.

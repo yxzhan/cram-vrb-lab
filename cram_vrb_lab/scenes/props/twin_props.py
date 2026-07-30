@@ -1,8 +1,8 @@
 """Pick-and-place props on the digital-twin side.
 
-:func:`add_props_to_twin` puts the same cube and pedestals CRAM plans against
-into the shared ``semantic_digital_twin`` world, built from the constants the
-Isaac side uses, so the twin and the render start out identical.
+:func:`add_props_to_twin` puts the cube CRAM plans against into the shared
+``semantic_digital_twin`` world, built from the constants the Isaac side uses,
+so the twin and the render start out identical.
 
 :func:`sync_cube_from_sim` pulls the cube's *actual* pose out of the sim and
 writes it back into the twin. That is the only place the twin learns the grasp
@@ -29,9 +29,6 @@ from .constants import (
     CUBE_COLOR,
     CUBE_POSE_TOPIC,
     CUBE_SIZE,
-    PEDESTAL_COLOR,
-    PICK_PEDESTAL_BODY_NAME,
-    PLACE_PEDESTAL_BODY_NAME,
     PropLayout,
 )
 
@@ -58,7 +55,7 @@ def _box_body(name, scale, color):
 
 
 def add_props_to_twin(world, layout: PropLayout = APARTMENT_LAYOUT):
-    """Add the cube and the two pedestals to ``world``; return the cube body.
+    """Add the cube to ``world``; return its body.
 
     Idempotent: if the cube is already there (a re-run of the notebook cell
     against a still-running server) the existing body is returned untouched.
@@ -67,30 +64,29 @@ def add_props_to_twin(world, layout: PropLayout = APARTMENT_LAYOUT):
     ``AttachNode`` replaces whatever connection a grasped body has, so nothing is
     gained by making the cube's connection movable up front; poses are updated by
     swapping the connection instead (:func:`set_cube_pose`).
+
+    ..note::
+       Only the cube is added. Whatever it rests on belongs to the scene, and if
+       that surface is not in the environment description either, giskard plans
+       as though nothing were under the cube.
     """
     existing = [b for b in world.bodies if b.name.name == CUBE_BODY_NAME]
     if existing:
         return existing[0]
 
     cube = _box_body(CUBE_BODY_NAME, (CUBE_SIZE,) * 3, CUBE_COLOR)
-    pedestal_size = layout.pedestal_size
-    pedestals = [
-        (_box_body(PICK_PEDESTAL_BODY_NAME, pedestal_size, PEDESTAL_COLOR),
-         (*layout.pick_position, pedestal_size[2] / 2)),
-        (_box_body(PLACE_PEDESTAL_BODY_NAME, pedestal_size, PEDESTAL_COLOR),
-         (*layout.place_position, pedestal_size[2] / 2)),
-    ]
 
     with world.modify_world():
-        for body, position in [(cube, layout.cube_start_position)] + pedestals:
-            world.add_kinematic_structure_entity(body)
-            world.add_connection(FixedConnection(
-                parent=world.root,
-                child=body,
-                parent_T_connection_expression=(
-                    HomogeneousTransformationMatrix.from_xyz_rpy(*position)
-                ),
-            ))
+        world.add_kinematic_structure_entity(cube)
+        world.add_connection(FixedConnection(
+            parent=world.root,
+            child=cube,
+            parent_T_connection_expression=(
+                HomogeneousTransformationMatrix.from_xyz_rpy(
+                    *layout.cube_start_position
+                )
+            ),
+        ))
     return cube
 
 
