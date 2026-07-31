@@ -1,0 +1,1442 @@
+#usda 1.0
+(
+    defaultPrim = "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
+    metersPerUnit = 1
+    subLayers = [
+        @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_look.usda@
+    ]
+    upAxis = "Z"
+)
+
+over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
+{
+    def Xform "Static" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI"]
+    )
+    {
+        bool physics:kinematicEnabled = 1
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/Static>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "none"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0007"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0008"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0009"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0010"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0011"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0012"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0013"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0014"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0015"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0016"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0017"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0018"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0019"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0020"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0021"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_628d91af1ab3ee0001ed70ac>
+            }
+
+            over "mesh_0022"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_628d91af1ab3ee0001ed70ac>
+            }
+
+            over "mesh_0023"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_628d91af1ab3ee0001ed70ac>
+            }
+
+            over "mesh_0024"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_5941f12764ba5c3d8f8b4933>
+            }
+
+            over "mesh_0025"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0026"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0027"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0028"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0029"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0030"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0031"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0032"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0033"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0034"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0035"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0036"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0037"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0038"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0039"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0040"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0041"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0042"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0043"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0044"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0045"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0046"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0047"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0048"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0049"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0050"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0051"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0052"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0053"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0054"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0055"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0056"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0057"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0058"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0059"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0060"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0061"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0062"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0063"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0064"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0065"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0066"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0067"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0068"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0069"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0070"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0071"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0072"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0073"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0074"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0075"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0076"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464fcbd7c7aa0001b0787a>
+            }
+
+            over "mesh_0077"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0078"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0079"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0080"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0081"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0082"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0083"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0084"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0085"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0086"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0087"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0088"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0089"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0090"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0091"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6545ced8a7a1dd0001750c62>
+            }
+
+            over "mesh_0092"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6545ced8a7a1dd0001750c62>
+            }
+        }
+    }
+
+    def Xform "door_2" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 5
+        float3 xformOp:scale = (0.96, 1, 1)
+        double3 xformOp:translate = (-0.984187943534851, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/B095bea57b6f46a59fe6A701e4e23301>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+        }
+    }
+
+    def Xform "door_2_handle" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 0.2
+        double xformOp:rotateY = -90
+        double3 xformOp:translate = (0.6314999999999998, -7.420769929885864, -1.8762979)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateY"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/B095bea57b6f46a59fe6A701e4e23301_handle_1>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+            }
+        }
+    }
+
+    def Xform "drawer_4" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 8
+        float3 xformOp:scale = (0.96, 1, 1)
+        double3 xformOp:translate = (-0.984187943534851, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5ea867659df64f408e96443612e6bc81>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0007"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0008"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0009"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+        }
+    }
+
+    def Xform "drawer_4_handle" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 0.2
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5ea867659df64f408e96443612e6bc81_handle_1>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f31d7c7aa0001b073db>
+            }
+        }
+    }
+
+    def Xform "door_1" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 5
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F2a2927dB09f40d29b7a3cb63c5e1e2f>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+        }
+    }
+
+    def Xform "door_1_handle" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 0.2
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F2a2927dB09f40d29b7a3cb63c5e1e2f_handle_1>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+            }
+        }
+    }
+
+    def Xform "door_4" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 5
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/Db95e8a331c74e7cA5ac6c6c522cde9b>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+        }
+    }
+
+    def Xform "door_4_handle" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 0.2
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/Db95e8a331c74e7cA5ac6c6c522cde9b_handle_1>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+            }
+        }
+    }
+
+    def Xform "door_3" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 5
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5c9ebfa4Efc84b04Bf6061fe4acd90a4>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
+            }
+        }
+    }
+
+    def Xform "door_3_handle" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 0.2
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5c9ebfa4Efc84b04Bf6061fe4acd90a4_handle_1>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+            }
+        }
+    }
+
+    def Xform "drawer_3" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 8
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A4ef78b96650f473f9de2F65c55bf08ab>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0007"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0008"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0009"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+        }
+    }
+
+    def Xform "drawer_3_handle" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 0.2
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A4ef78b96650f473f9de2F65c55bf08ab_handle_1>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+            }
+        }
+    }
+
+    def Xform "drawer_2" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 8
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A0aad046c75f94d4cA2dcB13bc8914ed5>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0007"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0008"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0009"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+        }
+    }
+
+    def Xform "drawer_2_handle" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 0.2
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A0aad046c75f94d4cA2dcB13bc8914ed5_handle_1>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+            }
+        }
+    }
+
+    def Xform "drawer_1" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 8
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F989cb36Ff194643990a751bdf31759b>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0001"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0002"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0003"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0004"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0005"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0006"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0007"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0008"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+
+            over "mesh_0009"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
+            }
+        }
+    }
+
+    def Xform "drawer_1_handle" (
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+    )
+    {
+        float physics:mass = 0.2
+        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+
+        def Mesh "geom" (
+            delete apiSchemas = ["PhysicsRigidBodyAPI"]
+            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
+            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F989cb36Ff194643990a751bdf31759b_handle_1>
+        )
+        {
+            uniform bool doubleSided = 0
+            token faceVaryingLinearInterpolation = "cornersPlus1"
+            token interpolateBoundary = "edgeAndCorner"
+            uniform token orientation = "rightHanded"
+            uniform token physics:approximation = "convexHull"
+            uniform token subdivisionScheme = "catmullClark"
+            token triangleSubdivisionRule = "catmullClark"
+            uniform token[] xformOpOrder = []
+
+            over "mesh_0000"
+            {
+                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+            }
+        }
+    }
+
+    def Scope "joints"
+    {
+        def PhysicsRevoluteJoint "door_2_hinge"
+        {
+            uniform token physics:axis = "Z"
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_2>
+            point3f physics:localPos0 = (1.66688, 7.15154, 0.4)
+            point3f physics:localPos1 = (1.6758, 7.15154, 0.4)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 90
+        }
+
+        def PhysicsFixedJoint "door_2_handle_fixed"
+        {
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_2>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_2_handle>
+            point3f physics:localPos0 = (1.2663416, 7.1208024, 0.576)
+            point3f physics:localPos1 = (1.4522979, 7.1207724, 0.4)
+            quatf physics:localRot1 = (0.7071068, 0, 0.7071068, 0)
+        }
+
+        def PhysicsPrismaticJoint "drawer_4_slide"
+        {
+            uniform token physics:axis = "Y"
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_4>
+            point3f physics:localPos0 = (1.4523001, 7.4030447, 0.8)
+            point3f physics:localPos1 = (1.4523001, 7.4030447, 0.8)
+            float physics:lowerLimit = -0.4662087
+            float physics:upperLimit = 0
+        }
+
+        def PhysicsFixedJoint "drawer_4_handle_fixed"
+        {
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_4>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_4_handle>
+            point3f physics:localPos0 = (1.4522979, 7.122772, 0.8)
+            point3f physics:localPos1 = (1.4522979, 7.122772, 0.8)
+        }
+
+        def PhysicsRevoluteJoint "door_1_hinge"
+        {
+            uniform token physics:axis = "Z"
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_1>
+            point3f physics:localPos0 = (1.2258, 7.15154, 0.5)
+            point3f physics:localPos1 = (1.2258, 7.15154, 0.5)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 90
+        }
+
+        def PhysicsFixedJoint "door_1_handle_fixed"
+        {
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_1>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_1_handle>
+            point3f physics:localPos0 = (0.81470734, 7.1207724, 0.776015)
+            point3f physics:localPos1 = (0.81470734, 7.1207724, 0.776015)
+        }
+
+        def PhysicsRevoluteJoint "door_4_hinge"
+        {
+            uniform token physics:axis = "Z"
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_4>
+            point3f physics:localPos0 = (2.2758, 7.15154, 0.575)
+            point3f physics:localPos1 = (2.2758, 7.15154, 0.575)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 90
+        }
+
+        def PhysicsFixedJoint "door_4_handle_fixed"
+        {
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_4>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_4_handle>
+            point3f physics:localPos0 = (1.7147074, 7.1207724, 0.926015)
+            point3f physics:localPos1 = (1.7147074, 7.1207724, 0.926015)
+        }
+
+        def PhysicsRevoluteJoint "door_3_hinge"
+        {
+            uniform token physics:axis = "Z"
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_3>
+            point3f physics:localPos0 = (2.2758, 7.15154, 1.5250001)
+            point3f physics:localPos1 = (2.2758, 7.15154, 1.5250001)
+            float physics:lowerLimit = 0
+            float physics:upperLimit = 90
+        }
+
+        def PhysicsFixedJoint "door_3_handle_fixed"
+        {
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_3>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_3_handle>
+            point3f physics:localPos0 = (1.7147074, 7.1207724, 1.173985)
+            point3f physics:localPos1 = (1.7147074, 7.1207724, 1.173985)
+        }
+
+        def PhysicsPrismaticJoint "drawer_3_slide"
+        {
+            uniform token physics:axis = "Y"
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_3>
+            point3f physics:localPos0 = (0.05229999, 7.4030447, 0.29999998)
+            point3f physics:localPos1 = (0.05229999, 7.4030447, 0.29999998)
+            float physics:lowerLimit = -0.4662087
+            float physics:upperLimit = 0
+        }
+
+        def PhysicsFixedJoint "drawer_3_handle_fixed"
+        {
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_3>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_3_handle>
+            point3f physics:localPos0 = (0.052297853, 7.122772, 0.3)
+            point3f physics:localPos1 = (0.052297853, 7.122772, 0.3)
+        }
+
+        def PhysicsPrismaticJoint "drawer_2_slide"
+        {
+            uniform token physics:axis = "Y"
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_2>
+            point3f physics:localPos0 = (0.05229999, 7.4030447, 0.6)
+            point3f physics:localPos1 = (0.05229999, 7.4030447, 0.6)
+            float physics:lowerLimit = -0.4662087
+            float physics:upperLimit = 0
+        }
+
+        def PhysicsFixedJoint "drawer_2_handle_fixed"
+        {
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_2>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_2_handle>
+            point3f physics:localPos0 = (0.052297853, 7.122772, 0.6)
+            point3f physics:localPos1 = (0.052297853, 7.122772, 0.6)
+        }
+
+        def PhysicsPrismaticJoint "drawer_1_slide"
+        {
+            uniform token physics:axis = "Y"
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_1>
+            point3f physics:localPos0 = (0.05229999, 7.4030447, 0.8)
+            point3f physics:localPos1 = (0.05229999, 7.4030447, 0.8)
+            float physics:lowerLimit = -0.4662087
+            float physics:upperLimit = 0
+        }
+
+        def PhysicsFixedJoint "drawer_1_handle_fixed"
+        {
+            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_1>
+            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_1_handle>
+            point3f physics:localPos0 = (0.052297853, 7.122772, 0.8)
+            point3f physics:localPos1 = (0.052297853, 7.122772, 0.8)
+        }
+    }
+}
+
