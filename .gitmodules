@@ -1,6 +1,6 @@
 [submodule "cognitive_robot_abstract_machine"]
 	path = cognitive_robot_abstract_machine
-	url = https://github.com/cram2/cognitive_robot_abstract_machine.git
+	url = https://github.com/yxzhan/cognitive_robot_abstract_machine.git
 [submodule "assets/stretch_urdf"]
 	path = assets/stretch_urdf
 	url = https://github.com/hello-robot/stretch_urdf
