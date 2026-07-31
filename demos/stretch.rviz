@@ -3,7 +3,9 @@ Panels:
     Help Height: 78
     Name: Displays
     Property Tree Widget:
-      Expanded: ~
+      Expanded:
+        - /MarkerArray1
+        - /MarkerArray1/Topic1
       Splitter Ratio: 0.5
     Tree Height: 577
   - Class: rviz_common/Views
@@ -733,148 +735,9 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        armchair: true
-        base_imu: true
-        base_link: true
-        bedside_table: true
-        cabinet1: true
-        cabinet10: true
-        cabinet10_drawer_bottom: true
-        cabinet10_drawer_middle: true
-        cabinet10_drawer_top: true
-        cabinet11: true
-        cabinet11_drawer_bottom: true
-        cabinet11_drawer_middle: true
-        cabinet11_drawer_top: true
-        cabinet12: true
-        cabinet12_door_bottom_left: true
-        cabinet12_door_top_left: true
-        cabinet1_coloksu_level4: true
-        cabinet1_coloksu_level5: true
-        cabinet1_door_top_left: true
-        cabinet1_drawer_bottom: true
-        cabinet1_drawer_middle: true
-        cabinet2: true
-        cabinet2_door_left: true
-        cabinet2_drawer_big: true
-        cabinet2_drawer_small: true
-        cabinet3: true
-        cabinet3_door_bottom_left: true
-        cabinet3_door_top_left: true
-        cabinet4: true
-        cabinet4_door_bottom: true
-        cabinet4_door_top: true
-        cabinet5: true
-        cabinet5_drawer_bottom: true
-        cabinet5_drawer_middle: true
-        cabinet5_drawer_top: true
-        cabinet6: true
-        cabinet6_drawer_bottom: true
-        cabinet6_drawer_middle: true
-        cabinet6_drawer_top: true
-        cabinet7: true
-        cabinet7_door_bottom_left: true
-        cabinet8: true
-        cabinet8_drawer_bottom: true
-        cabinet8_drawer_middle: true
-        cabinet9: true
-        cabinet9_drawer_bottom: true
-        cabinet9_drawer_middle: true
-        cabinet9_drawer_top: true
-        camera_link: true
-        caster_link: true
-        coffe_machine: true
-        coffee_table: true
-        coffee_table_drawer: true
-        cooktop: true
-        countertop: true
-        dishwasher_drawer_middle: true
-        gripper_camera_link: true
-        handle_cab10_b: true
-        handle_cab10_m: true
-        handle_cab10_t: true
-        handle_cab11_b: true
-        handle_cab11_m: true
-        handle_cab11_t: true
-        handle_cab1_drawer_bottom: true
-        handle_cab1_drawer_mid: true
-        handle_cab1_top_door: true
-        handle_cab2_door: true
-        handle_cab3_door_bottom: true
-        handle_cab3_door_top: true
-        handle_cab4_door_bottom: true
-        handle_cab5_b: true
-        handle_cab5_m: true
-        handle_cab5_t: true
-        handle_cab6_b: true
-        handle_cab6_m: true
-        handle_cab6_t: true
-        handle_cab7: true
-        handle_cab7_middle: true
-        handle_cab8: true
-        handle_cab9_b: true
-        handle_cab9_m: true
-        handle_cab9_t: true
-        island_back: true
-        island_countertop: true
-        island_waterfall_left: true
-        island_waterfall_right: true
-        laser: true
-        link_arm_l0: true
-        link_arm_l1: true
-        link_arm_l2: true
-        link_arm_l3: true
-        link_arm_l4: true
-        link_aruco_d405: true
-        link_aruco_fingertip_left: true
-        link_aruco_fingertip_right: true
-        link_aruco_inner_wrist: true
-        link_aruco_left_base: true
-        link_aruco_right_base: true
-        link_aruco_shoulder: true
-        link_aruco_top_wrist: true
-        link_gripper_finger_left: true
-        link_gripper_finger_right: true
-        link_gripper_fingertip_left: true
-        link_gripper_fingertip_right: true
-        link_gripper_s3_body: true
-        link_head: true
-        link_head_nav_cam: true
-        link_head_pan: true
-        link_head_tilt: true
-        link_left_wheel: true
-        link_lift: true
-        link_mast: true
-        link_right_wheel: true
-        link_wrist_pitch: true
-        link_wrist_roll: true
-        link_wrist_yaw: true
-        link_wrist_yaw_bottom: true
-        oven: true
-        respeaker_base: true
-        side_A_left: true
-        side_A_rb: true
-        side_A_rt: true
-        sink: true
-        sofa: true
-        table_area_main: true
-        tap_body: true
-        tap_handle: true
-        useless_underbar_a: true
-        useless_underbar_b: true
-        wall_coloksu_wall1: true
-        wall_coloksu_wall2: true
-        wall_coloksu_wall3: true
-        wall_coloksu_wall4: true
-        walls: true
-        wardrobe: true
-        wardrobe_door_left: true
-        wardrobe_door_left_handle: true
-        wardrobe_door_right: true
-        wardrobe_door_right_handle: true
-        windows: true
+        {}
       Topic:
-        Depth: 5
+        Depth: 4
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -900,22 +763,22 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 10.599039077758789
+      Distance: 8.763940811157227
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 2.5858118534088135
-        Y: 0.5519452095031738
-        Z: -0.19836470484733582
+        X: 2.6274492740631104
+        Y: 0.2898317575454712
+        Z: -0.24358320236206055
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.47479650378227234
+      Pitch: 0.4597965478897095
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
       Yaw: 3.3868184089660645
@@ -926,7 +789,7 @@ Window Geometry:
   Height: 800
   Hide Left Dock: true
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd000000010000000000000156000002cafc0200000003fb0000000c00430061006d006500720061000000003b000000bb0000000000000000fb000000100044006900730070006c006100790073000000003b000002ca000000c700fffffffb0000000a0056006900650077007300000001f100000114000000a000ffffff000003d8000002ca00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd000000010000000000000156000002cafc0200000003fb0000000c00430061006d006500720061000000003b000000bb0000000000000000fb000000100044006900730070006c006100790073000000003b000002ca000000c700fffffffb0000000a0056006900650077007300000001f100000114000000a000ffffff000003d8000002f100000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730000000000ffffffff0000000000000000
   Views:
     collapsed: false
   Width: 984

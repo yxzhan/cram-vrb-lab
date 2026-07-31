@@ -39,8 +39,8 @@ def load_apartment_scene(world, render, camera_eye=None, camera_target=None):
         )
 
     viewports.set_camera_view(
-        eye=np.array(camera_eye if camera_eye is not None else [-6.5, -2, 2]),
-        target=np.array(camera_target if camera_target is not None else [-1, 1, 1]),
+        eye=np.array(camera_eye if camera_eye is not None else [-4.0, -2, 2]),
+        target=np.array(camera_target if camera_target is not None else [1, 0, 0.8]),
     )
 
     for _ in range(30):

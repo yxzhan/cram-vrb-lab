@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRAM Workspace</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      background: #1e1e2e;
+      color: #cdd6f4;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+      flex-wrap: wrap;
+    }
+    header .title {
+      font-weight: 600;
+      margin-right: 12px;
+      font-size: 14px;
+    }
+    .tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border: 1px solid #313244;
+      border-radius: 6px;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background .15s, border-color .15s;
+    }
+    .tab:hover { background: #313244; }
+    .tab.active {
+      background: #89b4fa;
+      border-color: #89b4fa;
+      color: #11111b;
+      font-weight: 600;
+    }
+    .tab .open-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.15);
+      text-decoration: none;
+      color: inherit;
+      font-size: 12px;
+      line-height: 1;
+    }
+    .tab .open-btn:hover { background: rgba(0,0,0,0.35); }
+    .tab.active .open-btn { background: rgba(0,0,0,0.15); }
+
+    main {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    .frame-wrap {
+      position: absolute;
+      inset: 0;
+      display: none;
+    }
+    .frame-wrap.active { display: block; }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="title">EBiM Workspace</span>
+    <!-- tabs injected by script -->
+  </header>
+  <main></main>
+
+  <script>
+    const FALLBACK_BASE = "http://localhost:8888/";
+
+    function detectBase() {
+      const m = window.location.pathname.match(/^(\/user\/[^/]+\/)/);
+      if (m) return window.location.origin + m[1];
+      return FALLBACK_BASE;
+    }
+
+    const BASE = detectBase();
+
+    const targets = [
+      { name: "Desktop", path: "desktop/" },
+      { name: "VS Code", path: "vscode/?folder=/workspace/EBiM_Challenge" },
+      { name: "JupyterLab", path: "lab" }
+    ].map(t => ({ name: t.name, url: BASE + t.path }));
+
+    const header = document.querySelector("header");
+    const main = document.querySelector("main");
+    const tabs = [];
+    const frames = [];
+
+    targets.forEach((t, i) => {
+      // tab button
+      const tab = document.createElement("button");
+      tab.className = "tab" + (i === 0 ? " active" : "");
+      tab.innerHTML = `<span>${t.name}</span>`;
+
+      const openBtn = document.createElement("a");
+      openBtn.className = "open-btn";
+      openBtn.href = t.url;
+      openBtn.target = "_blank";
+      openBtn.rel = "noopener";
+      openBtn.title = "open in new tab";
+      openBtn.textContent = "↗";
+      openBtn.addEventListener("click", e => e.stopPropagation());
+      tab.appendChild(openBtn);
+
+      tab.addEventListener("click", () => activate(i));
+      header.appendChild(tab);
+      tabs.push(tab);
+
+      // frame (lazy: src set on first activation)
+      const wrap = document.createElement("div");
+      wrap.className = "frame-wrap" + (i === 0 ? " active" : "");
+      const iframe = document.createElement("iframe");
+      iframe.dataset.src = t.url;
+      wrap.appendChild(iframe);
+      main.appendChild(wrap);
+      frames.push({ wrap, iframe });
+    });
+
+    function activate(i) {
+      tabs.forEach((tab, j) => tab.classList.toggle("active", j === i));
+      frames.forEach((f, j) => f.wrap.classList.toggle("active", j === i));
+      const f = frames[i].iframe;
+      if (!f.src && f.dataset.src) f.src = f.dataset.src; // lazy load
+    }
+
+    // load first frame
+    activate(0);
+  </script>
+</body>
+</html>

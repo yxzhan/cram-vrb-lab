@@ -17,9 +17,79 @@ robokudo's learned annotators cannot run.
 
 from __future__ import annotations
 
+import sys
+import types
 from dataclasses import dataclass
 
 import numpy as np
+
+# --------------------------------------------------------------------------------
+# Keep robokudo's ROS visualizer -- and therefore cv_bridge -- out of this process.
+#
+# ``robokudo.utils.tree_execution`` imports ``robokudo.garden``, which imports
+# ``robokudo.vis.visualizer_manager`` -> ``robokudo.vis.ros_visualizer`` ->
+# ``cv_bridge``, all at *module* level. That chain runs unconditionally, even though
+# :func:`detect` passes ``include_gui=False`` and ``garden.grow_tree`` therefore never
+# instantiates ``VisualizationManager``: we pay for the import of a visualizer we
+# never build.
+#
+# The system ``cv_bridge`` is compiled against NumPy 1.x and this venv has NumPy 2.x,
+# so ``cv_bridge/__init__.py``'s ``from cv_bridge.boost.cv_bridge_boost import ...``
+# trips NumPy's compatibility shim. Note what that shim does, because it explains why
+# ``try``/``except`` is not the tool here: ``numpy/core/_multiarray_umath.py`` writes
+# its "A module that was compiled using NumPy 1.x" page *plus a formatted traceback*
+# straight to ``sys.stderr`` and only then raises ``ImportError`` -- and cv_bridge
+# catches that ImportError itself (``except ImportError: pass``). So the alarming
+# output in the notebook is a **print, not an exception**; there is nothing to catch,
+# and wrapping the robokudo imports in ``try``/``except`` cannot suppress it.
+# --------------------------------------------------------------------------------
+
+_ROS_VISUALIZER_MODULE = "robokudo.vis.ros_visualizer"
+
+
+def _disable_ros_visualizer() -> None:
+    """Pre-register a stub for :mod:`robokudo.vis.ros_visualizer` in ``sys.modules``.
+
+    ``visualizer_manager`` only does ``from robokudo.vis.ros_visualizer import
+    SharedROSVisualizer, AllAnnotatorROSVisualizer`` and lists the two classes in
+    ``self.visualizer_types``; they are instantiated solely by
+    ``create_visualizers_for_pipeline``, which no ``include_gui=False`` run reaches.
+    Satisfying those two names is therefore enough, and the real module -- the only
+    importer of ``cv_bridge`` in all of robokudo -- never loads.
+
+    The stubs raise if anything ever does try to build them, so a future
+    ``include_gui=True`` fails loudly here rather than mystifyingly inside cv_bridge.
+    """
+    if _ROS_VISUALIZER_MODULE in sys.modules:
+        return
+
+    class _DisabledROSVisualizer:
+        """Placeholder for a robokudo ROS visualizer that this venv cannot run."""
+
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError(
+                f"{type(self).__name__} is disabled by "
+                "cram_vrb_lab.perception.pipeline: it needs cv_bridge, which is "
+                "compiled against NumPy 1.x while this venv runs NumPy "
+                f"{np.__version__}. The geometric pipeline does not need any "
+                "visualizer -- detect() ticks with include_gui=False."
+            )
+
+    class SharedROSVisualizer(_DisabledROSVisualizer):
+        pass
+
+    class AllAnnotatorROSVisualizer(_DisabledROSVisualizer):
+        pass
+
+    stub = types.ModuleType(_ROS_VISUALIZER_MODULE)
+    stub.__doc__ = "Stub installed by cram_vrb_lab.perception.pipeline; see that module."
+    stub.SharedROSVisualizer = SharedROSVisualizer
+    stub.AllAnnotatorROSVisualizer = AllAnnotatorROSVisualizer
+    stub._cram_vrb_lab_stub = True
+    sys.modules[_ROS_VISUALIZER_MODULE] = stub
+
+
+_disable_ros_visualizer()
 
 # Import order matters. ``robokudo.annotators.outputs`` imports back into
 # ``robokudo.pipeline``, so pulling it in as the first robokudo submodule raises
