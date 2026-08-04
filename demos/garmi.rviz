@@ -1,0 +1,797 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /MarkerArray1
+        - /MarkerArray1/Topic1
+      Splitter Ratio: 0.5
+    Tree Height: 365
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 30
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Filter (blacklist): ""
+      Filter (whitelist): ""
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+        base_imu:
+          Value: true
+        base_link:
+          Value: true
+        basin_0:
+          Value: true
+        bay_window_platform_0:
+          Value: true
+        bay_window_platform_1:
+          Value: true
+        bed_0:
+          Value: true
+        book_0:
+          Value: true
+        book_1:
+          Value: true
+        book_10:
+          Value: true
+        book_2:
+          Value: true
+        book_3:
+          Value: true
+        book_4:
+          Value: true
+        book_5:
+          Value: true
+        book_6:
+          Value: true
+        book_7:
+          Value: true
+        book_8:
+          Value: true
+        book_9:
+          Value: true
+        bookshelf_0:
+          Value: true
+        cabinet_door_1:
+          Value: true
+        cabinet_door_1_handle:
+          Value: true
+        cabinet_door_2:
+          Value: true
+        cabinet_door_2_handle:
+          Value: true
+        cabinet_door_3:
+          Value: true
+        cabinet_door_3_handle:
+          Value: true
+        cabinet_door_4:
+          Value: true
+        cabinet_door_4_handle:
+          Value: true
+        camera_accel_frame:
+          Value: true
+        camera_accel_optical_frame:
+          Value: true
+        camera_bottom_screw_frame:
+          Value: true
+        camera_color_frame:
+          Value: true
+        camera_color_optical_frame:
+          Value: true
+        camera_depth_frame:
+          Value: true
+        camera_depth_optical_frame:
+          Value: true
+        camera_gyro_frame:
+          Value: true
+        camera_gyro_optical_frame:
+          Value: true
+        camera_infra1_frame:
+          Value: true
+        camera_infra1_optical_frame:
+          Value: true
+        camera_infra2_frame:
+          Value: true
+        camera_infra2_optical_frame:
+          Value: true
+        camera_link:
+          Value: true
+        caster_link:
+          Value: true
+        chair_0:
+          Value: true
+        chair_1:
+          Value: true
+        coffee_table_0:
+          Value: true
+        dining_table_0:
+          Value: true
+        door_0:
+          Value: true
+        door_0_handle_inner:
+          Value: true
+        door_0_handle_outer:
+          Value: true
+        door_0_leaf:
+          Value: true
+        door_1:
+          Value: true
+        door_1_handle_inner:
+          Value: true
+        door_1_handle_outer:
+          Value: true
+        door_1_leaf:
+          Value: true
+        door_2:
+          Value: true
+        door_2_handle_inner:
+          Value: true
+        door_2_handle_outer:
+          Value: true
+        door_2_leaf:
+          Value: true
+        drawer_1:
+          Value: true
+        drawer_1_handle:
+          Value: true
+        drawer_2:
+          Value: true
+        drawer_2_handle:
+          Value: true
+        drawer_3:
+          Value: true
+        drawer_3_handle:
+          Value: true
+        drawer_4:
+          Value: true
+        drawer_4_handle:
+          Value: true
+        floor_lamp_0:
+          Value: true
+        flowers_0:
+          Value: true
+        green_plants_0:
+          Value: true
+        gripper_camera_bottom_screw_frame:
+          Value: true
+        gripper_camera_color_frame:
+          Value: true
+        gripper_camera_color_optical_frame:
+          Value: true
+        gripper_camera_depth_frame:
+          Value: true
+        gripper_camera_depth_optical_frame:
+          Value: true
+        gripper_camera_infra1_frame:
+          Value: true
+        gripper_camera_infra1_optical_frame:
+          Value: true
+        gripper_camera_infra2_frame:
+          Value: true
+        gripper_camera_infra2_optical_frame:
+          Value: true
+        gripper_camera_link:
+          Value: true
+        hand_sanitizer_0:
+          Value: true
+        handrail_0:
+          Value: true
+        handrail_1:
+          Value: true
+        kitchen_cabinet:
+          Value: true
+        laser:
+          Value: true
+        link_arm_l0:
+          Value: true
+        link_arm_l1:
+          Value: true
+        link_arm_l2:
+          Value: true
+        link_arm_l3:
+          Value: true
+        link_arm_l4:
+          Value: true
+        link_aruco_d405:
+          Value: true
+        link_aruco_fingertip_left:
+          Value: true
+        link_aruco_fingertip_right:
+          Value: true
+        link_aruco_inner_wrist:
+          Value: true
+        link_aruco_left_base:
+          Value: true
+        link_aruco_right_base:
+          Value: true
+        link_aruco_shoulder:
+          Value: true
+        link_aruco_top_wrist:
+          Value: true
+        link_grasp_center:
+          Value: true
+        link_gripper_finger_left:
+          Value: true
+        link_gripper_finger_right:
+          Value: true
+        link_gripper_fingertip_left:
+          Value: true
+        link_gripper_fingertip_right:
+          Value: true
+        link_gripper_s3_body:
+          Value: true
+        link_head:
+          Value: true
+        link_head_nav_cam:
+          Value: true
+        link_head_pan:
+          Value: true
+        link_head_tilt:
+          Value: true
+        link_left_wheel:
+          Value: true
+        link_lift:
+          Value: true
+        link_mast:
+          Value: true
+        link_right_wheel:
+          Value: true
+        link_straight_gripper:
+          Value: true
+        link_wrist_pitch:
+          Value: true
+        link_wrist_quick_connect:
+          Value: true
+        link_wrist_roll:
+          Value: true
+        link_wrist_yaw:
+          Value: true
+        link_wrist_yaw_bottom:
+          Value: true
+        map:
+          Value: true
+        nightstand_0:
+          Value: true
+        odom:
+          Value: true
+        pipe_0:
+          Value: true
+        radiator_0:
+          Value: true
+        respeaker_base:
+          Value: true
+        sofa_0:
+          Value: true
+        toilet_0:
+          Value: true
+        toilet_paper_holder_0:
+          Value: true
+        trash_can_0:
+          Value: true
+        wall_0:
+          Value: true
+        window_0:
+          Value: true
+        window_1:
+          Value: true
+        window_10:
+          Value: true
+        window_11:
+          Value: true
+        window_12:
+          Value: true
+        window_13:
+          Value: true
+        window_14:
+          Value: true
+        window_2:
+          Value: true
+        window_3:
+          Value: true
+        window_4:
+          Value: true
+        window_5:
+          Value: true
+        window_6:
+          Value: true
+        window_7:
+          Value: true
+        window_8:
+          Value: true
+        window_9:
+          Value: true
+        world:
+          Value: true
+      Marker Scale: 0.5
+      Name: TF
+      Show Arrows: false
+      Show Axes: true
+      Show Names: true
+      Tree:
+        map:
+          odom:
+            base_link:
+              base_imu:
+                {}
+              caster_link:
+                {}
+              laser:
+                {}
+              link_arm_l0:
+                link_aruco_inner_wrist:
+                  {}
+                link_aruco_top_wrist:
+                  {}
+              link_arm_l1:
+                {}
+              link_arm_l2:
+                {}
+              link_arm_l3:
+                {}
+              link_aruco_left_base:
+                {}
+              link_aruco_right_base:
+                {}
+              link_gripper_finger_left:
+                link_aruco_fingertip_left:
+                  {}
+                link_gripper_fingertip_left:
+                  {}
+              link_gripper_finger_right:
+                link_aruco_fingertip_right:
+                  {}
+                link_gripper_fingertip_right:
+                  {}
+              link_head_pan:
+                {}
+              link_head_tilt:
+                camera_bottom_screw_frame:
+                  camera_link:
+                    camera_accel_frame:
+                      camera_accel_optical_frame:
+                        {}
+                    camera_color_frame:
+                      camera_color_optical_frame:
+                        {}
+                    camera_depth_frame:
+                      camera_depth_optical_frame:
+                        {}
+                    camera_gyro_frame:
+                      camera_gyro_optical_frame:
+                        {}
+                    camera_infra1_frame:
+                      camera_infra1_optical_frame:
+                        {}
+                    camera_infra2_frame:
+                      camera_infra2_optical_frame:
+                        {}
+                link_head_nav_cam:
+                  {}
+              link_left_wheel:
+                {}
+              link_lift:
+                link_arm_l4:
+                  {}
+                link_aruco_shoulder:
+                  {}
+              link_mast:
+                link_head:
+                  {}
+                respeaker_base:
+                  {}
+              link_right_wheel:
+                {}
+              link_wrist_pitch:
+                {}
+              link_wrist_roll:
+                link_straight_gripper:
+                  link_gripper_s3_body:
+                    gripper_camera_bottom_screw_frame:
+                      gripper_camera_link:
+                        gripper_camera_color_frame:
+                          gripper_camera_color_optical_frame:
+                            {}
+                        gripper_camera_depth_frame:
+                          gripper_camera_depth_optical_frame:
+                            {}
+                        gripper_camera_infra1_frame:
+                          gripper_camera_infra1_optical_frame:
+                            {}
+                        gripper_camera_infra2_frame:
+                          gripper_camera_infra2_optical_frame:
+                            {}
+                    link_aruco_d405:
+                      {}
+                    link_grasp_center:
+                      {}
+                link_wrist_quick_connect:
+                  {}
+              link_wrist_yaw:
+                link_wrist_yaw_bottom:
+                  {}
+          world:
+            basin_0:
+              {}
+            bay_window_platform_0:
+              {}
+            bay_window_platform_1:
+              {}
+            bed_0:
+              {}
+            book_0:
+              {}
+            book_1:
+              {}
+            book_10:
+              {}
+            book_2:
+              {}
+            book_3:
+              {}
+            book_4:
+              {}
+            book_5:
+              {}
+            book_6:
+              {}
+            book_7:
+              {}
+            book_8:
+              {}
+            book_9:
+              {}
+            bookshelf_0:
+              {}
+            chair_0:
+              {}
+            chair_1:
+              {}
+            coffee_table_0:
+              {}
+            dining_table_0:
+              {}
+            door_0:
+              door_0_leaf:
+                door_0_handle_inner:
+                  {}
+                door_0_handle_outer:
+                  {}
+            door_1:
+              door_1_leaf:
+                door_1_handle_inner:
+                  {}
+                door_1_handle_outer:
+                  {}
+            door_2:
+              door_2_leaf:
+                door_2_handle_inner:
+                  {}
+                door_2_handle_outer:
+                  {}
+            floor_lamp_0:
+              {}
+            flowers_0:
+              {}
+            green_plants_0:
+              {}
+            hand_sanitizer_0:
+              {}
+            handrail_0:
+              {}
+            handrail_1:
+              {}
+            kitchen_cabinet:
+              cabinet_door_1:
+                cabinet_door_1_handle:
+                  {}
+              cabinet_door_2:
+                cabinet_door_2_handle:
+                  {}
+              cabinet_door_3:
+                cabinet_door_3_handle:
+                  {}
+              cabinet_door_4:
+                cabinet_door_4_handle:
+                  {}
+              drawer_1:
+                drawer_1_handle:
+                  {}
+              drawer_2:
+                drawer_2_handle:
+                  {}
+              drawer_3:
+                drawer_3_handle:
+                  {}
+              drawer_4:
+                drawer_4_handle:
+                  {}
+            nightstand_0:
+              {}
+            pipe_0:
+              {}
+            radiator_0:
+              {}
+            sofa_0:
+              {}
+            toilet_0:
+              {}
+            toilet_paper_holder_0:
+              {}
+            trash_can_0:
+              {}
+            wall_0:
+              {}
+            window_0:
+              {}
+            window_1:
+              {}
+            window_10:
+              {}
+            window_11:
+              {}
+            window_12:
+              {}
+            window_13:
+              {}
+            window_14:
+              {}
+            window_2:
+              {}
+            window_3:
+              {}
+            window_4:
+              {}
+            window_5:
+              {}
+            window_6:
+              {}
+            window_7:
+              {}
+            window_8:
+              {}
+            window_9:
+              {}
+      Update Interval: 0
+      Value: true
+    - Alpha: 1
+      Auto Size:
+        Auto Size Factor: 1
+        Value: true
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/DepthCloud
+      Color: 255; 255; 255
+      Color Image Topic: /head_camera/image_raw
+      Color Transformer: RGB8
+      Color Transport Hint: raw
+      Decay Time: 0
+      Depth Map Topic: /head_camera/depth/image_raw
+      Depth Map Transport Hint: raw
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Name: DepthCloud
+      Occlusion Compensation:
+        Occlusion Time-Out: 30
+        Value: false
+      Position Transformer: XYZ
+      Queue Size: 5
+      Reliability Policy: Best effort
+      Selectable: true
+      Size (Pixels): 3
+      Style: Flat Squares
+      Topic Filter: true
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        base_imu: true
+        base_link: true
+        basin_0: true
+        bay_window_platform_0: true
+        bay_window_platform_1: true
+        bed_0: true
+        book_0: true
+        book_1: true
+        book_10: true
+        book_2: true
+        book_3: true
+        book_4: true
+        book_5: true
+        book_6: true
+        book_7: true
+        book_8: true
+        book_9: true
+        bookshelf_0: true
+        cabinet_door_1: true
+        cabinet_door_1_handle: true
+        cabinet_door_2: true
+        cabinet_door_2_handle: true
+        cabinet_door_3: true
+        cabinet_door_3_handle: true
+        cabinet_door_4: true
+        cabinet_door_4_handle: true
+        camera_link: true
+        caster_link: true
+        chair_0: true
+        chair_1: true
+        coffee_table_0: true
+        dining_table_0: true
+        door_0: true
+        door_0_handle_inner: true
+        door_0_handle_outer: true
+        door_0_leaf: true
+        door_1: true
+        door_1_handle_inner: true
+        door_1_handle_outer: true
+        door_1_leaf: true
+        door_2: true
+        door_2_handle_inner: true
+        door_2_handle_outer: true
+        door_2_leaf: true
+        drawer_1: true
+        drawer_1_handle: true
+        drawer_2: true
+        drawer_2_handle: true
+        drawer_3: true
+        drawer_3_handle: true
+        drawer_4: true
+        drawer_4_handle: true
+        floor_lamp_0: true
+        flowers_0: true
+        green_plants_0: true
+        gripper_camera_link: true
+        hand_sanitizer_0: true
+        handrail_0: true
+        handrail_1: true
+        kitchen_cabinet: true
+        laser: true
+        link_arm_l0: true
+        link_arm_l1: true
+        link_arm_l2: true
+        link_arm_l3: true
+        link_arm_l4: true
+        link_aruco_d405: true
+        link_aruco_fingertip_left: true
+        link_aruco_fingertip_right: true
+        link_aruco_inner_wrist: true
+        link_aruco_left_base: true
+        link_aruco_right_base: true
+        link_aruco_shoulder: true
+        link_aruco_top_wrist: true
+        link_gripper_finger_left: true
+        link_gripper_finger_right: true
+        link_gripper_fingertip_left: true
+        link_gripper_fingertip_right: true
+        link_gripper_s3_body: true
+        link_head: true
+        link_head_nav_cam: true
+        link_head_pan: true
+        link_head_tilt: true
+        link_left_wheel: true
+        link_lift: true
+        link_mast: true
+        link_right_wheel: true
+        link_wrist_pitch: true
+        link_wrist_roll: true
+        link_wrist_yaw: true
+        link_wrist_yaw_bottom: true
+        nightstand_0: true
+        pipe_0: true
+        radiator_0: true
+        respeaker_base: true
+        sofa_0: true
+        toilet_0: true
+        toilet_paper_holder_0: true
+        trash_can_0: true
+        wall_0: true
+        window_0: true
+        window_1: true
+        window_10: true
+        window_11: true
+        window_12: true
+        window_13: true
+        window_14: true
+        window_2: true
+        window_3: true
+        window_4: true
+        window_5: true
+        window_6: true
+        window_7: true
+        window_8: true
+        window_9: true
+      Topic:
+        Depth: 4
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /semworld/viz_marker
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 8.793176651000977
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: -1.7627909183502197
+        Y: 4.943386554718018
+        Z: 1.4898110628128052
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Pitch: 0.8897966146469116
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+      Yaw: 4.3718180656433105
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: true
+  Height: 800
+  Hide Left Dock: true
+  Hide Right Dock: false
+  QMainWindow State: 000000ff00000000fd000000010000000000000156000002cafc0200000003fb0000000c00430061006d006500720061000000003b000000bb0000000000000000fb000000100044006900730070006c006100790073000000003b000002ca000000c700fffffffb0000000a0056006900650077007300000001f100000114000000a000ffffff000003d8000002f100000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730000000000ffffffff0000000000000000
+  Views:
+    collapsed: false
+  Width: 984
+  X: 39
+  Y: 993

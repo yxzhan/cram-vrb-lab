@@ -153,7 +153,7 @@ def create_head_camera(world, render, want_depth=False):
     import omni
     from pxr import UsdGeom
     from isaacsim.sensors.camera import Camera
-    import isaacsim.core.utils.numpy.rotations as rot_utils
+    import isaacsim.core.utils.numpy.rotations as rot_utils 
 
     stage = omni.usd.get_context().get_stage()
 
@@ -165,7 +165,7 @@ def create_head_camera(world, render, want_depth=False):
         orientation=rot_utils.euler_angles_to_quats(np.array([0, 0, 0]), degrees=True),
     )
     head_cam.initialize()
-    head_cam.set_focal_length(1.5)
+    head_cam.set_focal_length(1.0)
     head_cam.set_clipping_range(near_distance=0.01, far_distance=20)
     if want_depth:
         # distance_to_image_plane = metric depth (m) read back by get_depth().

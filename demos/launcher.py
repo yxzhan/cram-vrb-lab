@@ -38,7 +38,7 @@ RVIZ_LOG = "/tmp/rviz.log"
 
 DEFAULT_SIM_SCRIPT = REPO / "demos" / "stretch_apartment_sim.py"
 DEFAULT_SERVER_SCRIPT = REPO / "demos" / "stretch_apartment_giskard_server.py"
-DEFAULT_RVIZ_CONFIG = REPO / "demos" / "stretch.rviz"
+DEFAULT_RVIZ_CONFIG = REPO / "demos" / "aicor.rviz"
 
 PANDA_SIM_SCRIPT = REPO / "demos" / "panda_pick_place_sim.py"
 PANDA_SERVER_SCRIPT = REPO / "demos" / "panda_pick_place_giskard_server.py"

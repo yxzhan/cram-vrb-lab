@@ -17,6 +17,9 @@ and giskard's collision world stay aligned by construction.
    ``(-1.4967, 4.8020, 1.5)``.
 """
 
+from dataclasses import dataclass
+from typing import Tuple
+
 from cram_vrb_lab.paths import ASSETS_DIR, ROS2_WS_DIR
 
 GRID_USD_PATH = str(ASSETS_DIR / "Grid" / "default_environment.usd")
@@ -178,3 +181,164 @@ FLOOR_CLUSTER_TUNING = {
 }
 """Cluster tuning for the floor view; overrides
 :data:`cram_vrb_lab.perception.pipeline.CLUSTER_TUNING`."""
+
+
+# --- Tabletop objects -----------------------------------------------------------
+#
+# This apartment ships without a single graspable object: every surface in it --
+# worktop, dining table, nightstand, bay-window platform -- is bare, and the only
+# small objects are books shelved *inside* a bookshelf, occluded from any standing
+# height (which is why LIVING_ROOM_FLOOR aims at the floor instead). The objects
+# below are added by the Isaac side at load time; neither ``world.usda`` nor
+# ``scene-bodies.xml`` is touched.
+
+YCB_ASSET_DIR = "/Isaac/Props/YCB/Axis_Aligned"
+"""Directory of the YCB props, relative to the Isaac Sim assets root.
+
+Resolved against ``isaacsim.storage.native.get_assets_root_path()`` rather than
+:data:`ASSETS_DIR`, so these are the stock Isaac assets (currently served from
+NVIDIA's cloud bucket, and cached locally by omniclient after the first load)
+rather than another copy vendored into this repo.
+"""
+
+YCB_UPRIGHT_ROLL = -1.5707963267948966  # -pi/2
+"""Roll [rad] about X that stands a YCB ``Axis_Aligned`` asset up in this Z-up world.
+
+These assets are authored with their vertical axis along **Y**: the mustard bottle's
+axis-aligned bounding box is 0.096 x 0.191 x 0.058 m, i.e. its 19.1 cm height lies
+along the asset's Y. The sign is the part worth writing down -- the axis points
+*down*, so it is the asset's **-Y** that has to become world +Z, which is a roll of
+**-90 deg**, not +90. Both signs give an upright bounding box, so this cannot be
+checked by measuring extents; +90 stands every object on its head (rendered and
+looked at: the mustard label upside down, the soup can resting on its lid).
+
+Leaves the bottle and the soup can standing, the tuna can on its base and the banana
+lying flat -- how each of them would actually be found on a table.
+"""
+
+
+@dataclass(frozen=True)
+class YCBProp:
+    """One YCB object standing on a surface, in the giskard ``map`` frame."""
+
+    name: str
+    """Prim name under :data:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.YCB_PROPS_ROOT`,
+    and the name the spawn report prints."""
+
+    asset: str
+    """File name inside :data:`YCB_ASSET_DIR`."""
+
+    position: Tuple[float, float, float]
+    """(x, y, surface_z): where on the surface, and the height of the surface itself.
+
+    Deliberately the **surface** height rather than the object's centre: how far a
+    centre sits above the surface depends on the mesh, so
+    :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props` measures
+    each asset's bounding box after rotating it upright and releases it with its
+    underside :data:`YCB_DROP_HEIGHT` above ``surface_z``.
+    """
+
+    mass: float
+    """[kg]. The object's real mass, from the YCB object-and-model set.
+
+    Given rather than left to PhysX's density default so a grasp has to hold the
+    weight the real object has.
+    """
+
+    yaw: float = 0.0
+    """Rotation [rad] about world Z, applied after :data:`YCB_UPRIGHT_ROLL`."""
+
+
+YCB_DROP_HEIGHT = 0.005
+"""How far [m] above its surface an object is released.
+
+Small on purpose: the surfaces are measured (see :data:`KITCHEN_WORKTOP`) and each
+asset is grounded on its own bounding box, so the drop only has to cover the error in
+those two numbers. Releasing from a height instead of spawning exactly at rest is what
+makes the settled pose evidence that the object is really standing on the surface
+rather than hovering a centimetre above it or sunk into it.
+"""
+
+
+KITCHEN_WORKTOP = (0.5, 7.42, 0.945)
+"""Centre of the kitchen worktop, in ``map``, at the height an object rests at.
+
+Every z here is a **raycast** against the assembled scene -- a vertical ray dropped on
+a grid over the surface, which is the only measurement that answers the question that
+actually matters ("what would an object released here land on?") rather than a
+question about geometry. Bounding boxes and the USD's own numbers both mislead:
+
+- the ``cabinet`` prim's ``xformOp:translate`` in ``world.usda`` says 1.0, but that is
+  the asset's pivot, near the middle of a run reaching from the floor to the wall
+  units at z = 2.0
+- the highest *vertices* of the cabinet's static mesh in this column sit at 0.900,
+  which is the worktop's front edge profile, not its face
+
+The rays come back 0.945 across the whole free run.
+
+.. warning::
+   The worktop is **not** clear at this centre. The sink is cut into it from x = 0.70
+   to x = 1.00 (rays fall through to the basin at 0.76, with a rim at 0.956) and the
+   tap stands behind it at (1.00, 7.60). Solid worktop runs from x = 0.10 to x = 0.65
+   at every depth y in [7.14, 7.70], and again from x = 1.10 to x = 1.50. This centre
+   is kept as the anchor because it is the middle of the worktop; :data:`YCB_PROPS`
+   offsets its two objects into the free stretch to its left. A soup can released at
+   x = 0.62 -- 0.08 m short of the cut-out -- slid off the edge and ended up in the
+   sink, which is how the cut-out was found.
+"""
+
+DINING_TABLE_TOP = (1.85, 4.78, 0.771)
+"""Centre of the dining table, in ``map``, at the height an object rests at.
+
+Raycast like :data:`KITCHEN_WORKTOP`, and 0.771 everywhere on the top: the whole
+surface is usable, 0.85 m across x by 1.35 m along y (rendered bounding box
+x in [1.433, 2.283], y in [4.101, 5.452]).
+
+The 11 mm between this and the top of the *visual* mesh at 0.760 is the table's own
+collider: it ships from ``world.usda`` as a ``convexDecomposition`` approximation,
+which does not follow the mesh exactly. Nothing to correct -- 0.771 is where an object
+comes to rest, and the render shows it resting on the table -- but it is the reason a
+number measured off the geometry is the wrong one to place from.
+"""
+
+YCB_PROPS = (
+    # Two on the worktop, spread along the run (the cabinets face -y, so the free
+    # direction is x) and pushed left of centre to clear the sink cut-out that starts
+    # at x = 0.70 -- see the warning on KITCHEN_WORKTOP. 0.28 m apart centre-to-centre
+    # leaves ~0.19 m of bare worktop between them, which is what keeps them two
+    # clusters rather than one for the Euclidean clustering in
+    # cram_vrb_lab.perception.pipeline.
+    YCBProp("mustard_bottle", "006_mustard_bottle.usd",
+            (KITCHEN_WORKTOP[0] - 0.20, KITCHEN_WORKTOP[1], KITCHEN_WORKTOP[2]),
+            mass=0.603, yaw=0.35),
+    YCBProp("tomato_soup_can", "005_tomato_soup_can.usd",
+            (KITCHEN_WORKTOP[0] + 0.08, KITCHEN_WORKTOP[1] + 0.03, KITCHEN_WORKTOP[2]),
+            mass=0.349),
+    # Two on the dining table, spread along its long axis (y) for the same reason.
+    # The banana is 0.197 m long and lies along x, well inside the table's 0.85 m.
+    YCBProp("banana", "011_banana.usd",
+            (DINING_TABLE_TOP[0], DINING_TABLE_TOP[1] - 0.13, DINING_TABLE_TOP[2]),
+            mass=0.066, yaw=-0.5),
+    YCBProp("tuna_fish_can", "007_tuna_fish_can.usd",
+            (DINING_TABLE_TOP[0] + 0.03, DINING_TABLE_TOP[1] + 0.13, DINING_TABLE_TOP[2]),
+            mass=0.171),
+)
+"""The four YCB objects the Isaac side adds to this apartment.
+
+Both surfaces get a tall object and a low one, so a detection can be scored on
+height as well as position. The positions here are where each object is *released*;
+what it settles at is decided by physics and printed by
+:func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props`.
+
+.. note::
+   These are real rigid bodies, but neither the assets nor this apartment come that
+   way, so both halves of the contact are built at load time (see
+   :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props`): the YCB
+   ``Axis_Aligned`` assets are bare meshes with no rigid body and no collider, and of
+   the apartment's own prims only the 15 free bodies (dining table, chairs, floor
+   lamp, books) carry a collider -- the kitchen cabinet, walls and floor carry none,
+   which is why the robot drives on the invisible ground plane instead of the
+   apartment's floor mesh. The dining table therefore supports an object out of the
+   box; the worktop needs a collider adding first, or anything released above it
+   falls straight through to the floor.
+"""
