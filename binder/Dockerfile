@@ -100,7 +100,7 @@ RUN code-server --install-extension lichenxi.sysmonitor
 WORKDIR ${REPO_DIR}
 
 RUN mkdir -p /home/jovyan/Desktop/ && \
-    cp demos/desktop/*.desktop /home/jovyan/Desktop/ ** \
+    cp demos/desktop/*.desktop /home/jovyan/Desktop/ && \
     chmod +x /home/jovyan/Desktop/*.desktop
 
 # Set VSCODE default directory
