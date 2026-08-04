@@ -94,8 +94,15 @@ COPY --chown=${NB_USER}:users binder ${REPO_DIR}/binder
 COPY --chown=${NB_USER}:users README.md pyproject.toml ${REPO_DIR}/
 RUN git config --global --add safe.directory ${REPO_DIR}
 
+RUN code-server --install-extension lichenxi.sysmonitor
+
 # Set Jupyterlab default directory
 WORKDIR ${REPO_DIR}
+
+RUN mkdir -p /home/jovyan/Desktop/ && \
+    cp demos/desktop/*.desktop /home/jovyan/Desktop/ ** \
+    chmod +x /home/jovyan/Desktop/*.desktop
+
 # Set VSCODE default directory
 ENV CODE_WORKING_DIRECTORY=${REPO_DIR}
 

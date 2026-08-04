@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GARMI_apartment
+Comment=
+Exec=/home/jovyan/cram-vrb-lab/binder/cram_python_wrapper.sh garmi_demo.py
+Icon=
+Path=/home/jovyan/cram-vrb-lab/demos
+Terminal=true
+StartupNotify=false

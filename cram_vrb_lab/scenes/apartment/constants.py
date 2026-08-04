@@ -33,7 +33,7 @@ coincides with the Isaac world frame because the localization joint is identity
 """
 
 # APARTMENT_URDF_OFFSET_IN_USD = (9.55, -2.594, -0.0701)
-APARTMENT_URDF_OFFSET_IN_USD = (9.526, -2.594, -0.0701)
+APARTMENT_URDF_OFFSET_IN_USD = (9.516, -2.594, -0.08)
 
 """Translation, in the (world-aligned) USD-origin frame, applied to
 ``apartment.urdf`` after the yaw rotation to line its root up with the USD origin.

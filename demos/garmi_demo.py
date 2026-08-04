@@ -1,26 +1,19 @@
 
-# %%
 import sys
 from pathlib import Path
 
 REPO = Path.cwd().resolve().parent  # this notebook lives in demos/
 sys.path.insert(0, str(REPO))
 
-# import os
-# os.environ["DISPLAY"] = ":0"
-
 from launcher import start_isaac_sim, start_giskard_server, start_rviz, stop
 
-rviz_proc = start_rviz()
-sim_proc = start_isaac_sim(camera="both")   # both RGB and depth
-giskard_proc = start_giskard_server()
+RVIZ_CONFIG = REPO / "demos" / "garmi.rviz"
+SIM_SCRIPT = REPO / "demos" / "stretch_garmi_apartment_sim.py"
+SERVER_SCRIPT = REPO / "demos" / "stretch_garmi_apartment_giskard_server.py"
 
-# %% [markdown]
-# ## Connect and build a CRAM `Context`
-# 
-# Verbatim from `stretch_apartment_cram.ipynb`. The `node` and its spinning
-# `MultiThreadedExecutor` built here are reused by robokudo later — it needs somewhere
-# to put its camera subscriptions, and a second executor would only fight this one.
+rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
+sim_proc = start_isaac_sim(sim_script=SIM_SCRIPT, camera="both")
+giskard_proc = start_giskard_server(server_script=SERVER_SCRIPT)
 
 # %%
 import threading
@@ -52,7 +45,7 @@ STRETCH_MOTION_MAPPINGS = [
 
 if not rclpy.ok():
     rclpy.init()
-node = rclpy.create_node('cram_perception_node')
+node = rclpy.create_node('cram_garmi_perception_node')
 executor = MultiThreadedExecutor()
 executor.add_node(node)
 threading.Thread(target=executor.spin, daemon=True, name='rclpy-executor').start()
@@ -71,6 +64,7 @@ context = Context(
     alternative_motion_mappings=STRETCH_MOTION_MAPPINGS,
 )
 print('connected, robot:', type(robot).__name__)
+print('bodies in the twin:', len(world.bodies))
 
 # %% [markdown]
 # ## A small run helper
@@ -86,16 +80,34 @@ def run_plan(plan, collision_avoidance=True):
         plan.perform()
     print('done')
 
+# %%
+from coraplex.robot_plans.actions.core.robot_body import SetGripperAction
+from semantic_digital_twin.datastructures.definitions import GripperState
+from coraplex.robot_plans.actions.core.robot_body import (
+    ParkArmsAction,
+    MoveTorsoAction,
+)
+from coraplex.datastructures.enums import Arms
+from semantic_digital_twin.datastructures.definitions import TorsoState
+
+run_plan(sequential([
+    ParkArmsAction(Arms.LEFT),
+    MoveTorsoAction(TorsoState.HIGH),
+], context=context))
+
+run_plan(execute_single(SetGripperAction(Arms.LEFT, GripperState.OPEN), context=context))
 
 # %%
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from semantic_digital_twin.spatial_types import Pose, Quaternion, Point3
 
 waypoints = [
-    ([0.0, -0.5, 0.0], [0, 0, 0, 1]),
-    # ([0.0, 2, 0.0], [0, 0, 0, 1]),
-    # ([1.8, 2, 0.0], [0, 0, 0, 1]),
-    # ([1.8, 0, 0.0], [0, 0, -1, 0])
+    # ([0.5, 6.5, 0.0], [0, 0, 0, 1]),
+    ([0.5, 6.5, 0.0], [0, 0, 1, 1]),
+
+    # ([-1.0, 4.5, 0.0], [0, 0, -1, 0]),
+    # ([1.8, 5, 0.0], [0, 0, 0, 1]),
+    # ([-1.5, 5, 0.0], [0, 0, -1, 0])
 ]
 
 for _waypoint in waypoints:
@@ -106,21 +118,39 @@ for _waypoint in waypoints:
     )
     run_plan(execute_single(NavigateAction(target), context=context))
 
+
+
 # %%
 from coraplex.robot_plans.actions.core.navigation import LookAtAction
 from semantic_digital_twin.spatial_types import Pose, Point3
 
+from cram_vrb_lab.scenes.garmi_apartment.constants import (
+    FLOOR_CLUSTER_TUNING,
+    FLOOR_CROP,
+    FURNITURE_IN_VIEW,
+    LIVING_ROOM_FLOOR,
+    KITCHEN_WORKTOP,
+    STRETCH_SPAWN_POSITION,
+)
 
-countertop = world.get_body_by_name("island_countertop")
 
-run_plan(execute_single(LookAtAction(countertop.global_pose), context=context))
+# %%
+
+# print('robot spawned at', STRETCH_SPAWN_POSITION, '-> looking at', LIVING_ROOM_FLOOR)
+
+run_plan(execute_single(
+    LookAtAction(Pose(Point3.from_iterable(KITCHEN_WORKTOP), reference_frame=world.root)),
+    context=context,
+))
+
+
+# %%
 
 from cram_vrb_lab.perception.twin_objects import camera_pose_in_map
 import numpy as np
 
 print('camera in map:\n', np.round(camera_pose_in_map(world), 3))
 
-# %%
 import matplotlib.pyplot as plt
 
 from sensor_msgs.msg import Image
@@ -163,18 +193,20 @@ fig.colorbar(im, ax=axes[1], shrink=0.8)
 plt.tight_layout()
 plt.show()
 
-# %%
+
 from cram_vrb_lab.perception import pipeline as rk
 
 # Built once and reused: constructing the descriptor spins up robokudo's own camera
 # node and its subscriptions, and a second one would just duplicate them.
 descriptor = rk.camera_descriptor()
 
+if 'rk_node' in globals():
+    rk_node.destroy_node()
 rk_node = rk.make_pipeline_node()
 
-
-# %%
-detections = rk.detect(rk_node, descriptor)
+# A fresh pipeline too: py_trees keeps blackboard state on the object.
+pipeline = rk.build_pipeline(descriptor, crop=FLOOR_CROP, tuning=FLOOR_CLUSTER_TUNING)
+detections = rk.detect(rk_node, descriptor, pipeline=pipeline)
 
 print(f'{len(detections)} cluster(s), poses in camera_color_optical_frame:')
 for i, d in enumerate(detections):
@@ -182,8 +214,6 @@ for i, d in enumerate(detections):
           f'extent {np.round(d.extents, 3)}  volume {d.volume * 1e3:.2f} L')
 
 
-
-# %%
 from cram_vrb_lab.perception.twin_objects import add_detections, DETECTION_PREFIX
 
 bodies = add_detections(world, detections)
@@ -197,59 +227,48 @@ print(f'\nbodies now carrying the {DETECTION_PREFIX!r} prefix:',
       len([b for b in world.bodies if b.name.prefix == DETECTION_PREFIX]))
 
 
-# %%
-from coraplex.robot_plans.actions.core.pick_up import PickUpAction
-from coraplex.datastructures.grasp import GraspDescription
-from coraplex.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
-from coraplex.view_manager import ViewManager
-from coraplex.robot_plans.actions.core.robot_body import (
-    ParkArmsAction,
-    MoveTorsoAction,
-)
-from coraplex.datastructures.enums import Arms
-from semantic_digital_twin.datastructures.definitions import TorsoState
+def body_position_in_map(name):
+    body = world.get_body_by_name(name)
+    return np.asarray(body.global_pose.to_np())[:3, 3].ravel()
 
-run_plan(sequential([
-    ParkArmsAction(Arms.LEFT),
-    MoveTorsoAction(TorsoState.HIGH),
-], context=context))
 
-grasp = GraspDescription(
-    ApproachDirection.FRONT,   # approach along map -y = along the arm
-    VerticalAlignment.NoAlignment,
-    ViewManager.get_end_effector_view(Arms.LEFT, robot),
-)
-
-# run_plan(
-#     execute_single(PickUpAction(bodies[-1], Arms.LEFT, grasp), context=context),
-#     collision_avoidance=True,
-# )
-
-# %%
-
-# %%
-waypoints = [
-    ([0.0, 2, 0.0], [0, 0, 0, 1]),
-    ([1.8, 2, 0.0], [0, 0, 0, 1]),
-    ([1.8, 0, 0.0], [0, 0, -1, 0])
+detected_positions = [
+    np.asarray(b.global_pose.to_np())[:3, 3].ravel() for b in bodies
 ]
 
-for _waypoint in waypoints:
-    target = Pose(
-        Point3.from_iterable(_waypoint[0]),
-        Quaternion.from_iterable(_waypoint[1]),
-        reference_frame=world.root
-    )
-    run_plan(execute_single(NavigateAction(target), context=context))
+print(f'{len(detected_positions)} detection(s) vs {len(FURNITURE_IN_VIEW)} '
+      'expected piece(s) of furniture\n')
+print(f'{"ground truth":16s} {"map (x, y)":>18s}  {"nearest detection":>18s}  {"dxy [m]":>8s}')
+for name in FURNITURE_IN_VIEW:
+    truth = body_position_in_map(name)
+    if not detected_positions:
+        print(f'{name:16s} {np.round(truth[:2], 3)!s:>18s}  {"-- none --":>18s}  {"":>8s}')
+        continue
+    distances = [np.linalg.norm(truth[:2] - found[:2]) for found in detected_positions]
+    best = int(np.argmin(distances))
+    print(f'{name:16s} {np.round(truth[:2], 3)!s:>18s}  '
+          f'{np.round(detected_positions[best][:2], 3)!s:>18s}  {distances[best]:8.3f}')
 
-# %%
+
+print(f'\n{"detection":12s} {"map (x, y)":>18s}  {"extents (m)":>22s}  '
+      f'{"nearest truth":16s} {"dxy [m]":>8s}')
+for index, (body, detection) in enumerate(zip(bodies, detections)):
+    found = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
+    distances = {name: np.linalg.norm(body_position_in_map(name)[:2] - found[:2])
+                 for name in FURNITURE_IN_VIEW}
+    nearest = min(distances, key=distances.get)
+    print(f'{body.name.name:12s} {np.round(found[:2], 3)!s:>18s}  '
+          f'{np.round(detection.extents, 3)!s:>22s}  '
+          f'{nearest:16s} {distances[nearest]:8.3f}')
+
+
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Drawer,
     Handle,
 )
 
-drawer_body = world.get_body_by_name("cabinet9_drawer_middle")
-handle_body = world.get_body_by_name("handle_cab9_m")
+drawer_body = world.get_body_by_name("drawer_1")
+handle_body = world.get_body_by_name("drawer_1_handle")
 
 if not world.get_semantic_annotations_by_type(Drawer):
     with world.modify_world():
@@ -261,7 +280,7 @@ print("drawer annotated:", drawer_body.name, "with handle", handle_body.name)
 # %%
 from coraplex.robot_plans.actions.core.navigation import LookAtAction
 
-run_plan(execute_single(LookAtAction(handle_body.global_pose), context=context))
+# run_plan(execute_single(LookAtAction(handle_body.global_pose), context=context))
 
 # %%
 from coraplex.robot_plans.actions.core.container import OpenAction, CloseAction
@@ -270,12 +289,8 @@ run_plan(
     execute_single(OpenAction(handle_body, Arms.LEFT), context=context),
     collision_avoidance=False,
 )
-print("drawer joint:", world.get_connection_by_name("cabinet10_drawer_middle_joint").position)
+# print("drawer joint:", world.get_connection_by_name("drawer_1").position)
 
-# %% [markdown]
-# ## Shutdown
-
-# %%
-stop()  # stops the isaac sim + giskard server + rviz started above
+# stop(patterns=(SIM_SCRIPT.name, SERVER_SCRIPT.name, 'rviz2'))
 
 

@@ -64,7 +64,7 @@ if not rclpy.ok():
 stretch_node = StretchROS(stretch, head_cam=head_cam,
                           publish_rgb=ARGS.want_rgb, publish_depth=ARGS.want_depth)
 props_node = PropsROS(cube) if cube is not None else None
-print("StretchROS node ready.")
+print("StretchROS node ready.", flush=True)
 
 try:
     while simulation_app.is_running():
