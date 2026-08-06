@@ -5,8 +5,10 @@ move: no odometry to sync, no ``map -> odom`` localization, no base velocity
 command. The robot root is bolted to ``map``, and the only channels are joint
 states in and streamed joint velocities out.
 
-The world is not simpler, though: the arm is mounted inside the apartment, so
-giskard has to know about the apartment to avoid it.
+The world config below builds the arm alone. Whatever scene the demo runs it in
+is merged next to it by
+:func:`cram_vrb_lab.control.giskard_world.build_world_config`, and the arm is
+mounted inside a room, so that merge is what lets giskard avoid the walls.
 """
 
 from dataclasses import dataclass, field
@@ -21,11 +23,7 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.world_entity import Body
 
-from cram_vrb_lab.scenes.apartment.constants import (
-    apartment_pose_in_map,
-    panda_pose_in_map,
-)
-from cram_vrb_lab.scenes.apartment.giskard_world import load_apartment_urdf
+from cram_vrb_lab.scenes.apartment.constants import panda_pose_in_map
 
 from .joints import CONTROLLED_JOINTS, JOINT_STATES_TOPIC, VELOCITY_CMD_TOPIC
 from .semantic_model import Panda
@@ -33,8 +31,7 @@ from .semantic_model import Panda
 
 @dataclass
 class WorldWithPandaConfig(WorldWithFixedRobot):
-    """The Panda fixed to ``map`` at its mounting pose, with the apartment
-    merged in beside it.
+    """The Panda fixed to ``map`` at its mounting pose.
 
     The props the demo manipulates are *not* here: the notebook adds them at
     runtime over ``/world_sync``
@@ -50,24 +47,25 @@ class WorldWithPandaConfig(WorldWithFixedRobot):
     )
     """Where the robot root sits in ``map``. The stock
     :class:`~giskardpy.model.world_config.WorldWithFixedRobot` bolts it to the
-    origin, which would put giskard's arm metres away from the rendered one."""
+    origin, which would put giskard's arm metres away from the rendered one.
 
-    apartment_urdf: str = field(kw_only=True, default_factory=load_apartment_urdf)
-    """URDF string of the environment merged next to the robot."""
-
-    apartment_pose: HomogeneousTransformationMatrix = field(
-        kw_only=True, default_factory=apartment_pose_in_map
-    )
-    """Apartment root pose in ``map``; see :func:`apartment_pose_in_map`."""
+    The default is the apartment's mounting pose, the same constants
+    ``spawn_panda`` places the prim with; another scene passes its own."""
 
     def setup_world(self) -> None:
-        """Build ``map``, hang the posed robot off it, then merge the apartment.
+        """Build ``map`` and hang the posed robot off it.
 
         Runs inside the ``modify_world`` context that
         :class:`giskardpy.middleware.ros2.giskard.Giskard` already opens around
         ``setup_world`` (matching the base class, which likewise assumes it).
         """
         world_root = Body(name=self.root_name)
+        # Added explicitly, as the base class does: a body that only appears as
+        # the parent of a merge is not in the kinematic structure until the
+        # surrounding ``modify_world`` context closes, and anything that merges
+        # onto ``map`` *after* this method -- the scene, see
+        # :mod:`cram_vrb_lab.control.giskard_world` -- looks the root up inside it.
+        self.world.add_body(world_root)
 
         robot_world = URDFParser(urdf=self.urdf, prefix="").parse()
         self.urdf_view.from_world(robot_world)
@@ -78,16 +76,6 @@ class WorldWithPandaConfig(WorldWithFixedRobot):
                 parent=world_root,
                 child=self.robot_root,
                 parent_T_connection_expression=self.robot_pose,
-            ),
-        )
-
-        apartment_world = URDFParser(urdf=self.apartment_urdf, prefix="").parse()
-        self.world.merge_world(
-            apartment_world,
-            FixedConnection(
-                parent=world_root,
-                child=apartment_world.root,
-                parent_T_connection_expression=self.apartment_pose,
             ),
         )
 

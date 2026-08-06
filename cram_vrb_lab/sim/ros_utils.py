@@ -1,12 +1,36 @@
-"""Robot-agnostic ROS 2 message building and quaternion math for sim nodes.
+"""Robot-agnostic ROS 2 plumbing for sim nodes: the base node class every sim
+bridge shares, plus message building and quaternion math.
 
-Free functions only; importable without a SimulationApp (needs the sourced ROS
-environment for the message types).
+Importable without a SimulationApp (needs the sourced ROS environment for the
+message types).
 """
 
 import numpy as np
 from geometry_msgs.msg import TransformStamped
+from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
+
+
+class SimBridge(Node):
+    """A ROS 2 node the shared sim loop drives, one call of each per sim step.
+
+    The loop (:func:`cram_vrb_lab.sim.runner.run`) is the same for every robot and
+    every scene, so what a bridge does per step is expressed as these two hooks
+    rather than as a hand-written loop per demo. Both default to doing nothing:
+    a publish-only bridge overrides :meth:`publish`, a commanded robot overrides
+    both.
+    """
+
+    receives_commands = True
+    """Whether the loop has to spin this node. A node with no subscriptions has
+    nothing to spin for, and the loop drains callbacks many times per step."""
+
+    def apply_commands(self, dt: float) -> None:
+        """Push the commands received since the last step into the sim, ``dt``
+        seconds' worth. Called *before* ``world.step``."""
+
+    def publish(self) -> None:
+        """Publish this step's state. Called *after* ``world.step``."""
 
 
 # --- tiny quaternion helpers (scalar-last x, y, z, w), no external deps ---

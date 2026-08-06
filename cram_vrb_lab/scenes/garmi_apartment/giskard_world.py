@@ -1,11 +1,12 @@
-"""Giskard world config that adds the garmi-apartment environment next to the
-Stretch robot, so the shared semantic_digital_twin world giskard plans in also
-contains the surroundings (walls, furniture) and can avoid collisions with them.
+"""The garmi-apartment as giskard's world knows it, so the shared
+semantic_digital_twin world giskard plans in also contains the surroundings
+(walls, furniture) and can avoid collisions with them.
 
-Purely additive: no changes to giskardpy or semantic_digital_twin. It subclasses
-the stock ``WorldWithStretchConfigDiffDrive`` and, after the robot is built, merges
-``scene-bodies.xml`` into the same world at the pose the apartment occupies in the
-Isaac Sim scene (:mod:`cram_vrb_lab.scenes.garmi_apartment.isaac_scene`).
+:func:`garmi_apartment_environment` describes ``scene-bodies.xml`` and the pose it
+occupies in the Isaac Sim scene
+(:mod:`cram_vrb_lab.scenes.garmi_apartment.isaac_scene`);
+:func:`cram_vrb_lab.control.giskard_world.build_world_config` merges it next to
+whichever robot the demo runs, so no class here is specific to a robot.
 
 The counterpart for the other flat is
 :mod:`cram_vrb_lab.scenes.apartment.giskard_world`; the two differ in exactly two
@@ -32,38 +33,33 @@ renders** rather than an independently authored URDF:
    prismatic connections giskard expects.
 
 .. warning::
-   Those free bodies make the **merge order load-bearing**, which is the one real
-   hazard in this module. ``StretchRealStyleInterface.setup`` identifies the
-   ``map -> odom`` localization joint as
+   Those free bodies are why the **merge order is load-bearing**, the one real
+   hazard this environment brings. ``StretchRealStyleInterface.setup`` identifies
+   the ``map -> odom`` localization joint as
    ``world.get_connections_by_type(Connection6DoF)[0]`` -- by position, not by name
-   -- and this world contains 16 of them rather than the usual 1. ``[0]`` is the
-   right one only because ``WorldWithDiffDriveRobot.setup_world`` creates the
-   localization connection before anything else and :meth:`setup_world` below
-   merges the environment *after* calling ``super()``. Verified on the assembled
-   world: ``get_connections_by_type(Connection6DoF)[0]`` is ``map -> odom`` and is
-   the same object as the config's ``localization`` field. Merge the environment
-   first and giskard would sync a book to the robot's localization transform.
+   -- and the assembled world contains 16 of them rather than the usual 1. ``[0]``
+   is the right one only because ``WorldWithDiffDriveRobot.setup_world`` creates the
+   localization connection before anything else and
+   :class:`~cram_vrb_lab.control.giskard_world.WithEnvironment` merges the
+   environment *after* calling ``super()``. Verified on the assembled world:
+   ``get_connections_by_type(Connection6DoF)[0]`` is ``map -> odom`` and is the same
+   object as the config's ``localization`` field. Merge the environment first and
+   giskard would sync a book to the robot's localization transform.
 """
 
 from __future__ import annotations
 
 import math
 import xml.etree.ElementTree as ElementTree
-from dataclasses import dataclass, field
 
-from giskardpy.middleware.ros2.scripts.iai_robots.stretch.configs import (
-    WorldWithStretchConfigDiffDrive,
-)
 from semantic_digital_twin.adapters.mjcf import MJCFParser
-from semantic_digital_twin.spatial_types.spatial_types import (
-    HomogeneousTransformationMatrix,
-)
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import (
-    FixedConnection,
     PrismaticConnection,
     RevoluteConnection,
 )
+
+from cram_vrb_lab.specs import EnvironmentSpec
 
 from .constants import GARMI_APARTMENT_MJCF_PATH, garmi_apartment_pose_in_map
 
@@ -148,11 +144,12 @@ def _repair_environment_dof_limits(world: World, angles_in_degrees: bool) -> Non
 def load_garmi_apartment_mjcf(mjcf_path: str = GARMI_APARTMENT_MJCF_PATH) -> World:
     """Parse the apartment MJCF into its own :class:`World`, with joint limits repaired.
 
-    Returns the parsed world rather than a description string -- the asymmetry with
-    ``load_apartment_urdf`` is just that ``URDFParser`` takes a URDF *string* it can
+    Both scenes hand giskard a parsed world (that is what an
+    :class:`~cram_vrb_lab.specs.EnvironmentSpec` carries), but they get there
+    differently: ``URDFParser`` takes a URDF *string* the apartment loader can
     pre-edit, while ``MJCFParser`` goes through MuJoCo's own compiler and needs the
     file on disk (its ``meshdir`` / ``texturedir`` resolve relative to it). The
-    post-processing step is the counterpart of that function's mesh dropping: the
+    post-processing step below is the counterpart of that loader's mesh dropping: the
     minimum edit that makes the description usable, applied here rather than upstream.
     See :func:`_repair_environment_dof_limits`.
     """
@@ -161,32 +158,8 @@ def load_garmi_apartment_mjcf(mjcf_path: str = GARMI_APARTMENT_MJCF_PATH) -> Wor
     return world
 
 
-@dataclass
-class WorldWithStretchAndGarmiApartmentDiffDrive(WorldWithStretchConfigDiffDrive):
-    """Stretch (diff-drive) plus the garmi-apartment environment in one giskard world."""
-
-    apartment_pose: HomogeneousTransformationMatrix = field(
-        kw_only=True, default_factory=garmi_apartment_pose_in_map
+def garmi_apartment_environment() -> EnvironmentSpec:
+    """The garmi-apartment as scenery for any robot's giskard world."""
+    return EnvironmentSpec(
+        load=load_garmi_apartment_mjcf, pose=garmi_apartment_pose_in_map
     )
-    """MJCF root pose in the ``map`` frame; see
-    :func:`~cram_vrb_lab.scenes.garmi_apartment.constants.garmi_apartment_pose_in_map`."""
-
-    mjcf_path: str = field(kw_only=True, default=GARMI_APARTMENT_MJCF_PATH)
-    """Environment description merged next to the robot."""
-
-    def setup_world(self) -> None:
-        """Build the robot world as usual, then merge the apartment onto ``map``.
-
-        Runs inside the ``modify_world`` context that :class:`giskardpy.middleware.
-        ros2.giskard.Giskard` already opens around ``setup_world`` (matching the
-        base class, which likewise assumes that outer context).
-        """
-        super().setup_world()
-
-        apartment_world = load_garmi_apartment_mjcf(self.mjcf_path)
-        map_to_apartment = FixedConnection(
-            parent=self.world.root,
-            child=apartment_world.root,
-            parent_T_connection_expression=self.apartment_pose,
-        )
-        self.world.merge_world(apartment_world, map_to_apartment)

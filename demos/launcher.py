@@ -8,8 +8,9 @@ each prints its ready marker. Two run modes:
 - ``terminal=True``: a visible ``gnome-terminal`` window running the same command
   (tee'd to the log so readiness is still detected). Handy for watching output.
 
-The defaults launch the Stretch + apartment demo; other robot/scene combinations
-pass their own ``sim_script`` / ``server_script`` / ``marker``.
+There is one sim script and one server script for every demo; which robot in
+which scene they run is a ``robot=`` / ``scene=`` argument, defaulting to the
+Stretch in the apartment (see :mod:`cram_vrb_lab.setups` for the combinations).
 """
 
 import os
@@ -26,6 +27,8 @@ except ImportError:
     # print("Sidecar not available!")
 
 from cram_vrb_lab.paths import REPO_DIR as REPO
+from cram_vrb_lab.setups import DEFAULT_ROBOT, DEFAULT_SCENE
+from cram_vrb_lab.sim.isaac_app import READY_MARKER as SIM_READY_MARKER
 
 # ROS 2 discovery, matched to the sim scripts so the notebook kernel sees the topics.
 os.environ.setdefault("ROS_DOMAIN_ID", "0")
@@ -36,13 +39,9 @@ ISAAC_SIM_LOG = "/tmp/isaac_sim.log"
 GISKARD_SERVER_LOG = "/tmp/giskard_server.log"
 RVIZ_LOG = "/tmp/rviz.log"
 
-DEFAULT_SIM_SCRIPT = REPO / "demos" / "stretch_apartment_sim.py"
-DEFAULT_SERVER_SCRIPT = REPO / "demos" / "stretch_apartment_giskard_server.py"
-DEFAULT_RVIZ_CONFIG = REPO / "demos" / "aicor.rviz"
-
-PANDA_SIM_SCRIPT = REPO / "demos" / "panda_pick_place_sim.py"
-PANDA_SERVER_SCRIPT = REPO / "demos" / "panda_pick_place_giskard_server.py"
-PANDA_SIM_MARKER = "PandaROS node ready."
+SIM_SCRIPT = REPO / "demos" / "sim.py"
+SERVER_SCRIPT = REPO / "demos" / "giskard_server.py"
+DEFAULT_RVIZ_CONFIG = REPO / "demos" / "rviz" / "aicor.rviz"
 
 # Sourced before the command in terminal mode: a fresh gnome-terminal shell does
 # not inherit the kernel's sourced ROS environment (the background mode does).
@@ -109,24 +108,28 @@ def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True)
     )
 
 
-def start_isaac_sim(sim_script=None, marker="StretchROS node ready.",
-                    terminal=False, timeout=900, camera=None, props=False):
-    """Launch an Isaac Sim scene script; wait for its ready marker.
+def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
+                    marker=SIM_READY_MARKER, terminal=False, timeout=900,
+                    camera=None, props=False):
+    """Launch the Isaac Sim scene for ``robot`` in ``scene``; wait until ready.
 
     First startup can take a few minutes (shader compilation).
 
-    :param sim_script: scene script run under the Isaac Sim python (default:
-        the Stretch apartment demo).
+    :param robot: which robot, e.g. ``"stretch"`` or ``"panda"``.
+    :param scene: which scene, e.g. ``"apartment"`` or ``"garmi_apartment"``.
+        The pair must be in :data:`cram_vrb_lab.setups.SETUPS`.
     :param camera: head-camera mode passed as ``--camera``
         (``"rgb"`` / ``"depth"`` / ``"both"`` / ``"none"``); None uses the
         script's default.
     :param props: pass ``--props`` to spawn the pick-and-place cube. Off by
-        default; only the pick-and-place demos use it.
+        default; only the pick-and-place demos use it, and the Panda setup
+        spawns it either way.
     """
-    sim_script = Path(sim_script) if sim_script else DEFAULT_SIM_SCRIPT
     args = [
         f"{REPO}/binder/isaacsim_python_wrapper.sh",
-        str(sim_script),
+        str(SIM_SCRIPT),
+        "--robot", robot,
+        "--scene", scene,
     ]
     if camera is not None:
         args += ["--camera", camera]
@@ -138,22 +141,24 @@ def start_isaac_sim(sim_script=None, marker="StretchROS node ready.",
         ISAAC_SIM_LOG,
         marker,
         timeout=timeout,
-        kill_stale=sim_script.name,
+        # The full path, not the basename: one script now runs every setup, and
+        # a stale sim of *any* combination has to go before a new one starts.
+        kill_stale=str(SIM_SCRIPT),
         terminal=terminal,
     )
 
 
-def start_giskard_server(server_script=None, marker="giskard is ready",
-                         terminal=False, timeout=300):
-    """Launch a giskard control server script; wait until it is ready."""
-    server_script = Path(server_script) if server_script else DEFAULT_SERVER_SCRIPT
+def start_giskard_server(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
+                         marker="giskard is ready", terminal=False, timeout=300):
+    """Launch the giskard control server for ``robot`` in ``scene``; wait until
+    it is ready. Same combination as :func:`start_isaac_sim`."""
     return start(
         "giskard server",
-        [sys.executable, str(server_script)],
+        [sys.executable, str(SERVER_SCRIPT), "--robot", robot, "--scene", scene],
         GISKARD_SERVER_LOG,
         marker,
         timeout=timeout,
-        kill_stale=server_script.name,
+        kill_stale=str(SERVER_SCRIPT),
         terminal=terminal,
     )
 
@@ -174,9 +179,10 @@ def start_rviz(rviz_config=None, terminal=False):
 
 
 def stop(patterns=None):
-    """Stop the sim, the giskard server and rviz, however they were started."""
+    """Stop the sim, the giskard server and rviz, however they were started and
+    whichever robot/scene they were running."""
     if patterns is None:
-        patterns = (DEFAULT_SIM_SCRIPT.name, DEFAULT_SERVER_SCRIPT.name, "rviz2")
+        patterns = (str(SIM_SCRIPT), str(SERVER_SCRIPT), "rviz2")
     for pattern in patterns:
         subprocess.run(["pkill", "-f", pattern], stdout=subprocess.DEVNULL)
     print("stopped isaac sim + giskard server + rviz")

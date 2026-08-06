@@ -20,7 +20,6 @@ from geometry_msgs.msg import Twist
 from isaacsim.core.prims import Articulation
 from isaacsim.core.utils.prims import create_prim
 from nav_msgs.msg import Odometry
-from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import Float64, Float64MultiArray
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
@@ -31,6 +30,7 @@ from cram_vrb_lab.sim.velocity_integrator import (
     dof_indices,
 )
 from cram_vrb_lab.sim.ros_utils import (
+    SimBridge,
     as_np,
     build_camera_info,
     depth_msg,
@@ -176,7 +176,7 @@ def create_head_camera(world, render, want_depth=False):
     return head_cam
 
 
-class StretchROS(Node):
+class StretchROS(SimBridge):
     def __init__(self, robot, head_cam=None, publish_rgb=True, publish_depth=False):
         super().__init__("stretch_ros")
         self.robot = robot
@@ -263,6 +263,16 @@ class StretchROS(Node):
             self.get_logger().warning(
                 f"joint_velocity_cmd has {len(msg.data)} values, expected "
                 f"{len(CONTROLLED_JOINTS)}; dropping", throttle_duration_sec=5.0)
+
+    def apply_commands(self, dt):
+        self.integrate_base(dt)
+        self.integrate_joint_velocities(dt)
+
+    def publish(self):
+        self.publish_joint_states()
+        self.publish_tf()
+        self.publish_odom()
+        self.publish_camera()
 
     def integrate_joint_velocities(self, dt):
         """Integrate streamed joint velocities into position targets, called

@@ -1,6 +1,6 @@
 # Demos: Stretch × apartment (giskardpy / CRAM)
 
-Controls the Stretch robot simulated by `stretch_apartment_sim.py` through
+Controls the Stretch robot simulated by `sim.py` through
 [giskardpy](../cognitive_robot_abstract_machine/giskardpy) (closed-loop
 whole-body QP control), using the **real-robot interface shape** so the sim
 exercises the same giskard code path as physical hardware. Two ways to drive it:
@@ -24,16 +24,19 @@ exercises the same giskard code path as physical hardware. Two ways to drive it:
   lands on the apartment floor** rather than on the 0.7 m posts it used to stand
   on, and its standing positions and grasp have not been re-tuned for that.
 
-The demo scripts are thin composition layers over the `cram_vrb_lab` package:
-robot-specific code lives in `cram_vrb_lab/robots/<robot>/`, scene-specific code
-in `cram_vrb_lab/scenes/<scene>/`, generic infrastructure in
-`cram_vrb_lab/sim/` and `cram_vrb_lab/control/`. Purely additive integration: no
-changes to giskardpy core or semantic_digital_twin.
+There are exactly two entry scripts, `sim.py` and `giskard_server.py`, and both
+take `--robot` and `--scene`: which combinations exist, and everything that
+differs between them, is data in `cram_vrb_lab/setups.py`. The scripts themselves
+are thin composition layers over the `cram_vrb_lab` package: robot-specific code
+lives in `cram_vrb_lab/robots/<robot>/`, scene-specific code in
+`cram_vrb_lab/scenes/<scene>/`, generic infrastructure in `cram_vrb_lab/sim/` and
+`cram_vrb_lab/control/`. Purely additive integration: no changes to giskardpy
+core or semantic_digital_twin.
 
 ## Architecture
 
 ```
-Isaac Sim (stretch_apartment_sim.py)              giskard server (stretch_apartment_giskard_server.py)
+Isaac Sim (sim.py --robot stretch)                giskard server (giskard_server.py --robot stretch)
   /stretch/joint_states       ───────────────────►  sync_joint_state_topic
   /odom (odom→base_link, GT)  ───────────────────►  sync_odometry_topic (DiffDrive)
   TF (odom→base_link→links)                         + loads apartment.urdf into its world
@@ -60,13 +63,14 @@ clients:
   ground-truth `/odom` and a static identity `map→odom` stands in for AMCL/SLAM,
   so `map == odom == the Isaac world frame`.
 - **Apartment in the world**
-  (`cram_vrb_lab.scenes.apartment.giskard_world.WorldWithStretchAndApartmentDiffDrive`):
+  (`cram_vrb_lab.scenes.apartment.giskard_world.apartment_environment`, merged
+  next to the robot by `cram_vrb_lab.control.giskard_world.build_world_config`):
   the giskard world giskard plans in also contains the apartment
   (walls/furniture), so motions can avoid it. See the collision-avoidance
   sections in both notebooks. The apartment `.urdf` is aligned to the Isaac
   `.usda` scene by `cram_vrb_lab.scenes.apartment.constants.apartment_pose_in_map`.
 - **Head camera** (one RGBD sensor, for perception — not the control loop):
-  `stretch_apartment_sim.py --camera {rgb,depth,both,none}` selects the streams
+  `sim.py --camera {rgb,depth,both,none}` selects the streams
   (rgb -> `/head_camera/image_raw`, depth -> `/head_camera/depth/image_raw` as
   32FC1 metres), plus `camera_info` for both. Images are stamped in
   `camera_color_optical_frame`, which the giskard server already broadcasts as
@@ -172,19 +176,22 @@ first cell calls `cram_vrb_lab.control.launcher.start_isaac_sim()` /
   starts the sim with `start_isaac_sim(props=True)`.
 - `panda_pick_place_cram.ipynb` — a Franka Panda mounted on a table in the
   apartment, grasping a cube off that table and placing it down further along.
-  Its own sim and server scripts
-  (`panda_pick_place_sim.py`, `panda_pick_place_giskard_server.py`) and its own
-  topics, so it can run alongside the Stretch demos.
+  Same two entry scripts, selected with `start_isaac_sim(robot="panda")` /
+  `start_giskard_server(robot="panda")`, on its own topics.
+- `stretch_garmi_apartment_perception_cram.ipynb` — the Stretch in the other
+  flat: `start_isaac_sim(scene="garmi_apartment", camera="both")` /
+  `start_giskard_server(scene="garmi_apartment")`.
 
 Manual start (source `/opt/ros/jazzy/setup.bash` and
 `ros2_ws/install/setup.bash` in every terminal):
 
-1. **Isaac Sim**: `binder/isaacsim_python_wrapper.sh demos/stretch_apartment_sim.py`
-   (or `demos/panda_pick_place_sim.py`)
+1. **Isaac Sim**: `binder/isaacsim_python_wrapper.sh demos/sim.py`
+   (add `--robot panda`, `--scene garmi_apartment`, ... — `--help` lists them)
 2. **giskard server** (wait for the `giskard is ready` log line; it also launches
-   the static `map→odom` localization stand-in):
+   the static `map→odom` localization stand-in), with the *same* `--robot` /
+   `--scene`:
    ```bash
-   cognitive_robot_abstract_machine/.venv/bin/python demos/stretch_apartment_giskard_server.py
+   cognitive_robot_abstract_machine/.venv/bin/python demos/giskard_server.py
    ```
 
 For custom motion goals follow `cram_vrb_lab/control/giskard_client.py` +
@@ -232,7 +239,7 @@ For custom motion goals follow `cram_vrb_lab/control/giskard_client.py` +
 - TF has redundant `odom→base_link` publishers (the sim and giskard's own world
   viz); this only affects RViz display — the control path consumes `/odom` (topic)
   and `map→odom` (tf), not `odom→base_link` tf.
-- QP `target_frequency=15` (`stretch_apartment_giskard_server.py`); below 20 the
+- QP `target_frequency=15` (`giskard_server.py`); below 20 the
   library warns (harmless here). The sim-side integrator's `VEL_MAX_LEAD`
   (0.02, `cram_vrb_lab/robots/stretch/isaac_node.py`) clamps how far targets may
   lead the measured position, which also prevents force build-up on contact.

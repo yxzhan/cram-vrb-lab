@@ -13,6 +13,17 @@ import os
 import shutil
 import sys
 
+from cram_vrb_lab.setups import add_setup_arguments
+
+READY_MARKER = "Isaac Sim scene ready."
+"""Printed by :func:`cram_vrb_lab.sim.runner.run` once the scene is up and the ROS
+topics exist, and polled for in the log file by ``cram_vrb_lab.control.launcher``.
+
+One string for every combination, so the launcher needs no per-demo knowledge. It
+lives here rather than next to the print because the launcher must be able to
+import it without pulling in the sim loop (and with it rclpy).
+"""
+
 
 def setup_ros_env():
     """ROS 2 environment for the Isaac ROS2 bridge (must be set before the
@@ -35,11 +46,13 @@ def parse_scene_args():
     """Parse the scene flags (and strip them from ``sys.argv`` before
     SimulationApp, which parses argv too).
 
-    :return: a namespace with ``camera`` (``rgb`` / ``depth`` / ``both`` /
-        ``none``), the derived ``want_rgb`` / ``want_depth`` booleans, and
-        ``props``.
+    :return: a namespace with ``robot`` and ``scene`` (the combination to run,
+        see :mod:`cram_vrb_lab.setups`), ``camera`` (``rgb`` / ``depth`` /
+        ``both`` / ``none``), the derived ``want_rgb`` / ``want_depth``
+        booleans, and ``props``.
     """
     parser = argparse.ArgumentParser(description="Isaac Sim scene")
+    add_setup_arguments(parser)
     parser.add_argument(
         "--camera",
         choices=["rgb", "depth", "both", "none"],
@@ -51,7 +64,8 @@ def parse_scene_args():
         "--props",
         action="store_true",
         help="spawn the graspable cube for the pick-and-place task. Off by "
-        "default: it is only used by the pick-and-place demos.",
+        "default, except where the setup spawns it anyway (the Panda demo is "
+        "about nothing else); an error for a setup with no prop layout.",
     )
     args, unknown_args = parser.parse_known_args()
     sys.argv = sys.argv[:1] + unknown_args  # hide the scene flags from SimulationApp

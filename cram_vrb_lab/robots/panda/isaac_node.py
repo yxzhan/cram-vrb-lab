@@ -22,7 +22,6 @@ import tempfile
 import numpy as np
 import omni.kit.commands
 from isaacsim.core.prims import Articulation, XFormPrim
-from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64, Float64MultiArray
 
@@ -30,6 +29,7 @@ from cram_vrb_lab.scenes.apartment.constants import (
     PANDA_BASE_ORIENTATION_WXYZ,
     PANDA_BASE_POSITION_IN_MAP,
 )
+from cram_vrb_lab.sim.ros_utils import SimBridge
 from cram_vrb_lab.sim.velocity_integrator import (
     StreamedVelocityIntegrator,
     dof_indices,
@@ -192,7 +192,7 @@ def move_to_park(panda, world, render):
     print(f"Panda parked at {PARK_CONFIGURATION}")
 
 
-class PandaROS(Node):
+class PandaROS(SimBridge):
     """ROS 2 bridge for the simulated Panda.
 
     Publishes joint states for giskard to close its loop on, and accepts the
@@ -235,6 +235,12 @@ class PandaROS(Node):
 
     def integrate_joint_velocities(self, dt):
         self.integrator.step(dt)
+
+    def apply_commands(self, dt):
+        self.integrate_joint_velocities(dt)
+
+    def publish(self):
+        self.publish_joint_states()
 
     def publish_joint_states(self):
         msg = JointState()

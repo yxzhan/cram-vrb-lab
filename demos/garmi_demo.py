@@ -2,18 +2,17 @@
 import sys
 from pathlib import Path
 
-REPO = Path.cwd().resolve().parent  # this notebook lives in demos/
+REPO = Path.cwd().resolve()  # this notebook lives in demos/
 sys.path.insert(0, str(REPO))
 
 from launcher import start_isaac_sim, start_giskard_server, start_rviz, stop
 
-RVIZ_CONFIG = REPO / "demos" / "garmi.rviz"
-SIM_SCRIPT = REPO / "demos" / "stretch_garmi_apartment_sim.py"
-SERVER_SCRIPT = REPO / "demos" / "stretch_garmi_apartment_giskard_server.py"
+RVIZ_CONFIG = REPO / "demos" / "rviz" /"garmi.rviz"
+SCENE = "garmi_apartment"
 
 rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
-sim_proc = start_isaac_sim(sim_script=SIM_SCRIPT, camera="both")
-giskard_proc = start_giskard_server(server_script=SERVER_SCRIPT)
+sim_proc = start_isaac_sim(scene=SCENE, camera="both")
+giskard_proc = start_giskard_server(scene=SCENE)
 
 # %%
 import threading
@@ -291,6 +290,6 @@ run_plan(
 )
 # print("drawer joint:", world.get_connection_by_name("drawer_1").position)
 
-# stop(patterns=(SIM_SCRIPT.name, SERVER_SCRIPT.name, 'rviz2'))
+# stop()  # stops the isaac sim + giskard server + rviz started above
 
 

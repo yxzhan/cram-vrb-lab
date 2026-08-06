@@ -19,10 +19,9 @@ from geometry_msgs.msg import PoseStamped
 from isaacsim.core.api.materials import PhysicsMaterial
 from isaacsim.core.api.objects import DynamicCuboid
 from isaacsim.core.utils.prims import define_prim
-from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 
-from cram_vrb_lab.sim.ros_utils import make_tf
+from cram_vrb_lab.sim.ros_utils import SimBridge, make_tf
 
 from .constants import (
     APARTMENT_LAYOUT,
@@ -81,7 +80,7 @@ def spawn_props(world, render, layout: PropLayout = APARTMENT_LAYOUT):
     return cube
 
 
-class PropsROS(Node):
+class PropsROS(SimBridge):
     """Publishes the cube's ground-truth pose -- a stand-in for perception.
 
     Both a :class:`geometry_msgs.msg.PoseStamped` on
@@ -90,11 +89,16 @@ class PropsROS(Node):
     believed one).
     """
 
+    receives_commands = False  # nothing to subscribe to: the props only report
+
     def __init__(self, cube):
         super().__init__("props_ros")
         self.cube = cube
         self.pub_cube_pose = self.create_publisher(PoseStamped, CUBE_POSE_TOPIC, 10)
         self.tf_broadcaster = TransformBroadcaster(self)
+
+    def publish(self):
+        self.publish_props()
 
     def publish_props(self):
         position, orientation = self.cube.get_world_pose()  # quat is (w, x, y, z)
