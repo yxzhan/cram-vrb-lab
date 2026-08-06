@@ -10,10 +10,15 @@ Three kinds of fact:
 - :data:`ROBOTS` / :data:`SCENES` -- what a robot or a scene *is*, collected from
   ``robots/<robot>/spec.py`` and ``scenes/<scene>/spec.py``, so everything about
   one of them still lives in its own directory.
-- :data:`SETUPS` -- what is true only of a *pair*: where the robot stands in that
-  scene, whether the scene has props to pick up, how the viewport frames it.
-- :func:`get_setup` and :func:`add_setup_arguments` -- the lookup and the two
-  command-line flags, shared by both entry points.
+- :data:`SETUPS` -- what is true only of a *pair*: whether the scene has props to
+  pick up, and how the viewport frames what the robot is doing.
+- :func:`get_setup`, :func:`add_setup_arguments` and :func:`spawn_pose_from_args`
+  -- the lookup and the command-line flags, shared by both entry points.
+
+Where the robot *stands* is not in here: it is a :class:`~cram_vrb_lab.specs.SpawnPose`
+the demo passes in (``--spawn-position`` / ``--spawn-yaw``), defaulting to the map
+origin. A notebook that wants its robot somewhere else says so; nothing in the
+package decides it on the demo's behalf.
 
 .. note::
    Imported by both the Isaac python and the CRAM venv, so nothing here (or in
@@ -25,16 +30,19 @@ from typing import Dict, Tuple
 
 from cram_vrb_lab.robots.panda.spec import PANDA
 from cram_vrb_lab.robots.stretch.spec import STRETCH
-from cram_vrb_lab.scenes.apartment.constants import PANDA_BASE_POSITION_IN_MAP
 from cram_vrb_lab.scenes.apartment.spec import APARTMENT
 from cram_vrb_lab.scenes.empty.spec import EMPTY
-from cram_vrb_lab.scenes.garmi_apartment.constants import STRETCH_SPAWN_POSITION
 from cram_vrb_lab.scenes.garmi_apartment.spec import GARMI_APARTMENT
-from cram_vrb_lab.scenes.props.constants import (
-    APARTMENT_LAYOUT,
-    PANDA_APARTMENT_LAYOUT,
+from cram_vrb_lab.scenes.props.constants import APARTMENT_LAYOUT, panda_layout_at
+from cram_vrb_lab.specs import (
+    ORIGIN,
+    PropsSpec,
+    RobotSpec,
+    SceneSpec,
+    Setup,
+    SpawnPose,
+    Viewport,
 )
-from cram_vrb_lab.specs import PropsSpec, RobotSpec, SceneSpec, Setup, Viewport
 
 ROBOTS: Dict[str, RobotSpec] = {robot.name: robot for robot in (STRETCH, PANDA)}
 
@@ -45,42 +53,50 @@ SCENES: Dict[str, SceneSpec] = {
 DEFAULT_ROBOT = STRETCH.name
 DEFAULT_SCENE = APARTMENT.name
 
+
+def _arm_workspace_viewport(spawn_pose: SpawnPose) -> Viewport:
+    """A close-up on a bolted-down arm's workspace, wherever it is bolted down.
+
+    Framed on the props rather than on the room: they are 5 cm objects, and the
+    scene's own wide shot leaves them a few pixels.
+    """
+    x, y, z = spawn_pose.position
+    return Viewport(
+        eye=(x - 1.4, y - 1.4, z + 1.0),
+        target=panda_layout_at(spawn_pose.position, spawn_pose.yaw)
+        .cube_start_position,
+    )
+
+
 SETUPS: Dict[Tuple[str, str], Setup] = {
     (setup.robot.name, setup.scene.name): setup
     for setup in (
         Setup(
             robot=STRETCH,
             scene=APARTMENT,
-            props=PropsSpec(layout=APARTMENT_LAYOUT),
+            # Fixed positions in the room: the robot drives to the props, so
+            # where it happens to start does not move them.
+            props=PropsSpec(layout=lambda spawn_pose: APARTMENT_LAYOUT),
         ),
         Setup(
             robot=STRETCH,
             scene=GARMI_APARTMENT,
-            # The map origin of this flat lies outside the rooms, so the default
-            # spawn would put the robot in the void next to the building.
-            spawn_position=STRETCH_SPAWN_POSITION,
-            # No props: their layout is measured against the *other* apartment's
-            # geometry, and the perception demo this scene exists for uses the
-            # YCB objects the scene loader puts on the worktop instead.
+            # No props: a layout for this flat has never been measured, and the
+            # perception demo this scene exists for uses the YCB objects the
+            # scene loader puts on the worktop instead.
         ),
         Setup(
             robot=PANDA,
             scene=APARTMENT,
-            # The arm's own default placement is this apartment's mounting pose
-            # (cram_vrb_lab.scenes.apartment.constants.PANDA_BASE_POSITION_IN_MAP),
-            # which the giskard world config reads too.
-            props=PropsSpec(layout=PANDA_APARTMENT_LAYOUT, by_default=True),
-            # Framed on the arm's workspace rather than on the apartment as a
-            # whole: the props are 5 cm objects and the default wide shot leaves
-            # them a few pixels.
-            viewport=Viewport(
-                eye=(
-                    PANDA_BASE_POSITION_IN_MAP[0] - 1.4,
-                    PANDA_BASE_POSITION_IN_MAP[1] - 1.4,
-                    PANDA_BASE_POSITION_IN_MAP[2] + 1.0,
+            # In front of the arm by construction, so the demo cannot put the
+            # cube out of reach by mounting the arm somewhere else.
+            props=PropsSpec(
+                layout=lambda spawn_pose: panda_layout_at(
+                    spawn_pose.position, spawn_pose.yaw
                 ),
-                target=PANDA_APARTMENT_LAYOUT.cube_start_position,
+                by_default=True,
             ),
+            viewport=_arm_workspace_viewport,
         ),
     )
 }
@@ -112,7 +128,8 @@ def get_setup(robot: str, scene: str) -> Setup:
 
 
 def add_setup_arguments(parser) -> None:
-    """Add ``--robot`` / ``--scene`` to an :mod:`argparse` parser."""
+    """Add the flags both entry points share: which combination, and where the
+    robot starts."""
     parser.add_argument(
         "--robot",
         choices=sorted(ROBOTS),
@@ -125,3 +142,24 @@ def add_setup_arguments(parser) -> None:
         default=DEFAULT_SCENE,
         help=f"which scene to run it in (default: {DEFAULT_SCENE}).",
     )
+    parser.add_argument(
+        "--spawn-position",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        default=list(ORIGIN.position),
+        help="where the robot starts, in the map frame [m] (default: the "
+        "origin). Pass the same value to the sim and to the giskard server.",
+    )
+    parser.add_argument(
+        "--spawn-yaw",
+        type=float,
+        metavar="RAD",
+        default=ORIGIN.yaw,
+        help="the robot's starting heading about z [rad] (default: 0).",
+    )
+
+
+def spawn_pose_from_args(args) -> SpawnPose:
+    """The spawn pose the flags above describe."""
+    return SpawnPose(position=tuple(args.spawn_position), yaw=args.spawn_yaw)

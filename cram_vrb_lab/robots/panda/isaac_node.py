@@ -25,10 +25,6 @@ from isaacsim.core.prims import Articulation, XFormPrim
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64, Float64MultiArray
 
-from cram_vrb_lab.scenes.apartment.constants import (
-    PANDA_BASE_ORIENTATION_WXYZ,
-    PANDA_BASE_POSITION_IN_MAP,
-)
 from cram_vrb_lab.sim.ros_utils import SimBridge
 from cram_vrb_lab.sim.velocity_integrator import (
     StreamedVelocityIntegrator,
@@ -84,16 +80,17 @@ limit, and far above the 0.5 N the cube's weight needs.
 def spawn_panda(
     world,
     render,
-    position=PANDA_BASE_POSITION_IN_MAP,
-    orientation=PANDA_BASE_ORIENTATION_WXYZ,
+    position=(0.0, 0.0, 0.0),
+    orientation=(1.0, 0.0, 0.0, 0.0),
 ):
     """Import the Panda into the open stage and return its Articulation.
 
-    The base is placed on the *prim*, before physics ever runs, and matches the
-    posed ``map -> panda_link0`` connection
+    The base is placed on the *prim*, before physics ever runs, and has to match
+    the posed ``map -> panda_link0`` connection
     :class:`~cram_vrb_lab.robots.panda.giskard_config.WorldWithPandaConfig`
-    builds -- both read the same constants, so the arm giskard plans for stands
-    where Isaac renders it.
+    builds, or the arm giskard plans for is not the arm Isaac renders. Both sides
+    are given the same :class:`~cram_vrb_lab.specs.SpawnPose` by the demo, which
+    is what keeps them together.
 
     :param orientation: quaternion in Isaac's ``(w, x, y, z)`` order.
     """

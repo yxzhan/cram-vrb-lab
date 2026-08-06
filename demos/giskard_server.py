@@ -18,9 +18,14 @@ The props the pick-and-place demos manipulate are not in the world config: the
 notebook adds them over ``/world_sync`` once it is connected, which keeps the
 scene giskard avoids collisions in identical to the one Isaac renders.
 
+``--spawn-position`` / ``--spawn-yaw`` must repeat what ``sim.py`` was given: for
+a robot bolted to ``map`` they are the only thing that tells giskard where it
+stands. A robot with a base ignores them and learns its pose from odometry.
+
 Run with the cognitive_robot_abstract_machine venv python, with ROS jazzy and the
 ros2_ws overlay sourced (see README.md):
-    python demos/giskard_server.py [--robot NAME] [--scene NAME]
+    python demos/giskard_server.py [--robot NAME] [--scene NAME] \
+        [--spawn-position X Y Z] [--spawn-yaw RAD]
 """
 
 import argparse
@@ -30,7 +35,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cram_vrb_lab.control.giskard_server import start_localization_stand_in
-from cram_vrb_lab.setups import add_setup_arguments, get_setup
+from cram_vrb_lab.setups import (
+    add_setup_arguments,
+    get_setup,
+    spawn_pose_from_args,
+)
 
 from giskardpy.middleware.ros2 import rospy
 from giskardpy.middleware.ros2.behavior_tree_config import ClosedLoopBTConfig
@@ -47,7 +56,9 @@ def parse_args():
 def main():
     args = parse_args()
     setup = get_setup(args.robot, args.scene)
+    spawn_pose = spawn_pose_from_args(args)
     environment = setup.scene.environment() if setup.scene.environment else None
+    print(f"{setup.name}, robot spawned at {spawn_pose}", flush=True)
 
     rospy.init_node("giskard")
     # Needed by an interface config that syncs the map->odom tf frame; started
@@ -56,7 +67,7 @@ def main():
     localization = start_localization_stand_in()
     try:
         giskard = Giskard(
-            world_config=setup.robot.giskard_world(environment),
+            world_config=setup.robot.giskard_world(environment, spawn_pose),
             robot_interface_config=setup.robot.giskard_interface(),
             behavior_tree_config=ClosedLoopBTConfig(),
             # 15 Hz: the rate the QP loop actually sustains on this machine with

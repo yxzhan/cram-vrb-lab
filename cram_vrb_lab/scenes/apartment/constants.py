@@ -72,63 +72,10 @@ def apartment_pose_in_map():
     return map_T_usd @ usd_T_urdf
 
 
-PANDA_BASE_POSITION_IN_USD = (7.14, -5.30, 0.933)
-# PANDA_BASE_POSITION_IN_USD = (7.9, -5.30, 0.0)
-
-"""Where the Panda stands, in ``apartmentICRA.usda``'s own frame.
-
-Given in the USD's frame rather than in ``map`` because that is where it was
-measured: with the apartment spawned at the origin this is the arm's correct
-place in the scene. Our scene offsets the apartment prim
-(:data:`USD_PRIM_POSITION_IN_MAP`), so the robot has to move with it -- see
-:data:`PANDA_BASE_POSITION_IN_MAP`.
-"""
-
-PANDA_BASE_ORIENTATION_WXYZ = (0.0, 0.0, 0.0, -1.0)
-"""The Panda's orientation, quaternion in USD/Isaac ``(w, x, y, z)`` order.
-
-``w = 0, z = -1`` is a half turn about z, so the arm faces along ``map`` -x. The
-apartment prim is placed with identity rotation, so this orientation carries
-into ``map`` unchanged.
-"""
-
-PANDA_BASE_POSITION_IN_MAP = (
-    PANDA_BASE_POSITION_IN_USD[0] + USD_PRIM_POSITION_IN_MAP[0],
-    PANDA_BASE_POSITION_IN_USD[1] + USD_PRIM_POSITION_IN_MAP[1],
-    PANDA_BASE_POSITION_IN_USD[2],
-)
-"""The Panda's base in the giskard ``map`` frame: (1.14, -0.30, 0.933).
-
-x and y are a plain sum with the prim placement -- plain because the apartment
-prim carries no rotation; if that ever changes this becomes a full composition.
-
-z is taken **verbatim** from :data:`PANDA_BASE_POSITION_IN_USD`, without the
-prim's 0.0701 lift. That lift belongs to the apartment geometry, not to the
-surface the arm is bolted to, and adding it stood the robot 7 cm above its table.
-"""
-
-PANDA_BASE_YAW_IN_MAP = 2.0 * math.atan2(
-    PANDA_BASE_ORIENTATION_WXYZ[3], PANDA_BASE_ORIENTATION_WXYZ[0]
-)
-"""The Panda's heading [rad] in ``map``, from :data:`PANDA_BASE_ORIENTATION_WXYZ`.
-
-The orientation is a pure z rotation, so the quaternion reduces to a yaw. Used to
-place the props in front of the arm without pulling in the twin's spatial types.
-"""
-
-
-def panda_pose_in_map():
-    """Pose of the Panda's base in the giskard ``map`` frame, as a
-    ``HomogeneousTransformationMatrix``.
-
-    The giskard world config fixes the robot root to ``map`` with this, so the
-    arm giskard plans for stands exactly where Isaac renders it.
-    """
-    from semantic_digital_twin.spatial_types.spatial_types import (
-        HomogeneousTransformationMatrix,
-    )
-
-    w, x, y, z = PANDA_BASE_ORIENTATION_WXYZ
-    return HomogeneousTransformationMatrix.from_xyz_quaternion(
-        *PANDA_BASE_POSITION_IN_MAP, x, y, z, w
-    )
+# Where the Panda is mounted is NOT here: it is a spawn pose the demo passes in
+# (--spawn-position / --spawn-yaw, see cram_vrb_lab.specs.SpawnPose), because
+# where an arm is bolted down is a property of the demo rather than of the room.
+# A pose measured in this USD's own frame has to be composed with
+# USD_PRIM_POSITION_IN_MAP above to land in `map` -- x and y as a plain sum
+# (the prim carries no rotation), z verbatim: the prim's 0.07 lift belongs to
+# the apartment geometry, not to the surface something stands on.

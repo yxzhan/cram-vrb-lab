@@ -12,7 +12,7 @@ rather than written out per combination.
 
 import rclpy
 
-from cram_vrb_lab.setups import get_setup
+from cram_vrb_lab.setups import get_setup, spawn_pose_from_args
 from cram_vrb_lab.sim.isaac_app import READY_MARKER
 
 SPINS_PER_STEP = 16
@@ -24,14 +24,15 @@ stale.
 """
 
 
-def build(world, render, setup, args):
-    """Load the scene, spawn the robot and the props, and return the ROS nodes.
+def build(world, render, setup, spawn_pose, args):
+    """Load the scene, spawn the robot at ``spawn_pose``, add the props, and
+    return the ROS nodes.
 
     The order is the one every scene needs: scenery, robot, props, and only then
     the robot's park pose -- ``spawn_props`` calls ``world.reset()``, which throws
     away drive gains and poses set before it.
     """
-    view = setup.viewport
+    view = setup.viewport(spawn_pose) if setup.viewport else None
     setup.scene.load(
         world,
         render,
@@ -39,13 +40,13 @@ def build(world, render, setup, args):
         camera_target=view.target if view else None,
     )
 
-    robot = setup.robot.spawn(world, render, position=setup.spawn_position)
+    robot = setup.robot.spawn(world, render, spawn_pose)
 
     props = None
     if setup.wants_props(args.props):
         from cram_vrb_lab.scenes.props.isaac_props import spawn_props
 
-        props = spawn_props(world, render, layout=setup.props.layout)
+        props = spawn_props(world, render, layout=setup.props.layout(spawn_pose))
 
     if setup.robot.park is not None:
         setup.robot.park(robot, world, render)
@@ -64,7 +65,8 @@ def build(world, render, setup, args):
 def run(simulation_app, world, render, args):
     """Build the setup ``args`` selects and step it until the app is closed."""
     setup = get_setup(args.robot, args.scene)
-    nodes = build(world, render, setup, args)
+    spawn_pose = spawn_pose_from_args(args)
+    nodes = build(world, render, setup, spawn_pose, args)
     commanded = [node for node in nodes if node.receives_commands]
 
     # flush=True is load-bearing, not decoration. This is the marker
@@ -73,7 +75,7 @@ def run(simulation_app, world, render, args):
     # loop below never writes enough to fill. Without the flush the sim comes up
     # fully, publishes every topic, and the notebook's first cell still sits there
     # until it times out.
-    print(f"{setup.name}: {READY_MARKER}", flush=True)
+    print(f"{setup.name} at {spawn_pose}: {READY_MARKER}", flush=True)
 
     try:
         while simulation_app.is_running():

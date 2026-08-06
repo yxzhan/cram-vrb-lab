@@ -65,8 +65,11 @@ HEAD_CAM_PRIM = ("/World/stretch/link_head_tilt/camera_bottom_screw_frame/"
 CAMERA_RESOLUTION = (640, 360)
 
 
-def spawn_stretch(world, render, position=(-1.5, 0, 0.05)):
+def spawn_stretch(world, render, position=(0.0, 0.0, 0.0), yaw=0.0):
     """Load the Stretch USD, tune its drives, and return the Articulation.
+
+    :param position: base position in the Isaac world frame (= giskard's ``map``).
+    :param yaw: heading about z [rad].
 
     .. note::
        This robot comes from a USD, unlike the Panda
@@ -84,11 +87,15 @@ def spawn_stretch(world, render, position=(-1.5, 0, 0.05)):
         usd_path=STRETCH_USD_PATH,
         prim_path="/World/stretch",
         position=np.array(position),
-        orientation=np.array([1, 0, 0, 0]),
+        # Isaac's (w, x, y, z) order; a pure yaw, so only w and z are non-zero.
+        orientation=np.array([math.cos(yaw / 2.0), 0.0, 0.0, math.sin(yaw / 2.0)]),
     )
 
     stretch = Articulation(prim_paths_expr="/World/stretch", name="stretch")
     world.reset()
+
+    print(f"Stretch spawned at {tuple(round(float(v), 4) for v in position)} "
+          f"yaw {math.degrees(yaw):.1f} deg")
 
     for _ in range(10):
         world.step(render=render)

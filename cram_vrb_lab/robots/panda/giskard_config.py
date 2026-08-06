@@ -23,8 +23,6 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.world_entity import Body
 
-from cram_vrb_lab.scenes.apartment.constants import panda_pose_in_map
-
 from .joints import CONTROLLED_JOINTS, JOINT_STATES_TOPIC, VELOCITY_CMD_TOPIC
 from .semantic_model import Panda
 
@@ -43,14 +41,16 @@ class WorldWithPandaConfig(WorldWithFixedRobot):
     urdf_view: AbstractRobot = field(kw_only=True, default=Panda, init=False)
 
     robot_pose: HomogeneousTransformationMatrix = field(
-        kw_only=True, default_factory=panda_pose_in_map
+        kw_only=True, default_factory=HomogeneousTransformationMatrix
     )
-    """Where the robot root sits in ``map``. The stock
-    :class:`~giskardpy.model.world_config.WorldWithFixedRobot` bolts it to the
-    origin, which would put giskard's arm metres away from the rendered one.
+    """Where the robot root sits in ``map``, i.e. the demo's spawn pose
+    (:class:`cram_vrb_lab.specs.SpawnPose`), the same one ``spawn_panda`` places
+    the prim with.
 
-    The default is the apartment's mounting pose, the same constants
-    ``spawn_panda`` places the prim with; another scene passes its own."""
+    The stock :class:`~giskardpy.model.world_config.WorldWithFixedRobot` bolts the
+    robot to the origin with no way to say otherwise, which for an arm mounted on
+    a table would put giskard's arm metres away from the rendered one. The default
+    here is that same origin -- an arm nobody placed stands where the map does."""
 
     def setup_world(self) -> None:
         """Build ``map`` and hang the posed robot off it.

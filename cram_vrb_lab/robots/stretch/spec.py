@@ -7,13 +7,20 @@ Isaac python (which has no giskardpy) and the CRAM venv (which has no isaacsim).
 from cram_vrb_lab.specs import RobotSpec
 
 
-def _giskard_world(environment):
+def _giskard_world(environment, spawn_pose):
     """The stock diff-drive Stretch world, with ``environment`` merged in after it.
 
     The stock config is unmodified: the robot is built by giskardpy's own
     ``WorldWithStretchConfigDiffDrive`` and the environment is merged onto ``map``
     afterwards. That order is load-bearing -- see
     :func:`cram_vrb_lab.control.giskard_world.build_world_config`.
+
+    ``spawn_pose`` is deliberately unused. The robot hangs off ``map -> odom`` and
+    giskard reads that transform from tf and the base pose from ``/odom``, so where
+    the robot actually stands arrives over the wire (the sim publishes odometry
+    from wherever it spawned it) exactly as it would from a real robot's
+    localization. Building the world at the spawn pose instead would double the
+    offset.
     """
     from giskardpy.middleware.ros2.scripts.iai_robots.stretch.configs import (
         WorldWithStretchConfigDiffDrive,
@@ -34,12 +41,12 @@ def _giskard_interface():
     return StretchRealStyleInterface()
 
 
-def _spawn(world, render, position=None):
+def _spawn(world, render, spawn_pose):
     from .isaac_node import spawn_stretch
 
-    if position is None:
-        return spawn_stretch(world, render)
-    return spawn_stretch(world, render, position=position)
+    return spawn_stretch(
+        world, render, position=spawn_pose.position, yaw=spawn_pose.yaw
+    )
 
 
 def _ros_node(world, render, robot, args):

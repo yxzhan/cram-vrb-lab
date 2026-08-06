@@ -25,8 +25,10 @@ exercises the same giskard code path as physical hardware. Two ways to drive it:
   on, and its standing positions and grasp have not been re-tuned for that.
 
 There are exactly two entry scripts, `sim.py` and `giskard_server.py`, and both
-take `--robot` and `--scene`: which combinations exist, and everything that
-differs between them, is data in `cram_vrb_lab/setups.py`. The scripts themselves
+take `--robot`, `--scene` and where the robot starts (`--spawn-position X Y Z`,
+`--spawn-yaw RAD`, default: the map origin, unrotated). Which combinations exist,
+and everything else that differs between them, is data in
+`cram_vrb_lab/setups.py`. The scripts themselves
 are thin composition layers over the `cram_vrb_lab` package: robot-specific code
 lives in `cram_vrb_lab/robots/<robot>/`, scene-specific code in
 `cram_vrb_lab/scenes/<scene>/`, generic infrastructure in `cram_vrb_lab/sim/` and
@@ -113,8 +115,10 @@ clients:
   plans as though nothing were under the cube. The sim publishes the cube's true
   pose on `/props/pick_cube_pose` and as the tf frame `pick_cube_gt`, which is
   the only way to tell a real grasp from CRAM merely believing it grasped
-  (`AttachNode` moves the twin's cube regardless). One layout per scene:
-  `APARTMENT_LAYOUT` for the Stretch, `PANDA_APARTMENT_LAYOUT` for the Panda.
+  (`AttachNode` moves the twin's cube regardless). One layout per setup, and for
+  a bolted-down arm it is a function of where the arm is bolted:
+  `APARTMENT_LAYOUT` is fixed in the room for the Stretch, `panda_layout_at(spawn
+  position, yaw)` follows the Panda.
 - **The Panda** (`cram_vrb_lab/robots/panda/`) is built entirely from the stock
   `panda_arm_hand.urdf` that ships with Isaac's URDF importer — imported into the
   stage at startup, so no converted USD is checked in, and parsed into the same
@@ -186,10 +190,13 @@ Manual start (source `/opt/ros/jazzy/setup.bash` and
 `ros2_ws/install/setup.bash` in every terminal):
 
 1. **Isaac Sim**: `binder/isaacsim_python_wrapper.sh demos/sim.py`
-   (add `--robot panda`, `--scene garmi_apartment`, ... — `--help` lists them)
+   (add `--robot panda`, `--scene garmi_apartment`, `--spawn-position 0 6 0.05`,
+   ... — `--help` lists them)
 2. **giskard server** (wait for the `giskard is ready` log line; it also launches
-   the static `map→odom` localization stand-in), with the *same* `--robot` /
-   `--scene`:
+   the static `map→odom` localization stand-in), with the *same* `--robot`,
+   `--scene` and spawn pose — for a robot bolted to `map` the spawn pose is the
+   only thing that tells giskard where it stands, and a value that disagrees with
+   the sim's makes it plan for a robot that is not the one being rendered:
    ```bash
    cognitive_robot_abstract_machine/.venv/bin/python demos/giskard_server.py
    ```

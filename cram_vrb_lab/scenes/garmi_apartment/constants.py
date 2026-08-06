@@ -101,18 +101,12 @@ def garmi_apartment_pose_in_map():
 # --- Where the robot stands and what it looks at --------------------------------
 #
 # The flat occupies x in [-5.3, 2.3], y in [1.2, 8.7], so the map origin is
-# OUTSIDE it -- the Stretch's usual spawn at (-1.5, 0) would put it in the void
-# beyond the south wall. Everything below is therefore given explicitly.
-
-STRETCH_SPAWN_POSITION = (0.0, 6.0, 0.05)
-"""Where the Stretch is spawned, in ``map``. Spawned facing ``map`` +x.
-
-Standing in the living room with a clear view down +x: the coffee table is 0.9 m
-ahead, the sofa and the floor lamp a little beyond it to either side. Clear of
-the bookshelf behind it (x = -1.9), of ``door_1`` (y = 1.3) and of the coffee
-table itself. z is the same 0.05 m lift ``spawn_stretch`` uses elsewhere, so the
-wheels start just above the floor and settle onto it.
-"""
+# OUTSIDE it: a robot spawned at the default origin ends up in the void beyond the
+# south wall. A demo in this scene has to pass a spawn position -- (0.0, 6.0, 0.05)
+# puts the Stretch in the living room facing +x, with the coffee table 0.9 m ahead,
+# the sofa and floor lamp a little beyond it, and clear of the bookshelf behind it
+# (x = -1.9), of door_1 (y = 1.3) and of the coffee table itself. The 0.05 m is the
+# usual lift that lets the wheels settle onto the floor rather than start in it.
 
 LIVING_ROOM_FLOOR = (1.0, 2.7, 0.1)
 """Point in ``map`` the head camera is aimed at: the floor 1.3 m ahead of the robot.

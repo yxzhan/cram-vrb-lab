@@ -43,8 +43,10 @@ cram_vrb_lab/
 ```
 
 Every demo runs the same two entry scripts, `demos/sim.py` and
-`demos/giskard_server.py`, with `--robot` and `--scene`. A combination is a row in
-`setups.py`; the robot half and the scene half are combined at run time (the scene
+`demos/giskard_server.py`, with `--robot`, `--scene` and where the robot starts
+(`--spawn-position` / `--spawn-yaw`, default: the map origin — where a robot
+belongs in a room is the demo's call, so the notebook passes it and the package
+never guesses). A combination is a row in `setups.py`; the robot half and the scene half are combined at run time (the scene
 is merged into the robot's giskard world by `control/giskard_world.py`, and the
 Isaac side is driven by one loop in `sim/runner.py`), so a new pairing needs no new
 entry scripts and usually no new code.

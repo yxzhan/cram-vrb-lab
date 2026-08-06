@@ -108,7 +108,22 @@ def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True)
     )
 
 
+def _spawn_args(spawn_position=None, spawn_yaw=None):
+    """``--spawn-position`` / ``--spawn-yaw`` flags, omitted when not given.
+
+    Omitted rather than defaulted here so the map origin is written down in one
+    place only -- the scripts' own default (:class:`cram_vrb_lab.specs.SpawnPose`).
+    """
+    args = []
+    if spawn_position is not None:
+        args += ["--spawn-position", *[str(float(v)) for v in spawn_position]]
+    if spawn_yaw is not None:
+        args += ["--spawn-yaw", str(float(spawn_yaw))]
+    return args
+
+
 def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
+                    spawn_position=None, spawn_yaw=None,
                     marker=SIM_READY_MARKER, terminal=False, timeout=900,
                     camera=None, props=False):
     """Launch the Isaac Sim scene for ``robot`` in ``scene``; wait until ready.
@@ -118,6 +133,11 @@ def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
     :param robot: which robot, e.g. ``"stretch"`` or ``"panda"``.
     :param scene: which scene, e.g. ``"apartment"`` or ``"garmi_apartment"``.
         The pair must be in :data:`cram_vrb_lab.setups.SETUPS`.
+    :param spawn_position: ``(x, y, z)`` in the ``map`` frame [m] the robot
+        starts at; None spawns it at the origin.
+    :param spawn_yaw: its starting heading about z [rad]; None means 0.
+        Pass both to :func:`start_giskard_server` as well -- a bolted-down arm
+        has no other way to tell giskard where it is.
     :param camera: head-camera mode passed as ``--camera``
         (``"rgb"`` / ``"depth"`` / ``"both"`` / ``"none"``); None uses the
         script's default.
@@ -130,6 +150,7 @@ def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
         str(SIM_SCRIPT),
         "--robot", robot,
         "--scene", scene,
+        *_spawn_args(spawn_position, spawn_yaw),
     ]
     if camera is not None:
         args += ["--camera", camera]
@@ -149,12 +170,20 @@ def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
 
 
 def start_giskard_server(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
+                         spawn_position=None, spawn_yaw=None,
                          marker="giskard is ready", terminal=False, timeout=300):
     """Launch the giskard control server for ``robot`` in ``scene``; wait until
-    it is ready. Same combination as :func:`start_isaac_sim`."""
+    it is ready.
+
+    Same combination *and the same spawn pose* as :func:`start_isaac_sim`: for a
+    robot fixed to ``map`` this is where giskard believes it stands, so a value
+    that disagrees with the sim's makes giskard plan for an arm that is not the
+    one being rendered.
+    """
     return start(
         "giskard server",
-        [sys.executable, str(SERVER_SCRIPT), "--robot", robot, "--scene", scene],
+        [sys.executable, str(SERVER_SCRIPT), "--robot", robot, "--scene", scene,
+         *_spawn_args(spawn_position, spawn_yaw)],
         GISKARD_SERVER_LOG,
         marker,
         timeout=timeout,

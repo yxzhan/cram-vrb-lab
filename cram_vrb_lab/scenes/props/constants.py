@@ -27,11 +27,6 @@ import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from cram_vrb_lab.scenes.apartment.constants import (
-    PANDA_BASE_POSITION_IN_MAP,
-    PANDA_BASE_YAW_IN_MAP,
-)
-
 CUBE_SIZE = 0.05
 """Edge length [m] of the graspable cube.
 
@@ -189,12 +184,6 @@ def panda_layout_at(base_position, base_yaw: float) -> PropLayout:
         place_position=to_map(place_offset),
         surface_z=base_position[2],
     )
-
-
-PANDA_APARTMENT_LAYOUT = panda_layout_at(
-    PANDA_BASE_POSITION_IN_MAP, PANDA_BASE_YAW_IN_MAP
-)
-"""Props for the Panda mounted in the apartment: just the cube, on its table."""
 
 # --- The Stretch's standing positions -------------------------------------
 #

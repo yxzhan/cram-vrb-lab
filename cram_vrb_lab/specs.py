@@ -17,8 +17,56 @@ These are the types the demo entry points (``demos/sim.py``,
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
+
+
+@dataclass(frozen=True)
+class SpawnPose:
+    """Where a robot starts, in the giskard ``map`` frame (= the Isaac world frame).
+
+    Passed in from the demo (``--spawn-position`` / ``--spawn-yaw``, i.e. the
+    notebook's ``spawn_position=`` / ``spawn_yaw=``) rather than baked into a
+    scene, because where a robot belongs in a room is a property of the demo, not
+    of the room. The default is the origin, unrotated: a robot the demo says
+    nothing about stands at ``map``'s origin.
+
+    Flat on the floor by construction -- position plus a heading, no roll or
+    pitch. Nothing here mounts a robot tilted, and a scalar yaw is what both
+    sides want anyway (Isaac takes a quaternion, giskard a transformation matrix,
+    and the prop layouts rotate their offsets by it).
+    """
+
+    position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """(x, y, z) in metres."""
+
+    yaw: float = 0.0
+    """Heading about z, in radians."""
+
+    @property
+    def quaternion_wxyz(self) -> Tuple[float, float, float, float]:
+        """The heading as a quaternion in Isaac's ``(w, x, y, z)`` order."""
+        return (math.cos(self.yaw / 2.0), 0.0, 0.0, math.sin(self.yaw / 2.0))
+
+    def to_transformation_matrix(self):
+        """The pose as a semantic_digital_twin
+        ``HomogeneousTransformationMatrix``, for the giskard side."""
+        from semantic_digital_twin.spatial_types.spatial_types import (
+            HomogeneousTransformationMatrix,
+        )
+
+        return HomogeneousTransformationMatrix.from_xyz_rpy(
+            *self.position, yaw=self.yaw
+        )
+
+    def __str__(self) -> str:
+        x, y, z = self.position
+        return f"({x:.3f}, {y:.3f}, {z:.3f}) yaw {math.degrees(self.yaw):.1f} deg"
+
+
+ORIGIN = SpawnPose()
+"""The default spawn pose: the map origin, unrotated."""
 
 
 @dataclass(frozen=True)
@@ -48,17 +96,22 @@ class RobotSpec:
     name: str
     """The ``--robot`` value."""
 
-    giskard_world: Callable[[Optional[EnvironmentSpec]], "WorldConfig"]
-    """Build the giskard world config: this robot, plus the environment it is
-    given (``None`` for a scene giskard should not know about). Robot-only, so
-    the same function serves every scene."""
+    giskard_world: Callable[[Optional[EnvironmentSpec], SpawnPose], "WorldConfig"]
+    """``(environment, spawn_pose) -> WorldConfig``: this robot, plus the
+    environment it is given (``None`` for a scene giskard should not know about).
+    Robot-only, so the same function serves every scene.
+
+    A robot bolted to ``map`` is built *at* the spawn pose, because that is the
+    only thing that tells giskard where it stands. A robot with a base ignores the
+    argument: it learns its pose from odometry and localization, which is what a
+    real one does too."""
 
     giskard_interface: Callable[[], "RobotInterfaceConfig"]
     """The giskard interface config wiring this robot's ROS topics."""
 
     spawn: Callable[..., object]
-    """``(world, render, position=None) -> handle``. ``position=None`` means the
-    robot's own default placement (see the ``isaac_node`` module)."""
+    """``(world, render, spawn_pose) -> handle``: put the robot into the Isaac
+    stage at that pose."""
 
     ros_node: Callable[..., "SimBridge"]
     """``(world, render, handle, args) -> SimBridge``: the sim-side ROS bridge,
@@ -92,8 +145,14 @@ class SceneSpec:
 class PropsSpec:
     """The pick-and-place props, where the scene has somewhere to put them."""
 
-    layout: "PropLayout"
-    """Where the cube starts and where it is carried to, in ``map``."""
+    layout: Callable[[SpawnPose], "PropLayout"]
+    """``(spawn_pose) -> PropLayout``: where the cube starts and where it is
+    carried to, in ``map``.
+
+    A function of where the robot stands, because for a bolted-down arm it has to
+    be: the props sit on the surface the arm is mounted on, within its reach, so
+    moving the arm moves them. For a mobile robot the props stay where the room
+    puts them and the argument is ignored."""
 
     by_default: bool = False
     """Spawn them without being asked. False means ``--props`` opts in: the cube
@@ -113,25 +172,24 @@ class Viewport:
 class Setup:
     """One runnable combination: a robot, a scene, and what only the *pair* knows.
 
-    Everything below is pair-level on purpose. Where a robot spawns depends on the
-    room it spawns in; whether there are props to grasp depends on whether the
-    scene offers a surface to put them on; how the viewport is framed depends on
-    what the robot does there.
+    Everything below is pair-level on purpose. Whether there are props to grasp
+    depends on whether the scene offers a surface to put them on; how the viewport
+    is framed depends on what the robot does there.
+
+    Where the robot *stands* is deliberately not here: it comes from the demo as a
+    :class:`SpawnPose`, and both fields below are given it.
     """
 
     robot: RobotSpec
     scene: SceneSpec
 
-    spawn_position: Optional[Tuple[float, float, float]] = None
-    """Where the robot stands in this scene, in ``map``. ``None`` uses the
-    robot's own default."""
-
     props: Optional[PropsSpec] = None
     """``None`` when this scene has no prop layout, which also makes ``--props``
     an error rather than a flag that silently does nothing."""
 
-    viewport: Optional[Viewport] = None
-    """``None`` uses the scene's own default view."""
+    viewport: Optional[Callable[[SpawnPose], Viewport]] = None
+    """``(spawn_pose) -> Viewport``, or ``None`` to use the scene's own default
+    view. Takes the pose because a close-up is framed on the robot."""
 
     @property
     def name(self) -> str:

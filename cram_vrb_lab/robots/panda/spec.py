@@ -7,11 +7,13 @@ Isaac python (which has no giskardpy) and the CRAM venv (which has no isaacsim).
 from cram_vrb_lab.specs import RobotSpec
 
 
-def _giskard_world(environment):
-    """The Panda bolted to ``map`` at its mounting pose, plus ``environment``.
+def _giskard_world(environment, spawn_pose):
+    """The Panda bolted to ``map`` at ``spawn_pose``, plus ``environment``.
 
-    No odometry and no localization -- the arm does not move -- so the only thing
-    the scene contributes is the scenery to avoid.
+    No odometry and no localization -- the arm does not move -- so the spawn pose
+    is the *only* thing that tells giskard where the arm is, and it has to be the
+    same one the sim placed the prim with or giskard plans for an arm metres away
+    from the rendered one. The scene contributes only the scenery to avoid.
     """
     from cram_vrb_lab.control.giskard_world import build_world_config
 
@@ -19,7 +21,10 @@ def _giskard_world(environment):
     from .joints import load_patched_urdf
 
     return build_world_config(
-        WorldWithPandaConfig, environment, urdf=load_patched_urdf()
+        WorldWithPandaConfig,
+        environment,
+        urdf=load_patched_urdf(),
+        robot_pose=spawn_pose.to_transformation_matrix(),
     )
 
 
@@ -29,12 +34,15 @@ def _giskard_interface():
     return PandaSimInterface()
 
 
-def _spawn(world, render, position=None):
+def _spawn(world, render, spawn_pose):
     from .isaac_node import spawn_panda
 
-    if position is None:
-        return spawn_panda(world, render)
-    return spawn_panda(world, render, position=position)
+    return spawn_panda(
+        world,
+        render,
+        position=spawn_pose.position,
+        orientation=spawn_pose.quaternion_wxyz,
+    )
 
 
 def _ros_node(world, render, robot, args):
