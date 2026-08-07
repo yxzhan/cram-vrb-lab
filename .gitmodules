@@ -4,3 +4,6 @@
 [submodule "assets/stretch_urdf"]
 	path = assets/stretch_urdf
 	url = https://github.com/hello-robot/stretch_urdf
+[submodule "assets/franka_ros"]
+	path = assets/franka_ros
+	url = https://github.com/frankarobotics/franka_ros.git
