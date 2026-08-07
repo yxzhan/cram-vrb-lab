@@ -26,6 +26,7 @@ package decides it on the demo's behalf.
    scope -- see :mod:`cram_vrb_lab.specs`. The constants below are plain python.
 """
 
+import math
 from typing import Dict, Tuple
 
 from cram_vrb_lab.robots.panda.spec import PANDA
@@ -54,6 +55,20 @@ DEFAULT_ROBOT = STRETCH.name
 DEFAULT_SCENE = APARTMENT.name
 
 
+def _in_front_of(spawn_pose: SpawnPose, ahead: float, side: float = 0.0,
+                 up: float = 0.0) -> Tuple[float, float, float]:
+    """A point ``ahead`` m in front of the robot, ``side`` m to its left and ``up``
+    m above its base, in ``map``. Follows the robot if the demo mounts it
+    elsewhere."""
+    x, y, z = spawn_pose.position
+    cos_yaw, sin_yaw = math.cos(spawn_pose.yaw), math.sin(spawn_pose.yaw)
+    return (
+        x + cos_yaw * ahead - sin_yaw * side,
+        y + sin_yaw * ahead + cos_yaw * side,
+        z + up,
+    )
+
+
 def _arm_workspace_viewport(spawn_pose: SpawnPose) -> Viewport:
     """A close-up on a bolted-down arm's workspace, wherever it is bolted down.
 
@@ -65,6 +80,18 @@ def _arm_workspace_viewport(spawn_pose: SpawnPose) -> Viewport:
         eye=(x - 1.4, y - 1.4, z + 1.0),
         target=panda_layout_at(spawn_pose.position, spawn_pose.yaw)
         .cube_start_position,
+    )
+
+
+def _arm_and_what_it_faces_viewport(spawn_pose: SpawnPose) -> Viewport:
+    """The arm and the furniture it works on, seen from the open side of the room.
+
+    For an arm that faces something close by (a cabinet run half a metre ahead),
+    where the props-framed view above would put the camera inside that furniture.
+    """
+    return Viewport(
+        eye=_in_front_of(spawn_pose, ahead=-1.5, side=-1.2, up=1.4),
+        target=_in_front_of(spawn_pose, ahead=0.55, up=0.8),
     )
 
 
@@ -97,6 +124,14 @@ SETUPS: Dict[Tuple[str, str], Setup] = {
                 by_default=True,
             ),
             viewport=_arm_workspace_viewport,
+        ),
+        Setup(
+            robot=PANDA,
+            scene=GARMI_APARTMENT,
+            # No props here either: this pairing exists to work on the *scene's*
+            # own articulation -- the kitchen cabinet's doors and drawers, which
+            # the MJCF twin models and Isaac renders from the same file.
+            viewport=_arm_and_what_it_faces_viewport,
         ),
     )
 }

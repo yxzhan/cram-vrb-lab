@@ -28,6 +28,11 @@ CONTROLLED_JOINTS = [
     "joint_gripper_finger_right",
 ]
 
+FINGER_JOINTS = ["joint_gripper_finger_left", "joint_gripper_finger_right"]
+"""The two gripper joints, named once: the sim node hands them to the velocity
+integrator as its holding joints and drives them from the gripper topic, and both
+have to mean the same pair."""
+
 VELOCITY_CMD_TOPIC = "/stretch/joint_velocity_cmd"
 JOINT_COMMAND_TOPIC = "/stretch/joint_command"
 JOINT_STATES_TOPIC = "/stretch/joint_states"

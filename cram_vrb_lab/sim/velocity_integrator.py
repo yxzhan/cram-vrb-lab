@@ -93,6 +93,38 @@ class StreamedVelocityIntegrator:
         self._command_time = time.time()
         return True
 
+    def hold_at(self, joint_names, position: float) -> None:
+        """Drive ``joint_names`` to ``position`` [rad or m] and make that the target
+        the integrator holds.
+
+        For commands that come from outside giskard's stream -- a gripper topic,
+        say. Writing the drives directly is not enough on its own: this class owns
+        the targets of every joint it was given and rewrites them each step, so a
+        direct write is overwritten within one step while a stream is live, and a
+        holding joint (whose target is deliberately never re-seeded from the
+        measured position) would have the *old* value restored at the start of the
+        next goal. Going through here updates the drives and the integrator's idea
+        of where they should be, so the command survives both.
+
+        Only the named joints are touched: writing every DOF -- e.g. from
+        ``get_joint_positions()`` -- would also throw away the lead the arm's
+        targets carry, and the arm sags by up to :data:`MAX_LEAD` until the drives
+        build it back up.
+        """
+        indices = [self.joint_names.index(name) for name in joint_names]
+        position = float(position)
+        if self._targets is None:
+            self._targets = self.robot.get_joint_positions()[0][self.dof_indices]
+            self._was_zero = np.ones(len(self.dof_indices), dtype=bool)
+        for index in indices:
+            self._targets[index] = np.clip(
+                position, self._lower[index], self._upper[index]
+            )
+        dof_indices = self.dof_indices[indices]
+        self.robot.set_joint_position_targets(
+            self._targets[indices].reshape(1, -1), joint_indices=dof_indices
+        )
+
     def step(self, nominal_dt: float):
         """Advance the position targets. Call once per sim step.
 

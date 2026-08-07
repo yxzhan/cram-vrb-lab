@@ -55,25 +55,51 @@ ARM_DRIVE_DAMPING = 1.0e4
 
 FINGER_DRIVE_STIFFNESS = 400.0
 FINGER_DRIVE_DAMPING = 40.0
-"""Finger drive gains, [N/m] and [N/(m/s)].
+"""Finger drive gains as a **force** drive would take them, [N/m] and [N/(m/s)].
 
 Taken from NVIDIA's own Franka setup
-(``omni.physxdemos.utils.franka_helpers.get_default_franka_parameters``), which
-is what the official Franka USD is built with. Reproducing them is the whole
-reason the imported robot behaves like the shipped asset.
+(``omni.physxdemos.utils.franka_helpers.get_default_franka_parameters``), which is
+what the official Franka USD is built with. Reproducing them is the whole reason
+the imported robot behaves like the shipped asset.
 
 A URDF describes geometry, mass and limits; it says **nothing about drives**. So
 the importer derives gains from link inertias, and a Franka finger weighs 14 g:
 whatever it derives, and anything sized for the arm, leaves the fingers
-oscillating like a spring. Sizing the damping analytically does not rescue it
-either -- critical damping for a 14 g mass at this stiffness works out around 5,
-and at that value the fingers still ring, because the drive is fighting the
-articulation's effective inertia rather than the bare link's.
+oscillating like a spring.
 
-Together with ``StreamedVelocityIntegrator.MAX_LEAD`` the stiffness also sets
-the grip force: the target may lead the measured position by 0.02 m, so a
-blocked finger pushes with about 8 N -- inside the joint's own 20 N effort
-limit, and far above the 0.5 N the cube's weight needs.
+Together with ``StreamedVelocityIntegrator.MAX_LEAD`` the stiffness also sets the
+grip force: the target may lead the measured position by 0.02 m, so a blocked
+finger pushes with about 8 N -- inside the joint's own 20 N effort limit, and far
+above the 0.5 N the cube's weight needs.
+
+.. warning::
+   These are not the numbers handed to ``set_gains``: see :data:`FINGER_MASS`.
+"""
+
+FINGER_MASS = 0.0140552
+"""Mass [kg] of one finger link, from ``panda_arm_hand.urdf``.
+
+The conversion factor between the gains above and the ones the drive actually
+gets, because **the URDF importer authors acceleration drives, not force drives**
+-- ``drive:linear:physics:type = "acceleration"`` on both finger joints. PhysX
+then reads the stiffness as m/s^2 per metre and scales the force by the joint's
+effective mass, so a gravity load costs a fixed ``g / stiffness`` of droop
+*whatever the link weighs*: at 400 that is 2.4 cm of a 4 cm stroke.
+
+Nothing shows while the hand is upright -- gravity acts across the finger axis --
+but roll the wrist so the fingers sit one above the other and the hand collapses
+onto its stops, after which no gripper command can recover it: a close
+"succeeds" because the fingers are already there, and an open never converges
+because 400 m/s^2 per metre cannot lift a finger the last 2.4 cm.
+
+Dividing by the finger mass converts the force-drive gains into acceleration-drive
+ones (``F = k_a * m * error``), which restores both intended numbers: the droop
+becomes ``g * m / k = 0.35 mm`` and the grip force ``k * MAX_LEAD = 8 N``.
+Measured in the pose that provoked this: droop 24.8 mm before, 0.34 mm after.
+
+Setting ``type = "force"`` on the joint prims instead does not work -- the
+attribute changes, PhysX keeps the acceleration behaviour, and a stop/play cycle
+does not re-read it either (both measured).
 """
 
 
@@ -172,9 +198,11 @@ def move_to_park(panda, world, render):
         kds=np.full((1, len(arm_dof)), ARM_DRIVE_DAMPING),
         joint_indices=arm_dof,
     )
+    # Divided by the finger mass: the importer's drives are acceleration drives,
+    # see FINGER_MASS.
     panda.set_gains(
-        kps=np.full((1, len(finger_dof)), FINGER_DRIVE_STIFFNESS),
-        kds=np.full((1, len(finger_dof)), FINGER_DRIVE_DAMPING),
+        kps=np.full((1, len(finger_dof)), FINGER_DRIVE_STIFFNESS / FINGER_MASS),
+        kds=np.full((1, len(finger_dof)), FINGER_DRIVE_DAMPING / FINGER_MASS),
         joint_indices=finger_dof,
     )
 
@@ -199,7 +227,6 @@ class PandaROS(SimBridge):
     def __init__(self, robot):
         super().__init__("panda_ros")
         self.robot = robot
-        self.finger_dof = dof_indices(robot, FINGER_JOINTS)
         self.integrator = StreamedVelocityIntegrator(
             robot, CONTROLLED_JOINTS, holding_joints=FINGER_JOINTS
         )
@@ -224,11 +251,14 @@ class PandaROS(SimBridge):
             )
 
     def gripper_cmd_cb(self, msg):
-        """Command both fingers to a travel [m] directly, bypassing giskard."""
-        targets = self.robot.get_joint_positions()[0].copy()
-        for index in self.finger_dof:
-            targets[index] = float(msg.data)
-        self.robot.set_joint_position_targets([targets])
+        """Command both fingers to a travel [m] directly, bypassing giskard.
+
+        Through the integrator rather than straight onto the drives: it owns the
+        targets of every controlled joint, the fingers included, so a direct write
+        would be overwritten within one sim step (see
+        :meth:`~cram_vrb_lab.sim.velocity_integrator.StreamedVelocityIntegrator.hold_at`).
+        """
+        self.integrator.hold_at(FINGER_JOINTS, msg.data)
 
     def integrate_joint_velocities(self, dt):
         self.integrator.step(dt)

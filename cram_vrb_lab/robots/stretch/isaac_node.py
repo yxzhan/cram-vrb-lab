@@ -46,6 +46,7 @@ from .joints import (
     CONTROLLED_JOINTS,
     DEPTH_IMAGE_TOPIC,
     DEPTH_INFO_TOPIC,
+    FINGER_JOINTS,
     GRIPPER_CMD_TOPIC,
     JOINT_STATES_TOPIC,
     ODOM_TOPIC,
@@ -127,8 +128,7 @@ def spawn_stretch(world, render, position=(0.0, 0.0, 0.0), yaw=0.0):
     # is stiffness * 0.02 -- the same order as the fingers' own gravity load, and
     # the fingers crawl. Raise the gains so the small lead produces authoritative
     # torque.
-    finger_dof = dof_indices(
-        stretch, ["joint_gripper_finger_left", "joint_gripper_finger_right"])
+    finger_dof = dof_indices(stretch, FINGER_JOINTS)
     stretch.set_gains(kps=np.full((1, len(finger_dof)), 200.0),
                       kds=np.full((1, len(finger_dof)), 2.0),
                       joint_indices=finger_dof)
@@ -191,10 +191,6 @@ class StretchROS(SimBridge):
         self.publish_rgb = publish_rgb
         self.publish_depth = publish_depth
 
-        # Gripper finger DOFs for the gripper command topic.
-        self.finger_dof = dof_indices(
-            robot, ["joint_gripper_finger_left", "joint_gripper_finger_right"])
-
         # Differential base geometry (for the cosmetic wheel spin only -- the
         # base is driven kinematically, see integrate_base).
         self.wheel_base = 0.3407
@@ -221,9 +217,7 @@ class StretchROS(SimBridge):
         # integrated into position targets each sim step, see
         # integrate_joint_velocities.
         self.integrator = StreamedVelocityIntegrator(
-            robot, CONTROLLED_JOINTS,
-            holding_joints=["joint_gripper_finger_left",
-                            "joint_gripper_finger_right"])
+            robot, CONTROLLED_JOINTS, holding_joints=FINGER_JOINTS)
 
         # TF: link names and the base link index
         self.body_names = list(robot.body_names)
@@ -316,10 +310,14 @@ class StretchROS(SimBridge):
             np.array([[vl, vr]]), joint_indices=self.wheel_dof)
 
     def gripper_cmd_cb(self, msg):
-        tgt = self.robot.get_joint_positions()[0].copy()
-        for i in self.finger_dof:
-            tgt[i] = float(msg.data)
-        self.robot.set_joint_position_targets([tgt])
+        """Command both fingers to a travel [m] directly, bypassing giskard.
+
+        Through the integrator rather than straight onto the drives: it owns the
+        targets of every controlled joint, the fingers included, so a direct write
+        would be overwritten within one sim step (see
+        :meth:`~cram_vrb_lab.sim.velocity_integrator.StreamedVelocityIntegrator.hold_at`).
+        """
+        self.integrator.hold_at(FINGER_JOINTS, msg.data)
 
     def publish_joint_states(self):
         msg = JointState()

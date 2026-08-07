@@ -83,6 +83,15 @@ clients:
   `--camera none` (or `ISAAC_NO_CAMERA=1`) plus `ISAAC_HEADLESS=1` /
   `ISAAC_RENDER=0` let a machine with no usable GPU display still run the control
   path.
+- **Grabbing things in the viewport** (shift + left-drag on a rigid body while
+  the sim runs, as in the GUI app): that is `omni.physx.ui`, which the GUI's
+  experience file loads through `omni.physx.bundle` but the one a `SimulationApp`
+  loads (`isaacsim.exp.base.python.kit`) does not. `sim.py` enables it explicitly
+  when rendering is on. It moves **rigid bodies** — the props. The robot is not
+  one: its base is teleported every step (`integrate_base`) and its joints are
+  driven to giskard's targets, so dragging it only fights the controller. Force
+  and behaviour are tunable through the usual carb settings
+  (`/physics/pickingForce`, `/physics/mousePush`, `/physics/forceGrab`).
 - giskard's closed loop outputs **joint velocities**; the sim integrates them
   into position targets every physics step
   (`StretchROS.integrate_joint_velocities`: exact sim dt, anti-windup lead
@@ -171,20 +180,21 @@ first cell calls `cram_vrb_lab.control.launcher.start_isaac_sim()` /
 (background processes, or pass `terminal=True` to open each in a
 `gnome-terminal` window):
 
-- `stretch_apartment_giskard.ipynb` — joint-space, gripper, Cartesian
-  (arm-only / whole-body), base goals, and external collision avoidance against
-  the apartment.
-- `stretch_apartment_cram.ipynb` — the same robot driven by high-level CRAM
-  plans (park arms, move torso, gripper, navigate).
-- `stretch_pick_place_cram.ipynb` — CRAM pick-and-place on the props;
-  starts the sim with `start_isaac_sim(props=True)`.
-- `panda_pick_place_cram.ipynb` — a Franka Panda mounted on a table in the
+- `panda_aicor_apartment.ipynb` — a Franka Panda mounted on a table in the
   apartment, grasping a cube off that table and placing it down further along.
-  Same two entry scripts, selected with `start_isaac_sim(robot="panda")` /
-  `start_giskard_server(robot="panda")`, on its own topics.
-- `stretch_garmi_apartment_perception_cram.ipynb` — the Stretch in the other
-  flat: `start_isaac_sim(scene="garmi_apartment", camera="both")` /
-  `start_giskard_server(scene="garmi_apartment")`.
+  Same two entry scripts, selected with `start_isaac_sim(robot="panda", ...)` /
+  `start_giskard_server(robot="panda", ...)`, on its own topics.
+- `stretch_aicor_apartment.ipynb` — the Stretch in the same apartment, driven by
+  high-level CRAM plans, with robokudo perception on the head camera.
+- `stretch_garmi_apartment.ipynb` — the Stretch in the other flat:
+  `start_isaac_sim(scene="garmi_apartment", spawn_position=(0, 6, 0.05), camera="both")`
+  and the same spawn pose for the server.
+- `panda_garmi_apartment.ipynb` — the Panda in that flat instead, bolted to the
+  floor in front of the kitchen run: park, gripper, and four Cartesian goals
+  around the cabinet with collision avoidance against the MJCF. No perception and
+  no props — and it documents why it stops short of opening a drawer (the
+  garmi-apartment USD carries no physics joints, so the MJCF's drawers and doors
+  articulate in the twin only).
 
 Manual start (source `/opt/ros/jazzy/setup.bash` and
 `ros2_ws/install/setup.bash` in every terminal):

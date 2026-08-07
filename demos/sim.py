@@ -44,6 +44,13 @@ from isaacsim.core.api import World
 from isaacsim.core.utils.extensions import enable_extension
 
 enable_extension("isaacsim.ros2.bridge")
+# Shift + left-drag in the viewport to grab and push rigid bodies while the sim
+# runs. The GUI app (`/isaac-sim/isaac-sim.sh`) has it because its experience file
+# pulls in omni.physx.bundle; the experience a SimulationApp loads
+# (isaacsim.exp.base.python.kit) does not, so it has to be asked for here. Only
+# worth loading when there is a viewport to interact with.
+if RENDER:
+    enable_extension("omni.physx.ui")
 
 my_world = World(stage_units_in_meters=1.0, physics_dt=1 / 200, rendering_dt=8 / 200)
 my_world.reset()
