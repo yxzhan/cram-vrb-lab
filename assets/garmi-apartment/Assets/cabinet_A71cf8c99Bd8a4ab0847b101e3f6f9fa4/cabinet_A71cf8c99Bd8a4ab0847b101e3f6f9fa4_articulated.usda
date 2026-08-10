@@ -501,13 +501,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
     }
 
     def Xform "door_2" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
     )
     {
         float physics:mass = 5
-        float3 xformOp:scale = (0.96, 1, 1)
+        int physxRigidBody:solverPositionIterationCount = 32
         double3 xformOp:translate = (-0.984187943534851, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        uniform token[] xformOpOrder = ["xformOp:translate"]
 
         def Mesh "geom" (
             delete apiSchemas = ["PhysicsRigidBodyAPI"]
@@ -522,7 +522,8 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             uniform token physics:approximation = "convexHull"
             uniform token subdivisionScheme = "catmullClark"
             token triangleSubdivisionRule = "catmullClark"
-            uniform token[] xformOpOrder = []
+            float3 xformOp:scale = (0.96, 1, 1)
+            uniform token[] xformOpOrder = ["xformOp:scale"]
 
             over "mesh_0000"
             {
@@ -559,47 +560,45 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
                 rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
             }
         }
-    }
 
-    def Xform "door_2_handle" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
-    {
-        float physics:mass = 0.2
-        double xformOp:rotateY = -90
-        double3 xformOp:translate = (0.6314999999999998, -7.420769929885864, -1.8762979)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateY"]
-
-        def Mesh "geom" (
-            delete apiSchemas = ["PhysicsRigidBodyAPI"]
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
-            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/B095bea57b6f46a59fe6A701e4e23301_handle_1>
-        )
+        def Xform "door_2_handle"
         {
-            uniform bool doubleSided = 0
-            token faceVaryingLinearInterpolation = "cornersPlus1"
-            token interpolateBoundary = "edgeAndCorner"
-            uniform token orientation = "rightHanded"
-            uniform token physics:approximation = "convexHull"
-            uniform token subdivisionScheme = "catmullClark"
-            token triangleSubdivisionRule = "catmullClark"
-            uniform token[] xformOpOrder = []
+            double xformOp:rotateY = -90
+            double3 xformOp:translate = (1.6156879435348508, 0, -0.8762978662044345)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateY"]
 
-            over "mesh_0000"
+            def Mesh "geom" (
+                delete apiSchemas = ["PhysicsRigidBodyAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/B095bea57b6f46a59fe6A701e4e23301_handle_1>
+            )
             {
-                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                uniform bool doubleSided = 0
+                token faceVaryingLinearInterpolation = "cornersPlus1"
+                token interpolateBoundary = "edgeAndCorner"
+                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
+                uniform token orientation = "rightHanded"
+                uniform token physics:approximation = "convexHull"
+                uniform token subdivisionScheme = "catmullClark"
+                token triangleSubdivisionRule = "catmullClark"
+                uniform token[] xformOpOrder = []
+
+                over "mesh_0000"
+                {
+                    rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                }
             }
         }
     }
 
     def Xform "drawer_4" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
     )
     {
         float physics:mass = 8
-        float3 xformOp:scale = (0.96, 1, 1)
+        int physxRigidBody:solverPositionIterationCount = 32
         double3 xformOp:translate = (-0.984187943534851, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        uniform token[] xformOpOrder = ["xformOp:translate"]
 
         def Mesh "geom" (
             delete apiSchemas = ["PhysicsRigidBodyAPI"]
@@ -614,7 +613,8 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             uniform token physics:approximation = "convexHull"
             uniform token subdivisionScheme = "catmullClark"
             token triangleSubdivisionRule = "catmullClark"
-            uniform token[] xformOpOrder = []
+            float3 xformOp:scale = (0.96, 1, 1)
+            uniform token[] xformOpOrder = ["xformOp:scale"]
 
             over "mesh_0000"
             {
@@ -666,43 +666,42 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
                 rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
             }
         }
-    }
 
-    def Xform "drawer_4_handle" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
-    {
-        float physics:mass = 0.2
-        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate"]
-
-        def Mesh "geom" (
-            delete apiSchemas = ["PhysicsRigidBodyAPI"]
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
-            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5ea867659df64f408e96443612e6bc81_handle_1>
-        )
+        def Xform "drawer_4_handle"
         {
-            uniform bool doubleSided = 0
-            token faceVaryingLinearInterpolation = "cornersPlus1"
-            token interpolateBoundary = "edgeAndCorner"
-            uniform token orientation = "rightHanded"
-            uniform token physics:approximation = "convexHull"
-            uniform token subdivisionScheme = "catmullClark"
-            token triangleSubdivisionRule = "catmullClark"
-            uniform token[] xformOpOrder = []
+            double3 xformOp:translate = (-0.058111997647285585, 0, 0)
+            uniform token[] xformOpOrder = ["xformOp:translate"]
 
-            over "mesh_0000"
+            def Mesh "geom" (
+                delete apiSchemas = ["PhysicsRigidBodyAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5ea867659df64f408e96443612e6bc81_handle_1>
+            )
             {
-                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f31d7c7aa0001b073db>
+                uniform bool doubleSided = 0
+                token faceVaryingLinearInterpolation = "cornersPlus1"
+                token interpolateBoundary = "edgeAndCorner"
+                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
+                uniform token orientation = "rightHanded"
+                uniform token physics:approximation = "convexHull"
+                uniform token subdivisionScheme = "catmullClark"
+                token triangleSubdivisionRule = "catmullClark"
+                uniform token[] xformOpOrder = []
+
+                over "mesh_0000"
+                {
+                    rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f31d7c7aa0001b073db>
+                }
             }
         }
     }
 
     def Xform "door_1" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
     )
     {
         float physics:mass = 5
+        int physxRigidBody:solverPositionIterationCount = 32
         double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
         uniform token[] xformOpOrder = ["xformOp:translate"]
 
@@ -756,43 +755,41 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
                 rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
             }
         }
-    }
 
-    def Xform "door_1_handle" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
-    {
-        float physics:mass = 0.2
-        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate"]
-
-        def Mesh "geom" (
-            delete apiSchemas = ["PhysicsRigidBodyAPI"]
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
-            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F2a2927dB09f40d29b7a3cb63c5e1e2f_handle_1>
-        )
+        def Xform "door_1_handle"
         {
-            uniform bool doubleSided = 0
-            token faceVaryingLinearInterpolation = "cornersPlus1"
-            token interpolateBoundary = "edgeAndCorner"
-            uniform token orientation = "rightHanded"
-            uniform token physics:approximation = "convexHull"
-            uniform token subdivisionScheme = "catmullClark"
-            token triangleSubdivisionRule = "catmullClark"
             uniform token[] xformOpOrder = []
 
-            over "mesh_0000"
+            def Mesh "geom" (
+                delete apiSchemas = ["PhysicsRigidBodyAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F2a2927dB09f40d29b7a3cb63c5e1e2f_handle_1>
+            )
             {
-                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                uniform bool doubleSided = 0
+                token faceVaryingLinearInterpolation = "cornersPlus1"
+                token interpolateBoundary = "edgeAndCorner"
+                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
+                uniform token orientation = "rightHanded"
+                uniform token physics:approximation = "convexHull"
+                uniform token subdivisionScheme = "catmullClark"
+                token triangleSubdivisionRule = "catmullClark"
+                uniform token[] xformOpOrder = []
+
+                over "mesh_0000"
+                {
+                    rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                }
             }
         }
     }
 
     def Xform "door_4" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
     )
     {
         float physics:mass = 5
+        int physxRigidBody:solverPositionIterationCount = 32
         double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
         uniform token[] xformOpOrder = ["xformOp:translate"]
 
@@ -846,43 +843,41 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
                 rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
             }
         }
-    }
 
-    def Xform "door_4_handle" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
-    {
-        float physics:mass = 0.2
-        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate"]
-
-        def Mesh "geom" (
-            delete apiSchemas = ["PhysicsRigidBodyAPI"]
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
-            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/Db95e8a331c74e7cA5ac6c6c522cde9b_handle_1>
-        )
+        def Xform "door_4_handle"
         {
-            uniform bool doubleSided = 0
-            token faceVaryingLinearInterpolation = "cornersPlus1"
-            token interpolateBoundary = "edgeAndCorner"
-            uniform token orientation = "rightHanded"
-            uniform token physics:approximation = "convexHull"
-            uniform token subdivisionScheme = "catmullClark"
-            token triangleSubdivisionRule = "catmullClark"
             uniform token[] xformOpOrder = []
 
-            over "mesh_0000"
+            def Mesh "geom" (
+                delete apiSchemas = ["PhysicsRigidBodyAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/Db95e8a331c74e7cA5ac6c6c522cde9b_handle_1>
+            )
             {
-                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                uniform bool doubleSided = 0
+                token faceVaryingLinearInterpolation = "cornersPlus1"
+                token interpolateBoundary = "edgeAndCorner"
+                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
+                uniform token orientation = "rightHanded"
+                uniform token physics:approximation = "convexHull"
+                uniform token subdivisionScheme = "catmullClark"
+                token triangleSubdivisionRule = "catmullClark"
+                uniform token[] xformOpOrder = []
+
+                over "mesh_0000"
+                {
+                    rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                }
             }
         }
     }
 
     def Xform "door_3" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
     )
     {
         float physics:mass = 5
+        int physxRigidBody:solverPositionIterationCount = 32
         double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
         uniform token[] xformOpOrder = ["xformOp:translate"]
 
@@ -936,43 +931,41 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
                 rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_64464f6ad7c7aa0001b075f3>
             }
         }
-    }
 
-    def Xform "door_3_handle" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
-    {
-        float physics:mass = 0.2
-        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate"]
-
-        def Mesh "geom" (
-            delete apiSchemas = ["PhysicsRigidBodyAPI"]
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
-            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5c9ebfa4Efc84b04Bf6061fe4acd90a4_handle_1>
-        )
+        def Xform "door_3_handle"
         {
-            uniform bool doubleSided = 0
-            token faceVaryingLinearInterpolation = "cornersPlus1"
-            token interpolateBoundary = "edgeAndCorner"
-            uniform token orientation = "rightHanded"
-            uniform token physics:approximation = "convexHull"
-            uniform token subdivisionScheme = "catmullClark"
-            token triangleSubdivisionRule = "catmullClark"
             uniform token[] xformOpOrder = []
 
-            over "mesh_0000"
+            def Mesh "geom" (
+                delete apiSchemas = ["PhysicsRigidBodyAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5c9ebfa4Efc84b04Bf6061fe4acd90a4_handle_1>
+            )
             {
-                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                uniform bool doubleSided = 0
+                token faceVaryingLinearInterpolation = "cornersPlus1"
+                token interpolateBoundary = "edgeAndCorner"
+                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
+                uniform token orientation = "rightHanded"
+                uniform token physics:approximation = "convexHull"
+                uniform token subdivisionScheme = "catmullClark"
+                token triangleSubdivisionRule = "catmullClark"
+                uniform token[] xformOpOrder = []
+
+                over "mesh_0000"
+                {
+                    rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                }
             }
         }
     }
 
     def Xform "drawer_3" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
     )
     {
         float physics:mass = 8
+        int physxRigidBody:solverPositionIterationCount = 32
         double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
         uniform token[] xformOpOrder = ["xformOp:translate"]
 
@@ -1041,43 +1034,41 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
                 rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
             }
         }
-    }
 
-    def Xform "drawer_3_handle" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
-    {
-        float physics:mass = 0.2
-        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate"]
-
-        def Mesh "geom" (
-            delete apiSchemas = ["PhysicsRigidBodyAPI"]
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
-            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A4ef78b96650f473f9de2F65c55bf08ab_handle_1>
-        )
+        def Xform "drawer_3_handle"
         {
-            uniform bool doubleSided = 0
-            token faceVaryingLinearInterpolation = "cornersPlus1"
-            token interpolateBoundary = "edgeAndCorner"
-            uniform token orientation = "rightHanded"
-            uniform token physics:approximation = "convexHull"
-            uniform token subdivisionScheme = "catmullClark"
-            token triangleSubdivisionRule = "catmullClark"
             uniform token[] xformOpOrder = []
 
-            over "mesh_0000"
+            def Mesh "geom" (
+                delete apiSchemas = ["PhysicsRigidBodyAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A4ef78b96650f473f9de2F65c55bf08ab_handle_1>
+            )
             {
-                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                uniform bool doubleSided = 0
+                token faceVaryingLinearInterpolation = "cornersPlus1"
+                token interpolateBoundary = "edgeAndCorner"
+                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
+                uniform token orientation = "rightHanded"
+                uniform token physics:approximation = "convexHull"
+                uniform token subdivisionScheme = "catmullClark"
+                token triangleSubdivisionRule = "catmullClark"
+                uniform token[] xformOpOrder = []
+
+                over "mesh_0000"
+                {
+                    rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                }
             }
         }
     }
 
     def Xform "drawer_2" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
     )
     {
         float physics:mass = 8
+        int physxRigidBody:solverPositionIterationCount = 32
         double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
         uniform token[] xformOpOrder = ["xformOp:translate"]
 
@@ -1146,43 +1137,41 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
                 rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
             }
         }
-    }
 
-    def Xform "drawer_2_handle" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
-    {
-        float physics:mass = 0.2
-        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate"]
-
-        def Mesh "geom" (
-            delete apiSchemas = ["PhysicsRigidBodyAPI"]
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
-            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A0aad046c75f94d4cA2dcB13bc8914ed5_handle_1>
-        )
+        def Xform "drawer_2_handle"
         {
-            uniform bool doubleSided = 0
-            token faceVaryingLinearInterpolation = "cornersPlus1"
-            token interpolateBoundary = "edgeAndCorner"
-            uniform token orientation = "rightHanded"
-            uniform token physics:approximation = "convexHull"
-            uniform token subdivisionScheme = "catmullClark"
-            token triangleSubdivisionRule = "catmullClark"
             uniform token[] xformOpOrder = []
 
-            over "mesh_0000"
+            def Mesh "geom" (
+                delete apiSchemas = ["PhysicsRigidBodyAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A0aad046c75f94d4cA2dcB13bc8914ed5_handle_1>
+            )
             {
-                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                uniform bool doubleSided = 0
+                token faceVaryingLinearInterpolation = "cornersPlus1"
+                token interpolateBoundary = "edgeAndCorner"
+                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
+                uniform token orientation = "rightHanded"
+                uniform token physics:approximation = "convexHull"
+                uniform token subdivisionScheme = "catmullClark"
+                token triangleSubdivisionRule = "catmullClark"
+                uniform token[] xformOpOrder = []
+
+                over "mesh_0000"
+                {
+                    rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                }
             }
         }
     }
 
     def Xform "drawer_1" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
     )
     {
         float physics:mass = 8
+        int physxRigidBody:solverPositionIterationCount = 32
         double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
         uniform token[] xformOpOrder = ["xformOp:translate"]
 
@@ -1251,34 +1240,31 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
                 rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_6446510cd7c7aa0001b081b1>
             }
         }
-    }
 
-    def Xform "drawer_1_handle" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
-    )
-    {
-        float physics:mass = 0.2
-        double3 xformOp:translate = (-1.0422999411821365, -7.420769929885864, -1.0000000337955655)
-        uniform token[] xformOpOrder = ["xformOp:translate"]
-
-        def Mesh "geom" (
-            delete apiSchemas = ["PhysicsRigidBodyAPI"]
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
-            prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F989cb36Ff194643990a751bdf31759b_handle_1>
-        )
+        def Xform "drawer_1_handle"
         {
-            uniform bool doubleSided = 0
-            token faceVaryingLinearInterpolation = "cornersPlus1"
-            token interpolateBoundary = "edgeAndCorner"
-            uniform token orientation = "rightHanded"
-            uniform token physics:approximation = "convexHull"
-            uniform token subdivisionScheme = "catmullClark"
-            token triangleSubdivisionRule = "catmullClark"
             uniform token[] xformOpOrder = []
 
-            over "mesh_0000"
+            def Mesh "geom" (
+                delete apiSchemas = ["PhysicsRigidBodyAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F989cb36Ff194643990a751bdf31759b_handle_1>
+            )
             {
-                rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                uniform bool doubleSided = 0
+                token faceVaryingLinearInterpolation = "cornersPlus1"
+                token interpolateBoundary = "edgeAndCorner"
+                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
+                uniform token orientation = "rightHanded"
+                uniform token physics:approximation = "convexHull"
+                uniform token subdivisionScheme = "catmullClark"
+                token triangleSubdivisionRule = "catmullClark"
+                uniform token[] xformOpOrder = []
+
+                over "mesh_0000"
+                {
+                    rel material:binding = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Materials/MI_69ae32f98addd433aebf0490>
+                }
             }
         }
     }
@@ -1291,18 +1277,11 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_2>
             point3f physics:localPos0 = (1.66688, 7.15154, 0.4)
-            point3f physics:localPos1 = (1.6758, 7.15154, 0.4)
+            # x = 0.96 * 1.6758: PhysX scales a joint's local frame by the body it
+            # sits on, and door_2's 0.96 squeeze now lives on its mesh, not its body.
+            point3f physics:localPos1 = (1.608768, 7.15154, 0.4)
             float physics:lowerLimit = 0
             float physics:upperLimit = 90
-        }
-
-        def PhysicsFixedJoint "door_2_handle_fixed"
-        {
-            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_2>
-            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_2_handle>
-            point3f physics:localPos0 = (1.2663416, 7.1208024, 0.576)
-            point3f physics:localPos1 = (1.4522979, 7.1207724, 0.4)
-            quatf physics:localRot1 = (0.7071068, 0, 0.7071068, 0)
         }
 
         def PhysicsPrismaticJoint "drawer_4_slide"
@@ -1311,17 +1290,10 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_4>
             point3f physics:localPos0 = (1.4523001, 7.4030447, 0.8)
-            point3f physics:localPos1 = (1.4523001, 7.4030447, 0.8)
+            # x = 0.96 * 1.4523001, as for door_2_hinge above.
+            point3f physics:localPos1 = (1.3942081, 7.4030447, 0.8)
             float physics:lowerLimit = -0.4662087
             float physics:upperLimit = 0
-        }
-
-        def PhysicsFixedJoint "drawer_4_handle_fixed"
-        {
-            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_4>
-            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_4_handle>
-            point3f physics:localPos0 = (1.4522979, 7.122772, 0.8)
-            point3f physics:localPos1 = (1.4522979, 7.122772, 0.8)
         }
 
         def PhysicsRevoluteJoint "door_1_hinge"
@@ -1335,14 +1307,6 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 90
         }
 
-        def PhysicsFixedJoint "door_1_handle_fixed"
-        {
-            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_1>
-            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_1_handle>
-            point3f physics:localPos0 = (0.81470734, 7.1207724, 0.776015)
-            point3f physics:localPos1 = (0.81470734, 7.1207724, 0.776015)
-        }
-
         def PhysicsRevoluteJoint "door_4_hinge"
         {
             uniform token physics:axis = "Z"
@@ -1352,14 +1316,6 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             point3f physics:localPos1 = (2.2758, 7.15154, 0.575)
             float physics:lowerLimit = 0
             float physics:upperLimit = 90
-        }
-
-        def PhysicsFixedJoint "door_4_handle_fixed"
-        {
-            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_4>
-            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_4_handle>
-            point3f physics:localPos0 = (1.7147074, 7.1207724, 0.926015)
-            point3f physics:localPos1 = (1.7147074, 7.1207724, 0.926015)
         }
 
         def PhysicsRevoluteJoint "door_3_hinge"
@@ -1373,14 +1329,6 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 90
         }
 
-        def PhysicsFixedJoint "door_3_handle_fixed"
-        {
-            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_3>
-            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_3_handle>
-            point3f physics:localPos0 = (1.7147074, 7.1207724, 1.173985)
-            point3f physics:localPos1 = (1.7147074, 7.1207724, 1.173985)
-        }
-
         def PhysicsPrismaticJoint "drawer_3_slide"
         {
             uniform token physics:axis = "Y"
@@ -1390,14 +1338,6 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             point3f physics:localPos1 = (0.05229999, 7.4030447, 0.29999998)
             float physics:lowerLimit = -0.4662087
             float physics:upperLimit = 0
-        }
-
-        def PhysicsFixedJoint "drawer_3_handle_fixed"
-        {
-            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_3>
-            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_3_handle>
-            point3f physics:localPos0 = (0.052297853, 7.122772, 0.3)
-            point3f physics:localPos1 = (0.052297853, 7.122772, 0.3)
         }
 
         def PhysicsPrismaticJoint "drawer_2_slide"
@@ -1411,14 +1351,6 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 0
         }
 
-        def PhysicsFixedJoint "drawer_2_handle_fixed"
-        {
-            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_2>
-            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_2_handle>
-            point3f physics:localPos0 = (0.052297853, 7.122772, 0.6)
-            point3f physics:localPos1 = (0.052297853, 7.122772, 0.6)
-        }
-
         def PhysicsPrismaticJoint "drawer_1_slide"
         {
             uniform token physics:axis = "Y"
@@ -1429,13 +1361,18 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:lowerLimit = -0.4662087
             float physics:upperLimit = 0
         }
+    }
 
-        def PhysicsFixedJoint "drawer_1_handle_fixed"
+    def Scope "PhysicsMaterials"
+    {
+        def Material "handle" (
+            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
+        )
         {
-            rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_1>
-            rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_1_handle>
-            point3f physics:localPos0 = (0.052297853, 7.122772, 0.8)
-            point3f physics:localPos1 = (0.052297853, 7.122772, 0.8)
+            float physics:dynamicFriction = 1.2
+            float physics:restitution = 0
+            float physics:staticFriction = 1.5
+            token physxMaterial:frictionCombineMode = "max"
         }
     }
 }

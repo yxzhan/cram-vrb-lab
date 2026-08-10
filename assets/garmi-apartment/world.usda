@@ -1027,66 +1027,61 @@ def Scope "Root"
                     double3 xformOp:translate = (0.9000000134110451, 7.420769929885864, 1.0000000337955655)
                     uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
 
+                    # The handles are colliders of the door/drawer they sit on, not
+                    # bodies of their own, so their overrides live one level down.
                     over "door_1"
                     {
-                    }
-
-                    over "door_1_handle"
-                    {
-                        over "geom" (
-                            prepend apiSchemas = ["PhysxConvexDecompositionCollisionAPI"]
-                        )
+                        over "door_1_handle"
                         {
-                            uniform token physics:approximation = "convexDecomposition"
+                            over "geom" (
+                                prepend apiSchemas = ["PhysxConvexDecompositionCollisionAPI"]
+                            )
+                            {
+                                uniform token physics:approximation = "convexDecomposition"
+                            }
                         }
                     }
 
                     over "door_2"
                     {
-                    }
-
-                    over "door_2_handle"
-                    {
+                        over "door_2_handle"
+                        {
+                        }
                     }
 
                     over "door_3"
                     {
-                    }
-
-                    over "door_3_handle"
-                    {
+                        over "door_3_handle"
+                        {
+                        }
                     }
 
                     over "door_4"
                     {
-                    }
-
-                    over "door_4_handle"
-                    {
+                        over "door_4_handle"
+                        {
+                        }
                     }
 
                     over "drawer_1"
                     {
-                    }
-
-                    over "drawer_1_handle"
-                    {
+                        over "drawer_1_handle"
+                        {
+                        }
                     }
 
                     over "drawer_2"
                     {
-                    }
-
-                    over "drawer_2_handle"
-                    {
+                        over "drawer_2_handle"
+                        {
+                        }
                     }
 
                     over "drawer_3"
                     {
-                    }
-
-                    over "drawer_3_handle"
-                    {
+                        over "drawer_3_handle"
+                        {
+                        }
                     }
 
                     over "drawer_4"
@@ -1098,10 +1093,10 @@ def Scope "Root"
                             uniform token physics:approximation = "convexHull"
                             int physxConvexDecompositionCollision:hullVertexLimit = 82
                         }
-                    }
 
-                    over "drawer_4_handle"
-                    {
+                        over "drawer_4_handle"
+                        {
+                        }
                     }
                 }
             }
