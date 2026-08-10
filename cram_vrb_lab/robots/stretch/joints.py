@@ -54,7 +54,7 @@ CAMERA_FRAME_ID = "camera_color_optical_frame"
 # dex wrist and SG3 gripper -- the variant matching assets/stretch/stretch.usd).
 _STRETCH_URDF_DIR = str(ASSETS_DIR / "stretch_urdf" / "stretch_urdf" / "SE3")
 SIM_URDF_PATH = os.path.join(
-    _STRETCH_URDF_DIR, "stretch_description_SE3_eoa_wrist_dw3_tool_sg3.urdf"
+    _STRETCH_URDF_DIR, "stretch_description_SE3_eoa_wrist_dw3_tool_sg3_pro.urdf"
 )
 
 # giskardpy's semantic Stretch model expects link_straight_gripper as the root

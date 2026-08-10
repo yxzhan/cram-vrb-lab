@@ -13,18 +13,18 @@
 """
 
 import math
+import tempfile
 import time
 
 import numpy as np
+import omni.kit.commands
 from geometry_msgs.msg import Twist
-from isaacsim.core.prims import Articulation
-from isaacsim.core.utils.prims import create_prim
+from isaacsim.core.prims import Articulation, XFormPrim
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import Float64, Float64MultiArray
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
-from cram_vrb_lab.paths import ASSETS_DIR
 from cram_vrb_lab.sim.velocity_integrator import (
     StreamedVelocityIntegrator,
     dof_indices,
@@ -54,84 +54,135 @@ from .joints import (
     RGB_INFO_TOPIC,
     VELOCITY_CMD_TOPIC,
     head_camera_static_transforms,
+    load_patched_urdf,
 )
 
-STRETCH_USD_PATH = str(ASSETS_DIR / "stretch" / "stretch.usd")
-# STRETCH_USD_PATH = str(ASSETS_DIR / "stretch_urdf/stretch_urdf/SE3/stretch_description_SE3_eoa_wrist_dw3_tool_sg3_pro/stretch_description_SE3_eoa_wrist_dw3_tool_sg3_pro.usd")
+JOINT_DRIVE_STIFFNESS = 1.0e5
+JOINT_DRIVE_DAMPING = 1.0e4
+"""Drive gains for every joint the robot is commanded through.
 
+One number for all of them, which only makes sense once you know that the URDF
+importer authors **acceleration** drives: PhysX reads the stiffness as
+(m/s^2)/m or (rad/s^2)/rad and scales the force by the joint's effective mass, so
+what a gravity load costs in droop is ``g / stiffness`` *whatever the link
+weighs*. A 2 kg lift and a 50 g finger therefore want the same gain, and at 1e5
+both sit within about 0.1 mm of their target. (Same reasoning, and the same
+measurement, as :data:`cram_vrb_lab.robots.panda.isaac_node.FINGER_MASS`.)
 
-# The head camera sits deep inside the Stretch link tree.
-HEAD_CAM_PRIM = ("/World/stretch/link_head_tilt/camera_bottom_screw_frame/"
-                 "camera_link/camera_color_frame/camera_color_optical_frame")
+The importer derives its own gains from link inertias and they are far too soft
+in these units: the lift sags to the bottom of its 1.1 m travel and the wrist
+droops onto its limit. That is what used to make this robot unusable when
+imported from URDF, and why it was loaded from a hand-tuned USD instead.
+
+The stiffness also sets the grip: with ``StreamedVelocityIntegrator.MAX_LEAD`` of
+0.02 rad the finger drive develops 1e5 * I_finger * 0.02 of torque.
+"""
+
+DRIVEN_JOINTS = [joint for joint in CONTROLLED_JOINTS if "wheel" not in joint]
+"""Everything given a position drive: the controlled joints minus the wheels,
+which are undriven so their cosmetic spin adds no reaction to the base."""
+
+STRETCH_PRIM_PATH = "/stretch"
+"""Where the importer puts the robot: ``/`` plus the URDF's ``<robot name=...>``."""
+
+# The camera sensor hangs off the very frame its images are stamped in, so it
+# needs no pose maths of its own. The importer lays the links out flat under the
+# robot prim rather than nested as the link tree is, but the frame is a real part
+# of the articulation: measured across a head_pan/head_tilt move, it travels with
+# link_head_tilt and keeps a constant 5.46 cm offset from it -- the same offset
+# the URDF's fixed chain gives. It only exists because merge_fixed_joints is off,
+# which is also what keeps joints.head_camera_static_transforms() a valid chain.
+HEAD_CAM_FRAME_PRIM = f"{STRETCH_PRIM_PATH}/{CAMERA_FRAME_ID}"
+HEAD_CAM_PRIM = f"{HEAD_CAM_FRAME_PRIM}/head_camera"
 CAMERA_RESOLUTION = (640, 360)
 
 
 def spawn_stretch(world, render, position=(0.0, 0.0, 0.0), yaw=0.0):
-    """Load the Stretch USD, tune its drives, and return the Articulation.
+    """Import the Stretch URDF into the open stage, tune its drives, and return
+    its Articulation.
 
     :param position: base position in the Isaac world frame (= giskard's ``map``).
     :param yaw: heading about z [rad].
 
-    .. note::
-       This robot comes from a USD, unlike the Panda
-       (:func:`cram_vrb_lab.robots.panda.isaac_node.spawn_panda`), which the sim
-       builds from the very URDF giskard and the twin plan against. Importing the
-       Stretch URDF instead does work as far as the articulation goes -- all 14
-       DOFs, the camera-frame chain and the patched gripper limits come through
-       -- but the URDF carries no drive parameters, and the gains the importer
-       derives cannot hold the arm: joint_lift sags to the bottom of its travel
-       under the arm's weight and the wrist droops onto its limit. The USD
-       carries hand-tuned drives that would have to be reproduced joint by joint
-       first.
+    Built from the very URDF giskard and the twin plan against
+    (:func:`cram_vrb_lab.robots.stretch.joints.load_patched_urdf`), as the Panda
+    is, so no converted USD has to be kept in step with it. What a URDF does not
+    carry is **drives**: the importer derives its own, and they cannot hold this
+    robot up -- see :data:`JOINT_DRIVE_STIFFNESS` for what replaces them and why
+    the numbers look the way they do.
     """
-    create_prim(
-        usd_path=STRETCH_USD_PATH,
-        prim_path="/World/stretch",
-        position=np.array(position),
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".urdf", prefix="stretch_patched_", delete=False
+    ) as urdf_file:
+        urdf_file.write(load_patched_urdf())
+        urdf_path = urdf_file.name
+
+    _, import_config = omni.kit.commands.execute("URDFCreateImportConfig")
+    # A mobile robot: the base is free, and StretchROS.integrate_base teleports it.
+    import_config.fix_base = False
+    import_config.import_inertia_tensor = True
+    import_config.distance_scale = 1.0
+    # Keep the fixed joints: the head-camera frame chain hangs off them, and the
+    # semantic model looks bodies up by the names they carry.
+    import_config.merge_fixed_joints = False
+    import_config.convex_decomp = False
+    # Nothing here needs the robot to avoid itself -- giskard plans the motions --
+    # and the gripper's hulls overlap the wrist they are mounted on.
+    import_config.self_collision = False
+
+    articulation_root = omni.kit.commands.execute(
+        "URDFParseAndImportFile",
+        urdf_path=urdf_path,
+        import_config=import_config,
+        get_articulation_root=True,
+    )[1]
+    print(f"Stretch imported from {urdf_path} to {articulation_root}")
+
+    # On the prim, before physics runs: this is the pose a later world.reset()
+    # restores, and where the base starts dead-reckoning from.
+    XFormPrim(STRETCH_PRIM_PATH).set_world_poses(
+        np.array([position], dtype=float),
         # Isaac's (w, x, y, z) order; a pure yaw, so only w and z are non-zero.
-        orientation=np.array([math.cos(yaw / 2.0), 0.0, 0.0, math.sin(yaw / 2.0)]),
+        np.array([[math.cos(yaw / 2.0), 0.0, 0.0, math.sin(yaw / 2.0)]], dtype=float),
     )
 
-    stretch = Articulation(prim_paths_expr="/World/stretch", name="stretch")
+    # Reset before wrapping: the freshly imported prims are not in the physics
+    # scene yet, and Articulation reads its link metadata in its constructor.
     world.reset()
+    for _ in range(5):
+        world.step(render=render)
+
+    stretch = Articulation(prim_paths_expr=articulation_root, name="stretch")
+    world.reset()
+    for _ in range(10):
+        world.step(render=render)
 
     print(f"Stretch spawned at {tuple(round(float(v), 4) for v in position)} "
           f"yaw {math.degrees(yaw):.1f} deg")
 
-    for _ in range(10):
-        world.step(render=render)
+    # --- Replace the importer's drives ---
+    # Every joint the robot is commanded through, in one go: see
+    # JOINT_DRIVE_STIFFNESS for why one number covers a 2 kg lift and a 50 g
+    # finger alike.
+    driven_dof = dof_indices(stretch, DRIVEN_JOINTS)
+    stretch.set_gains(
+        kps=np.full((1, len(driven_dof)), JOINT_DRIVE_STIFFNESS),
+        kds=np.full((1, len(driven_dof)), JOINT_DRIVE_DAMPING),
+        joint_indices=driven_dof,
+    )
+    # A force budget the drives can actually spend (the URDF says 100 for every
+    # joint, including the lift that carries the whole arm).
+    stretch.set_max_efforts(
+        np.full((1, len(driven_dof)), 200.0), joint_indices=driven_dof
+    )
 
-    # --- Fix the telescoping arm joint gains ---
-    # The arm extends through four serially-chained prismatic joints
-    # (joint_arm_l0..l3, 0.13 m each). Isaac auto-generates their drive gains from
-    # the tiny link masses (~20 N/m stiffness), so a commanded extension springs
-    # back instead of holding. Raise the PD gains to values comparable to the
-    # hand-tuned joint_lift (stiffness 50000 / damping 300).
-    arm_joints = ["joint_arm_l0", "joint_arm_l1", "joint_arm_l2", "joint_arm_l3"]
-    arm_dof = dof_indices(stretch, arm_joints)
-
-    kps = np.full((1, len(arm_dof)), 1.0e4)   # stiffness [N/m]
-    kds = np.full((1, len(arm_dof)), 2.0e2)   # damping  [N/(m/s)]
-    stretch.set_gains(kps=kps, kds=kds, joint_indices=arm_dof)
-
-    # A larger force budget so the drive can actually reach the target.
-    stretch.set_max_efforts(np.full((1, len(arm_dof)), 200.0), joint_indices=arm_dof)
-
-    # Cap the speed so the arm extends/retracts gently (URDF default is 1.0 m/s).
+    # Cap the telescoping joints' speed so the arm extends gently (URDF: 1.0 m/s).
+    telescope_dof = dof_indices(
+        stretch, ["joint_arm_l0", "joint_arm_l1", "joint_arm_l2", "joint_arm_l3"]
+    )
     stretch.set_max_joint_velocities(
-        np.full((1, len(arm_dof)), 0.1), joint_indices=arm_dof)
-
-    # --- Fix the gripper finger joint gains ---
-    # Same auto-generation problem as the arm: the tiny finger links get
-    # stiffness ~1.1 / damping ~4e-4. The velocity integrator caps the target
-    # lead at MAX_LEAD (0.02 rad), so the drive torque on a streamed gripper goal
-    # is stiffness * 0.02 -- the same order as the fingers' own gravity load, and
-    # the fingers crawl. Raise the gains so the small lead produces authoritative
-    # torque.
-    finger_dof = dof_indices(stretch, FINGER_JOINTS)
-    stretch.set_gains(kps=np.full((1, len(finger_dof)), 200.0),
-                      kds=np.full((1, len(finger_dof)), 2.0),
-                      joint_indices=finger_dof)
+        np.full((1, len(telescope_dof)), 0.1), joint_indices=telescope_dof
+    )
 
     # --- Make the base kinematic ---
     # The differential-drive wheels have an in-place-rotation deadzone in
@@ -148,7 +199,7 @@ def spawn_stretch(world, render, position=(0.0, 0.0, 0.0), yaw=0.0):
 
     for _ in range(3):
         world.step(render=render)
-    print("Stretch ready: arm gains raised, base kinematic.")
+    print("Stretch ready: drives replaced, base kinematic.")
     return stretch
 
 
@@ -163,17 +214,30 @@ def create_head_camera(world, render, want_depth=False):
     import isaacsim.core.utils.numpy.rotations as rot_utils 
 
     stage = omni.usd.get_context().get_stage()
+    if not stage.GetPrimAtPath(HEAD_CAM_FRAME_PRIM):
+        raise RuntimeError(f"no {HEAD_CAM_FRAME_PRIM} to mount the head camera on")
 
     UsdGeom.Camera.Define(stage, HEAD_CAM_PRIM)
     head_cam = Camera(
         prim_path=HEAD_CAM_PRIM,
         frequency=30,
         resolution=CAMERA_RESOLUTION,
-        orientation=rot_utils.euler_angles_to_quats(np.array([0, 0, 0]), degrees=True),
+    )
+    # The orientation is set on the prim, NOT through Camera(orientation=...):
+    # that argument goes through Isaac's own ROS<->USD camera axis conversion, and
+    # passing the identity there lands the prim looking straight at the floor
+    # (measured: prim quat (0.708, 0, 0, -0.706) against a frame at
+    # (0.707, 0, 0.707, 0), while Camera.get_world_pose() cheerfully reports the
+    # frame's). Here the parent is a REP-103 optical frame -- +z is the view
+    # direction, +y is down -- and a USD camera looks down its own -z with +y up,
+    # so half a turn about x is what aligns them.
+    XFormPrim(HEAD_CAM_PRIM).set_local_poses(
+        translations=np.zeros((1, 3)),
+        orientations=np.array([[0.0, 1.0, 0.0, 0.0]]),  # (w, x, y, z)
     )
     head_cam.initialize()
     head_cam.set_focal_length(1.0)
-    head_cam.set_clipping_range(near_distance=0.01, far_distance=20)
+    head_cam.set_clipping_range(near_distance=0.05, far_distance=20)
     if want_depth:
         # distance_to_image_plane = metric depth (m) read back by get_depth().
         head_cam.add_distance_to_image_plane_to_frame()
