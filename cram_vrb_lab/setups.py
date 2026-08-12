@@ -123,7 +123,7 @@ SETUPS: Dict[Tuple[str, str], Setup] = {
                 ),
                 by_default=True,
             ),
-            viewport=_arm_workspace_viewport,
+            # viewport=_arm_workspace_viewport,
         ),
         Setup(
             robot=PANDA,
@@ -131,7 +131,7 @@ SETUPS: Dict[Tuple[str, str], Setup] = {
             # No props here either: this pairing exists to work on the *scene's*
             # own articulation -- the kitchen cabinet's doors and drawers, which
             # the MJCF twin models and Isaac renders from the same file.
-            viewport=_arm_and_what_it_faces_viewport,
+            # viewport=_arm_and_what_it_faces_viewport,
         ),
     )
 }

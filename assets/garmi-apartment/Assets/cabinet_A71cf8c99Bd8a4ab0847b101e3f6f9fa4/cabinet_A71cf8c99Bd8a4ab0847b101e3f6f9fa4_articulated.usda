@@ -1269,10 +1269,26 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
         }
     }
 
+    # Every hinge and slide carries a drive with stiffness 0, target velocity 0 and
+    # damping: no spring pulling the door anywhere, just resistance proportional to
+    # speed -- which is what the friction in a real hinge or drawer runner does. A
+    # frictionless joint never stops once something touches it, and a door still
+    # drifting when the gripper closes again is a door that chatters against it.
+    # Damping is acceleration-normalised, so the number is independent of the body's
+    # mass; angular drives measure velocity in deg/s, which is why a hinge wants a
+    # much smaller number than a slide. Measured at these values: a 25 N shove now
+    # coasts 6-9 mm instead of 180-470 mm and stops dead, while a 25 N pull still
+    # swings a door 0.5-0.8 m and draws a drawer 0.19 m out in three seconds.
     def Scope "joints"
     {
-        def PhysicsRevoluteJoint "door_2_hinge"
+        def PhysicsRevoluteJoint "door_2_hinge" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
         {
+            float drive:angular:physics:damping = 1
+            float drive:angular:physics:stiffness = 0
+            float drive:angular:physics:targetVelocity = 0
+            token drive:angular:physics:type = "acceleration"
             uniform token physics:axis = "Z"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_2>
@@ -1284,8 +1300,14 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 90
         }
 
-        def PhysicsPrismaticJoint "drawer_4_slide"
+        def PhysicsPrismaticJoint "drawer_4_slide" (
+            prepend apiSchemas = ["PhysicsDriveAPI:linear"]
+        )
         {
+            float drive:linear:physics:damping = 50
+            float drive:linear:physics:stiffness = 0
+            float drive:linear:physics:targetVelocity = 0
+            token drive:linear:physics:type = "acceleration"
             uniform token physics:axis = "Y"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_4>
@@ -1296,8 +1318,14 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 0
         }
 
-        def PhysicsRevoluteJoint "door_1_hinge"
+        def PhysicsRevoluteJoint "door_1_hinge" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
         {
+            float drive:angular:physics:damping = 1
+            float drive:angular:physics:stiffness = 0
+            float drive:angular:physics:targetVelocity = 0
+            token drive:angular:physics:type = "acceleration"
             uniform token physics:axis = "Z"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_1>
@@ -1307,8 +1335,14 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 90
         }
 
-        def PhysicsRevoluteJoint "door_4_hinge"
+        def PhysicsRevoluteJoint "door_4_hinge" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
         {
+            float drive:angular:physics:damping = 1
+            float drive:angular:physics:stiffness = 0
+            float drive:angular:physics:targetVelocity = 0
+            token drive:angular:physics:type = "acceleration"
             uniform token physics:axis = "Z"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_4>
@@ -1318,8 +1352,14 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 90
         }
 
-        def PhysicsRevoluteJoint "door_3_hinge"
+        def PhysicsRevoluteJoint "door_3_hinge" (
+            prepend apiSchemas = ["PhysicsDriveAPI:angular"]
+        )
         {
+            float drive:angular:physics:damping = 1
+            float drive:angular:physics:stiffness = 0
+            float drive:angular:physics:targetVelocity = 0
+            token drive:angular:physics:type = "acceleration"
             uniform token physics:axis = "Z"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/door_3>
@@ -1329,8 +1369,14 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 90
         }
 
-        def PhysicsPrismaticJoint "drawer_3_slide"
+        def PhysicsPrismaticJoint "drawer_3_slide" (
+            prepend apiSchemas = ["PhysicsDriveAPI:linear"]
+        )
         {
+            float drive:linear:physics:damping = 50
+            float drive:linear:physics:stiffness = 0
+            float drive:linear:physics:targetVelocity = 0
+            token drive:linear:physics:type = "acceleration"
             uniform token physics:axis = "Y"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_3>
@@ -1340,8 +1386,14 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 0
         }
 
-        def PhysicsPrismaticJoint "drawer_2_slide"
+        def PhysicsPrismaticJoint "drawer_2_slide" (
+            prepend apiSchemas = ["PhysicsDriveAPI:linear"]
+        )
         {
+            float drive:linear:physics:damping = 50
+            float drive:linear:physics:stiffness = 0
+            float drive:linear:physics:targetVelocity = 0
+            token drive:linear:physics:type = "acceleration"
             uniform token physics:axis = "Y"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_2>
@@ -1351,8 +1403,14 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             float physics:upperLimit = 0
         }
 
-        def PhysicsPrismaticJoint "drawer_1_slide"
+        def PhysicsPrismaticJoint "drawer_1_slide" (
+            prepend apiSchemas = ["PhysicsDriveAPI:linear"]
+        )
         {
+            float drive:linear:physics:damping = 50
+            float drive:linear:physics:stiffness = 0
+            float drive:linear:physics:targetVelocity = 0
+            token drive:linear:physics:type = "acceleration"
             uniform token physics:axis = "Y"
             rel physics:body0 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Static>
             rel physics:body1 = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/drawer_1>

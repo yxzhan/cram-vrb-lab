@@ -1,26 +1,19 @@
 
-# %%
 import sys
 from pathlib import Path
 
-REPO = Path.cwd().resolve().parent  # this notebook lives in demos/
+REPO = Path.cwd().resolve()  # this notebook lives in demos/
 sys.path.insert(0, str(REPO))
 
 # import os
 # os.environ["DISPLAY"] = ":0"
 
 from launcher import start_isaac_sim, start_giskard_server, start_rviz, stop
+SPAWN_POSITION = (-1.5, 0.0, 0.05)
 
 rviz_proc = start_rviz()
-sim_proc = start_isaac_sim(camera="both")   # both RGB and depth
-giskard_proc = start_giskard_server()
-
-# %% [markdown]
-# ## Connect and build a CRAM `Context`
-# 
-# Verbatim from `stretch_apartment_cram.ipynb`. The `node` and its spinning
-# `MultiThreadedExecutor` built here are reused by robokudo later — it needs somewhere
-# to put its camera subscriptions, and a second executor would only fight this one.
+sim_proc = start_isaac_sim(spawn_position=SPAWN_POSITION, camera="both")   # both RGB and depth
+giskard_proc = start_giskard_server(spawn_position=SPAWN_POSITION)
 
 # %%
 import threading
@@ -86,7 +79,6 @@ def run_plan(plan, collision_avoidance=True):
         plan.perform()
     print('done')
 
-
 # %%
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from semantic_digital_twin.spatial_types import Pose, Quaternion, Point3
@@ -120,6 +112,7 @@ import numpy as np
 
 print('camera in map:\n', np.round(camera_pose_in_map(world), 3))
 
+
 # %%
 import matplotlib.pyplot as plt
 
@@ -150,18 +143,18 @@ rgb = np.frombuffer(rgb_msg.data, np.uint8).reshape(rgb_msg.height, rgb_msg.widt
 depth = np.frombuffer(depth_msg_.data, np.float32).reshape(depth_msg_.height,
                                                            depth_msg_.width)
 
-print(f'rgb   {rgb.shape} {rgb_msg.encoding}  frame={rgb_msg.header.frame_id}')
-print(f'depth {depth.shape} {depth_msg_.encoding}  '
-      f'valid {np.isfinite(depth).mean():.0%}  '
-      f'range {np.nanmin(depth):.2f}..{np.nanmax(depth[np.isfinite(depth)]):.2f} m')
+# print(f'rgb   {rgb.shape} {rgb_msg.encoding}  frame={rgb_msg.header.frame_id}')
+# print(f'depth {depth.shape} {depth_msg_.encoding}  '
+#       f'valid {np.isfinite(depth).mean():.0%}  '
+#       f'range {np.nanmin(depth):.2f}..{np.nanmax(depth[np.isfinite(depth)]):.2f} m')
 
-fig, axes = plt.subplots(1, 2, figsize=(13, 4))
-axes[0].imshow(rgb); axes[0].set_title('rgb8'); axes[0].axis('off')
-im = axes[1].imshow(np.where(np.isfinite(depth), depth, np.nan), cmap='viridis')
-axes[1].set_title('depth [m]'); axes[1].axis('off')
-fig.colorbar(im, ax=axes[1], shrink=0.8)
-plt.tight_layout()
-plt.show()
+# fig, axes = plt.subplots(1, 2, figsize=(13, 4))
+# axes[0].imshow(rgb); axes[0].set_title('rgb8'); axes[0].axis('off')
+# im = axes[1].imshow(np.where(np.isfinite(depth), depth, np.nan), cmap='viridis')
+# axes[1].set_title('depth [m]'); axes[1].axis('off')
+# fig.colorbar(im, ax=axes[1], shrink=0.8)
+# plt.tight_layout()
+# plt.show()
 
 # %%
 from cram_vrb_lab.perception import pipeline as rk
@@ -180,8 +173,6 @@ print(f'{len(detections)} cluster(s), poses in camera_color_optical_frame:')
 for i, d in enumerate(detections):
     print(f'  [{i}] pos {np.round(d.position, 3)}  '
           f'extent {np.round(d.extents, 3)}  volume {d.volume * 1e3:.2f} L')
-
-
 
 # %%
 from cram_vrb_lab.perception.twin_objects import add_detections, DETECTION_PREFIX
@@ -219,13 +210,6 @@ grasp = GraspDescription(
     VerticalAlignment.NoAlignment,
     ViewManager.get_end_effector_view(Arms.LEFT, robot),
 )
-
-# run_plan(
-#     execute_single(PickUpAction(bodies[-1], Arms.LEFT, grasp), context=context),
-#     collision_avoidance=True,
-# )
-
-# %%
 
 # %%
 waypoints = [
