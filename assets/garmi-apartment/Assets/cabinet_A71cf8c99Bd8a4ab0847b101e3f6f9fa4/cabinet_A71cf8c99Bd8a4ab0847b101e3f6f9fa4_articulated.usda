@@ -569,14 +569,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
 
             def Mesh "geom" (
                 delete apiSchemas = ["PhysicsRigidBodyAPI"]
-                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/B095bea57b6f46a59fe6A701e4e23301_handle_1>
             )
             {
                 uniform bool doubleSided = 0
                 token faceVaryingLinearInterpolation = "cornersPlus1"
                 token interpolateBoundary = "edgeAndCorner"
-                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
                 uniform token orientation = "rightHanded"
                 uniform token physics:approximation = "convexHull"
                 uniform token subdivisionScheme = "catmullClark"
@@ -674,14 +673,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
 
             def Mesh "geom" (
                 delete apiSchemas = ["PhysicsRigidBodyAPI"]
-                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5ea867659df64f408e96443612e6bc81_handle_1>
             )
             {
                 uniform bool doubleSided = 0
                 token faceVaryingLinearInterpolation = "cornersPlus1"
                 token interpolateBoundary = "edgeAndCorner"
-                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
                 uniform token orientation = "rightHanded"
                 uniform token physics:approximation = "convexHull"
                 uniform token subdivisionScheme = "catmullClark"
@@ -762,14 +760,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
 
             def Mesh "geom" (
                 delete apiSchemas = ["PhysicsRigidBodyAPI"]
-                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F2a2927dB09f40d29b7a3cb63c5e1e2f_handle_1>
             )
             {
                 uniform bool doubleSided = 0
                 token faceVaryingLinearInterpolation = "cornersPlus1"
                 token interpolateBoundary = "edgeAndCorner"
-                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
                 uniform token orientation = "rightHanded"
                 uniform token physics:approximation = "convexHull"
                 uniform token subdivisionScheme = "catmullClark"
@@ -850,14 +847,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
 
             def Mesh "geom" (
                 delete apiSchemas = ["PhysicsRigidBodyAPI"]
-                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/Db95e8a331c74e7cA5ac6c6c522cde9b_handle_1>
             )
             {
                 uniform bool doubleSided = 0
                 token faceVaryingLinearInterpolation = "cornersPlus1"
                 token interpolateBoundary = "edgeAndCorner"
-                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
                 uniform token orientation = "rightHanded"
                 uniform token physics:approximation = "convexHull"
                 uniform token subdivisionScheme = "catmullClark"
@@ -938,14 +934,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
 
             def Mesh "geom" (
                 delete apiSchemas = ["PhysicsRigidBodyAPI"]
-                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A5c9ebfa4Efc84b04Bf6061fe4acd90a4_handle_1>
             )
             {
                 uniform bool doubleSided = 0
                 token faceVaryingLinearInterpolation = "cornersPlus1"
                 token interpolateBoundary = "edgeAndCorner"
-                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
                 uniform token orientation = "rightHanded"
                 uniform token physics:approximation = "convexHull"
                 uniform token subdivisionScheme = "catmullClark"
@@ -1041,14 +1036,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
 
             def Mesh "geom" (
                 delete apiSchemas = ["PhysicsRigidBodyAPI"]
-                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A4ef78b96650f473f9de2F65c55bf08ab_handle_1>
             )
             {
                 uniform bool doubleSided = 0
                 token faceVaryingLinearInterpolation = "cornersPlus1"
                 token interpolateBoundary = "edgeAndCorner"
-                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
                 uniform token orientation = "rightHanded"
                 uniform token physics:approximation = "convexHull"
                 uniform token subdivisionScheme = "catmullClark"
@@ -1144,14 +1138,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
 
             def Mesh "geom" (
                 delete apiSchemas = ["PhysicsRigidBodyAPI"]
-                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/A0aad046c75f94d4cA2dcB13bc8914ed5_handle_1>
             )
             {
                 uniform bool doubleSided = 0
                 token faceVaryingLinearInterpolation = "cornersPlus1"
                 token interpolateBoundary = "edgeAndCorner"
-                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
                 uniform token orientation = "rightHanded"
                 uniform token physics:approximation = "convexHull"
                 uniform token subdivisionScheme = "catmullClark"
@@ -1247,14 +1240,13 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
 
             def Mesh "geom" (
                 delete apiSchemas = ["PhysicsRigidBodyAPI"]
-                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "MaterialBindingAPI"]
+                prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                 prepend references = @./cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4_geo.usd@</cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/Geom/F989cb36Ff194643990a751bdf31759b_handle_1>
             )
             {
                 uniform bool doubleSided = 0
                 token faceVaryingLinearInterpolation = "cornersPlus1"
                 token interpolateBoundary = "edgeAndCorner"
-                rel material:binding:physics = </cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4/PhysicsMaterials/handle>
                 uniform token orientation = "rightHanded"
                 uniform token physics:approximation = "convexHull"
                 uniform token subdivisionScheme = "catmullClark"
@@ -1418,19 +1410,6 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             point3f physics:localPos1 = (0.05229999, 7.4030447, 0.8)
             float physics:lowerLimit = -0.4662087
             float physics:upperLimit = 0
-        }
-    }
-
-    def Scope "PhysicsMaterials"
-    {
-        def Material "handle" (
-            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
-        )
-        {
-            float physics:dynamicFriction = 1.2
-            float physics:restitution = 0
-            float physics:staticFriction = 1.5
-            token physxMaterial:frictionCombineMode = "max"
         }
     }
 }
