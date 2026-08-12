@@ -8,11 +8,17 @@ from cram_vrb_lab.specs import RobotSpec
 
 
 def _giskard_world(environment, spawn_pose):
-    """GARMI bolted to ``map`` at ``spawn_pose``, plus ``environment``.
+    """GARMI on its omni drive, with ``environment`` merged in after it.
 
-    The base is frozen in the patched URDF, so there is no odometry and no
-    localization: the spawn pose is the *only* thing that tells giskard where the
-    robot stands, and it has to be the same one the sim placed the prim with.
+    That order is load-bearing -- see
+    :func:`cram_vrb_lab.control.giskard_world.build_world_config`.
+
+    ``spawn_pose`` is deliberately unused. The robot hangs off ``map -> odom`` and
+    giskard reads that transform from tf and the base pose from ``/odom``, so
+    where the robot actually stands arrives over the wire (the sim publishes
+    odometry from wherever it spawned it) exactly as it would from a real robot's
+    localization. Building the world at the spawn pose instead would double the
+    offset.
     """
     from cram_vrb_lab.control.giskard_world import build_world_config
 
@@ -20,10 +26,7 @@ def _giskard_world(environment, spawn_pose):
     from .joints import load_patched_urdf
 
     return build_world_config(
-        WorldWithGarmiConfig,
-        environment,
-        urdf=load_patched_urdf(),
-        robot_pose=spawn_pose.to_transformation_matrix(),
+        WorldWithGarmiConfig, environment, urdf=load_patched_urdf()
     )
 
 

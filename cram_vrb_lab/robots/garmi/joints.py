@@ -1,15 +1,26 @@
 """Shared constants for the giskard <-> Isaac Sim GARMI integration.
 
-GARMI is a Clearpath-Ridgeback-style mobile base carrying a lift, a head and two
-Franka FR3 arms with Franka Hands. The base is not driven here: the drawer demo
-works from one standing position, so :func:`load_patched_urdf` freezes the
-wheels, the lift and the head and the robot is bolted to ``map`` like the Panda.
-What is left controlled is both arms and their fingers.
+GARMI is a Clearpath-Ridgeback-style mecanum base carrying a lift, a pan/tilt
+head and two Franka FR3 arms with Franka Hands. All of it is live here: the base
+drives, the lift raises the torso and the head turns.
+
+The twin side does not model any of that locally --
+:mod:`semantic_digital_twin.robots.garmi` already ships a full GARMI model
+(``GarmiMobileBase(MobileBase[OmniDrive])``, ``GarmiTorso``, ``GarmiNeck``,
+``GarmiCamera``) plus a ``garmi.srdf`` self-collision matrix. That model was
+written against a differently-named export of this same robot, so
+:func:`load_patched_urdf` renames the arms, grippers and head joints to match it
+(:data:`UPSTREAM_RENAMES`) and everything downstream uses the upstream classes.
 
 The joint order of :data:`CONTROLLED_JOINTS` is the contract between giskard's
 joint-group velocity controller and the sim's velocity-command integrator: the
 Float64MultiArray velocity command carries no joint names, only values in this
 order.
+
+.. note::
+   This module is imported by the Isaac python too, which has no
+   ``semantic_digital_twin``. Everything here is therefore plain python, and the
+   constants that duplicate an upstream value (:data:`PARK_CONFIGURATION`) say so.
 """
 
 import os
@@ -34,79 +45,92 @@ into a prim path nothing can predict.
 
 SIDES = ("left", "right")
 
+ARM_PREFIX = {"left": "arm_0", "right": "arm_1"}
+"""How :mod:`semantic_digital_twin.robots.garmi` names the two arms.
+
+``GarmiLeftArm`` resolves its tip as ``arm_0_fr3_link8`` off
+``arm_mount_left_link``, so arm 0 is the left one.
+"""
+
 
 def arm_joints(side: str) -> list[str]:
-    return [f"{side}_fr3_joint{i}" for i in range(1, 8)]
+    return [f"{ARM_PREFIX[side]}_fr3_joint{i}" for i in range(1, 8)]
 
 
 def finger_joints(side: str) -> list[str]:
-    return [f"{side}_fr3_finger_joint{i}" for i in (1, 2)]
+    return [f"{ARM_PREFIX[side]}_gripper_fr3_finger_joint{i}" for i in (1, 2)]
 
 
 ARM_JOINTS = [joint for side in SIDES for joint in arm_joints(side)]
 FINGER_JOINTS = [joint for side in SIDES for joint in finger_joints(side)]
-CONTROLLED_JOINTS = ARM_JOINTS + FINGER_JOINTS
 
-FROZEN_JOINTS = [
+LIFT_JOINTS = ["lift_0_lower_joint", "lift_0_upper_joint"]
+"""The two prismatic segments of the lift column.
+
+The description makes the upper one *mimic* the lower; the mimic is dropped (see
+:func:`load_patched_urdf`) and ``GarmiTorso`` drives both to the same value
+instead, which is what its low/mid/high states do.
+"""
+
+HEAD_JOINTS = ["head_pan_joint", "head_tilt_joint"]
+"""``o1_motor_1`` / ``o1_motor_2`` after the rename -- pan then tilt, in the
+``neck_1 -> neck_2 -> head`` chain."""
+
+WHEEL_JOINTS = [
     "front_left_wheel_joint",
     "front_right_wheel_joint",
     "rear_left_wheel_joint",
     "rear_right_wheel_joint",
-    "lift_0_lower_joint",
-    "lift_0_upper_joint",
-    "o1_motor_1",
-    "o1_motor_2",
 ]
-"""Joints made ``fixed`` by :func:`load_patched_urdf`.
+"""The four mecanum wheels.
 
-Everything nothing in this repo commands. Left movable they would be free DOFs
-in both worlds: giskard would happily solve a goal by driving the head or the
-lift, and in the sim they would sag under their own weight with no drive to
-hold them.
+Deliberately **not** in :data:`CONTROLLED_JOINTS`. The base is commanded as a
+whole through giskard's ``OmniDrive`` connection and driven kinematically in the
+sim (``GarmiROS.integrate_base``), which owns these joints and spins them
+cosmetically; nothing in either world reads their angle back.
 """
+
+CONTROLLED_JOINTS = ARM_JOINTS + FINGER_JOINTS + LIFT_JOINTS + HEAD_JOINTS
+"""Every joint giskard streams velocities for -- the base excepted, which goes
+over :data:`CMD_VEL_TOPIC` as a Twist instead."""
 
 VELOCITY_CMD_TOPIC = "/garmi/joint_velocity_cmd"
 JOINT_STATES_TOPIC = "/garmi/joint_states"
 GRIPPER_CMD_TOPIC = "/garmi/gripper_command"
+CMD_VEL_TOPIC = "/garmi/cmd_vel"
+
+ODOM_TOPIC = "/odom"
+"""Unnamespaced, as on the Stretch: the localization stand-in
+(:func:`cram_vrb_lab.control.giskard_server.start_localization_stand_in`)
+publishes a static ``map -> odom`` and only one robot runs at a time."""
 
 ROBOT_ROOT_LINK = "base_link"
-
-
-def arm_root_link(side: str) -> str:
-    return f"{side}_fr3_link0"
+BASE_LINK = "chassis_link"
+"""What ``GarmiMobileBase`` uses as its root."""
 
 
 def hand_link(side: str) -> str:
-    return f"{side}_fr3_hand"
+    return f"{ARM_PREFIX[side]}_gripper_fr3_hand"
 
 
 def tool_frame_link(side: str) -> str:
-    """The description's own TCP link, 0.1034 m out along the hand's +z."""
-    return f"{side}_fr3_hand_tcp"
-
-
-def finger_link(side: str, finger: str) -> str:
-    return f"{side}_fr3_{finger}finger"
-
-
-def fingertip_link(side: str, finger: str) -> str:
-    """Added by :func:`load_patched_urdf`; the description ships no such link."""
-    return f"{side}_fr3_{finger}finger_tip"
+    return f"{ARM_PREFIX[side]}_gripper_fr3_hand_tcp"
 
 
 TOOL_FRAME_OFFSET = 0.1034
 """Distance [m] along the hand's +z to the point between the fingertips."""
 
-FINGER_TIP_OFFSET = TOOL_FRAME_OFFSET - 0.0584
-"""Distance [m] from a finger's own origin to its pad tip: 0.0584 m is where the
-finger joint mounts the finger on the hand."""
-
 MAX_FINGER_TRAVEL = 0.04
 """Per-finger stroke [m] from the URDF; the pads stand at most 0.08 m apart."""
 
 GRIPPER_OPEN_TRAVEL = 0.038
-"""Per-finger travel [m] that ``GripperState.OPEN`` means, just short of the hard
-stop so the drive settles on the commanded value instead of pushing into it."""
+"""Per-finger travel [m] the sim opens the hand to when it parks.
+
+Just short of the :data:`MAX_FINGER_TRAVEL` hard stop, so the drive settles on
+the commanded value instead of pushing into the limit. Upstream's
+``GripperState.OPEN`` is the full 0.04; the difference only matters to the sim's
+park, since giskard commands the upstream value.
+"""
 
 FINGER_MASS = 0.0291
 """Mass [kg] of one FR3 finger link, from the description.
@@ -117,30 +141,85 @@ what they say -- see the Panda's ``FINGER_MASS`` for the full account.
 """
 
 PARK_CONFIGURATION = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
-"""GARMI's own home pose, in :func:`arm_joints` order. The same for both arms.
+"""GARMI's home pose, in :func:`arm_joints` order. The same for both arms.
 
-Not chosen here: the description states it twice, and both agree. The URDF's
-``ros2_control`` block gives every FR3 joint an ``initial_value`` (this, to three
-decimals), and ``mujoco/garmi.xml`` carries it again as the ``home`` keyframe --
-whose ``qpos`` also opens with ``0 0 0.0259``, which is where
-:data:`~cram_vrb_lab.robots.garmi.isaac_node.BASE_LINK_HEIGHT` comes from.
+Duplicated from ``GarmiLeftArm.ARM_PARK_CONFIGURATION`` in
+:mod:`semantic_digital_twin.robots.garmi`, and it has to be: the sim's park runs
+under the Isaac python, which has no ``semantic_digital_twin`` to read it from.
+**Keep the two in sync** -- if they drift, the sim parks somewhere giskard does
+not think it is. The description states the same numbers twice more, in the
+URDF's ``ros2_control`` ``initial_value``s and in ``mujoco/garmi.xml``'s ``home``
+keyframe (whose ``qpos`` also opens with ``0 0 0.0259``, which is where
+:data:`~cram_vrb_lab.robots.garmi.isaac_node.BASE_LINK_HEIGHT` comes from).
 
 It is Franka's own "ready" pose, applied to both arms unmirrored. On GARMI's
-tilted shoulders (see ``arm_mount_*_joint``) that holds the hands 0.79 m in front
-of ``base_link`` at 0.84 m -- arms out in front, chest height. Worth knowing when
-picking a spawn pose: a robot parked less than ~0.8 m from a worktop parks its
-hands inside it.
+tilted shoulders (``arm_mount_*_joint``) it holds the hands 0.79 m in front of
+``base_link`` at 0.84 m -- arms out, chest height.
 """
 
 _MESH_PREFIX = "package://garmi_description/"
-
-_STRIPPED_JOINT_TAGS = ("axis", "limit", "mimic", "dynamics", "safety_controller")
 
 _MESH_ALIAS_DIR = Path(tempfile.gettempdir()) / "garmi_mesh_aliases"
 """Where :func:`_usd_safe_mesh` puts its symlinks.
 
 Outside the repo on purpose: it is generated, and a checkout should stay clean.
 Regenerated on demand, so deleting it costs nothing.
+"""
+
+
+def _upstream_renames() -> list[tuple[str, str]]:
+    """Link/joint renames taking this description to the names
+    :mod:`semantic_digital_twin.robots.garmi` looks bodies up by.
+
+    The upstream model was written against another export of the same robot: its
+    ``garmi.srdf`` names every non-arm link exactly as this URDF does
+    (``chassis_link``, ``axle_link``, ``lift_0_*``, ``front_rocker_link``,
+    ``lidar2d_*``, ``head``, ``neck_1``), and only the arm/gripper prefixes and
+    the two head joints differ.
+
+    **Order matters.** Each substitution is a plain prefix replacement, and the
+    specific ones have to run before the catch-all ``left_fr3_`` -> ``arm_0_fr3_``
+    or the fingers and hand would be swept into the arm's namespace. Replacing
+    ``left_fr3_hand`` covers ``_hand_tcp``, ``_hand_joint`` and
+    ``_hand_tcp_joint`` in one go, for the same reason.
+    """
+    renames = []
+    for side in SIDES:
+        arm = ARM_PREFIX[side]
+        renames += [
+            (f"{side}_fr3_hand", f"{arm}_gripper_fr3_hand"),
+            (f"{side}_fr3_leftfinger", f"{arm}_gripper_fr3_leftfinger"),
+            (f"{side}_fr3_rightfinger", f"{arm}_gripper_fr3_rightfinger"),
+            (f"{side}_fr3_finger_joint", f"{arm}_gripper_fr3_finger_joint"),
+            (f"{side}_fr3_", f"{arm}_fr3_"),
+        ]
+    return renames + [("o1_motor_1", "head_pan_joint"), ("o1_motor_2", "head_tilt_joint")]
+
+
+UPSTREAM_RENAMES = _upstream_renames()
+
+_TOOL_FRAME_RPY = "0 -1.5707963267948966 0"
+"""Rotation put on the ``*_hand_tcp_joint``, replacing the description's ``0 0 0``.
+
+Reconciles two conventions that would otherwise disagree silently.
+:class:`~semantic_digital_twin.robots.robot_parts.EndEffector` derives its
+approach direction as the **x** column of ``front_facing_orientation``, and
+upstream's ``GarmiLeftGripper`` passes the identity quaternion -- so it expects a
+tool frame whose x-axis already points out between the fingers. A Franka Hand
+points its **z** out, and this description's TCP joint carries no rotation of its
+own, so without this the approach axis would come out sideways and every grasp
+would reach across the object instead of at it.
+
+A quarter turn about y maps z onto x and leaves y -- the closing axis -- alone,
+which is exactly the convention
+:mod:`cram_vrb_lab.robots.panda.semantic_model` states for the Panda.
+
+The sign is **negative**, and it is worth being sure about rather than reasoning
+about: a rotation of ``theta`` about y has ``(cos(theta), 0, -sin(theta))`` as
+its first column, so only ``-pi/2`` puts the tool's x on the hand's ``+z``.
+``+pi/2`` lands on ``-z``, which preserves the closing axis and looks entirely
+plausible while making every grasp approach the object from behind. Checked by
+comparing the tool frame's x against the hand's z in the parked pose.
 """
 
 
@@ -173,38 +252,25 @@ def _usd_safe_mesh(path: str) -> str:
     return str(alias)
 
 
-def _tool_links() -> str:
-    """The fingertip frames the semantic model looks bodies up by.
-
-    The tool frame itself is not among them: unlike the stock Panda URDF, this
-    description already carries ``*_fr3_hand_tcp``.
-    """
-    links = []
-    for side in SIDES:
-        for finger in ("left", "right"):
-            tip, parent = fingertip_link(side, finger), finger_link(side, finger)
-            links.append(
-                f'  <link name="{tip}"/>\n'
-                f'  <joint name="{tip}_joint" type="fixed">\n'
-                f'    <origin rpy="0 0 0" xyz="0 0 {FINGER_TIP_OFFSET}"/>\n'
-                f'    <parent link="{parent}"/>\n'
-                f'    <child link="{tip}"/>\n'
-                f"  </joint>\n"
-            )
-    return "".join(links) + "</robot>"
-
-
 def load_patched_urdf() -> str:
     """Read the GARMI URDF and make it usable by the twin, giskard and the sim.
 
-    Six changes: the robot is renamed (:data:`ROBOT_NAME`); the Gazebo and
-    ros2_control blocks are dropped, as neither parser here has any use for them;
-    :data:`FROZEN_JOINTS` become fixed joints; every ``mimic`` is removed, which
-    on the fingers is what stops giskard's velocity group from putting two
-    constraints on one DOF and going infeasible; mesh paths are made absolute
-    (nothing resolves ``package://garmi_description`` here) and, where the file
-    name would not survive Isaac's importer, aliased -- see
-    :func:`_usd_safe_mesh`; and the fingertip frames are appended.
+    Five changes:
+
+    - the robot is renamed (:data:`ROBOT_NAME`), and the Gazebo and ros2_control
+      blocks are dropped -- neither parser here has any use for them;
+    - every ``mimic`` is removed. On the fingers that is what stops giskard's
+      velocity group from putting two constraints on one DOF and going
+      infeasible; on the lift it lets ``GarmiTorso`` drive both segments;
+    - mesh paths are made absolute (nothing resolves
+      ``package://garmi_description`` here) and, where the file name would not
+      survive Isaac's importer, aliased -- see :func:`_usd_safe_mesh`;
+    - the TCP frames are given :data:`_TOOL_FRAME_RPY`;
+    - the arms, grippers and head joints are renamed to what the upstream
+      semantic model expects -- see :func:`_upstream_renames`.
+
+    Nothing is frozen: the wheels, the lift and the head are all real joints, and
+    the upstream model claims all three.
     """
     root = ElementTree.parse(GARMI_URDF_PATH).getroot()
     root.set("name", ROBOT_NAME)
@@ -213,14 +279,11 @@ def load_patched_urdf() -> str:
         for element in root.findall(tag):
             root.remove(element)
 
-    frozen = set(FROZEN_JOINTS)
     for joint in root.findall("joint"):
-        if joint.get("name") in frozen:
-            joint.set("type", "fixed")
-            for child in [c for c in joint if c.tag in _STRIPPED_JOINT_TAGS]:
-                joint.remove(child)
         for mimic in joint.findall("mimic"):
             joint.remove(mimic)
+        if joint.get("name", "").endswith("_hand_tcp_joint"):
+            joint.find("origin").set("rpy", _TOOL_FRAME_RPY)
 
     for mesh in root.iter("mesh"):
         filename = mesh.get("filename")
@@ -229,9 +292,9 @@ def load_patched_urdf() -> str:
         mesh.set("filename", _usd_safe_mesh(filename))
 
     urdf = ElementTree.tostring(root, encoding="unicode")
-
-    assert urdf.count("</robot>") == 1, "expected exactly one closing robot tag"
-    return urdf.replace("</robot>", _tool_links())
+    for old, new in UPSTREAM_RENAMES:
+        urdf = urdf.replace(old, new)
+    return urdf
 
 
 def joint_limits() -> dict[str, tuple[float, float]]:

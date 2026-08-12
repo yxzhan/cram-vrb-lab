@@ -1,74 +1,61 @@
 """Giskard world and robot-interface config for GARMI against Isaac Sim.
 
-The same shape as the Panda's, and for the same reason: with the base frozen
-(see :data:`cram_vrb_lab.robots.garmi.joints.FROZEN_JOINTS`) GARMI does not
-move, so there is no odometry to sync and no ``map -> odom`` localization. The
-robot root is bolted to ``map`` at the demo's spawn pose, and the only channels
-are joint states in and streamed joint velocities out.
+GARMI drives, so both halves are the mobile-robot shape rather than the Panda's:
+the world hangs the robot off ``map -> odom`` through an ``OmniDrive`` instead of
+bolting it down, and the interface learns where the robot is from odometry and
+localization the way it would on real hardware.
 
-Whatever scene the demo runs it in is merged next to the robot by
+Neither class does much. giskardpy already ships
+:class:`~giskardpy.model.world_config.WorldWithOmniDriveRobot`, and
+:class:`~giskardpy.middleware.ros2.scripts.iai_robots.hsr.configs.HSRVelocityInterface`
+is the same interface against a different robot's topics.
+
+Whatever scene the demo runs in is merged next to the robot by
 :func:`cram_vrb_lab.control.giskard_world.build_world_config`.
 """
 
 from dataclasses import dataclass, field
 
 from giskardpy.middleware.ros2.robot_interface_config import RobotInterfaceConfig
-from giskardpy.model.world_config import WorldWithFixedRobot
-from semantic_digital_twin.adapters.urdf import URDFParser
+from giskardpy.model.world_config import WorldWithOmniDriveRobot
+from semantic_digital_twin.robots.garmi import Garmi
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
-from semantic_digital_twin.spatial_types.spatial_types import (
-    HomogeneousTransformationMatrix,
+from semantic_digital_twin.world_description.connections import (
+    Connection6DoF,
+    OmniDrive,
 )
-from semantic_digital_twin.world_description.connections import FixedConnection
-from semantic_digital_twin.world_description.world_entity import Body
 
-from .joints import CONTROLLED_JOINTS, JOINT_STATES_TOPIC, VELOCITY_CMD_TOPIC
-from .semantic_model import Garmi
+from .joints import (
+    CMD_VEL_TOPIC,
+    CONTROLLED_JOINTS,
+    JOINT_STATES_TOPIC,
+    ODOM_TOPIC,
+    VELOCITY_CMD_TOPIC,
+)
 
 
 @dataclass
-class WorldWithGarmiConfig(WorldWithFixedRobot):
-    """GARMI fixed to ``map`` at the pose the sim placed the prim with."""
+class WorldWithGarmiConfig(WorldWithOmniDriveRobot):
+    """GARMI on ``map -> odom -> base_link``, the latter an ``OmniDrive``.
+
+    No spawn pose: unlike the Panda's fixed-robot config, nothing here says where
+    the robot stands. It hangs off ``odom``, giskard reads ``map -> odom`` from tf
+    and the base pose from :data:`~cram_vrb_lab.robots.garmi.joints.ODOM_TOPIC`,
+    and the sim publishes odometry from wherever it spawned the robot -- so the
+    pose arrives over the wire exactly as a real robot's localization would
+    deliver it.
+    """
 
     urdf_view: AbstractRobot = field(kw_only=True, default=Garmi, init=False)
 
-    robot_pose: HomogeneousTransformationMatrix = field(
-        kw_only=True, default_factory=HomogeneousTransformationMatrix
-    )
-    """Where ``base_link`` sits in ``map``, i.e. the demo's
-    :class:`~cram_vrb_lab.specs.SpawnPose`. The stock
-    :class:`~giskardpy.model.world_config.WorldWithFixedRobot` bolts the robot to
-    the origin with no way to say otherwise, which would leave giskard planning
-    for a robot metres away from the rendered one."""
-
-    def setup_world(self) -> None:
-        """Build ``map`` and hang the posed robot off it.
-
-        Runs inside the ``modify_world`` context
-        :class:`giskardpy.middleware.ros2.giskard.Giskard` already opens around
-        ``setup_world``.
-        """
-        world_root = Body(name=self.root_name)
-        # Added explicitly, as the base class does: anything merging onto ``map``
-        # after this method -- the scene -- looks the root up inside the same
-        # modify_world context.
-        self.world.add_body(world_root)
-
-        robot_world = URDFParser(urdf=self.urdf, prefix="").parse()
-        self.urdf_view.from_world(robot_world)
-        self.robot_root = robot_world.root
-        self.world.merge_world(
-            robot_world,
-            FixedConnection(
-                parent=world_root,
-                child=self.robot_root,
-                parent_T_connection_expression=self.robot_pose,
-            ),
-        )
-
 
 class GarmiSimInterface(RobotInterfaceConfig):
-    """Closed-loop interface against the Isaac Sim GARMI topics.
+    """Real-robot-style closed-loop interface against the Isaac Sim GARMI topics.
+
+    Four channels: ``map -> odom`` from tf (a static identity stands in for SLAM,
+    see :func:`cram_vrb_lab.control.giskard_server.start_localization_stand_in`),
+    ground-truth wheel odometry, joint states in, and streamed velocities out --
+    a Twist for the base and a Float64MultiArray for everything else.
 
     ``minimum_valid_velocity=0`` because the sim integrates streamed joint
     velocities into position targets rather than driving a real velocity
@@ -77,6 +64,19 @@ class GarmiSimInterface(RobotInterfaceConfig):
     """
 
     def setup(self):
+        # [0] picks by position, not by name, and the garmi-apartment MJCF
+        # contributes 15 Connection6DoF of its own for its free bodies. It is the
+        # right one only because the robot's world is built before the scene is
+        # merged onto it -- see cram_vrb_lab.control.giskard_world.
+        self.sync_6dof_joint_with_tf_frame(
+            joint=self.world.get_connections_by_type(Connection6DoF)[0],
+            tf_parent_frame="map",
+            tf_child_frame="odom",
+        )
+        omni_drive = self.world.get_connections_by_type(OmniDrive)[0]
+        self.sync_odometry_topic(ODOM_TOPIC, omni_drive)
+        self.add_base_cmd_velocity(cmd_vel_topic=CMD_VEL_TOPIC, joint=omni_drive)
+
         self.sync_joint_state_topic(JOINT_STATES_TOPIC)
         self.add_joint_velocity_group_controller(
             cmd_topic=VELOCITY_CMD_TOPIC,

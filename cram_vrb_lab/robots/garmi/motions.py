@@ -20,7 +20,7 @@ from coraplex.robot_plans.motions.base import AlternativeMotion
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
 
-from .semantic_model import Garmi
+from semantic_digital_twin.robots.garmi import Garmi
 
 CLOSE_TIMEOUT = 3.0
 """Seconds to keep pushing the fingers shut before calling the hand closed.

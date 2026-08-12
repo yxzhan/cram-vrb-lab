@@ -195,12 +195,19 @@ first cell calls `cram_vrb_lab.control.launcher.start_isaac_sim()` /
   no props — and it documents why it stops short of opening a drawer (the
   garmi-apartment USD carries no physics joints, so the MJCF's drawers and doors
   articulate in the twin only).
-- `garmi_robot_demo.py` — the same drawer, opened by **GARMI itself** rather than
-  by a bare arm: `start_isaac_sim(robot="garmi", scene="garmi_apartment",
-  spawn_position=(..., 0.0259), spawn_yaw=math.pi/2)`. The robot stands in front
-  of the kitchen run, parks both arms in the description's own home pose, then
-  opens and closes `drawer_4` with the left one. The base is **frozen**, not
-  driven — see `cram_vrb_lab/robots/garmi/joints.py`.
+- `garmi_demo.py` — the same kitchen, worked by **GARMI itself** rather than by a
+  bare arm: `start_isaac_sim(robot="garmi", scene="garmi_apartment",
+  spawn_position=(..., 0.0259), spawn_yaw=math.pi/2)`. Parks both arms in the
+  description's own home pose, **drives** to the cabinet with a `NavigateAction`,
+  then opens a drawer with one arm and a cabinet door with the other. The mecanum
+  base is an `OmniDrive` on giskard's side and kinematic in the sim — the wheels
+  are undriven and `base_link` is teleported, because this description models
+  each mecanum wheel as a plain cylinder with no rollers. See
+  `cram_vrb_lab/robots/garmi/isaac_node.py:undrive_wheels`.
+  The twin is `semantic_digital_twin.robots.garmi.Garmi` (mobile base, lift
+  torso, pan/tilt neck, `garmi.srdf` self-collision matrix); the patched URDF
+  renames this description's arms and head joints onto the names that model
+  expects — see `UPSTREAM_RENAMES` in `cram_vrb_lab/robots/garmi/joints.py`.
 
 Manual start (source `/opt/ros/jazzy/setup.bash` and
 `ros2_ws/install/setup.bash` in every terminal):
