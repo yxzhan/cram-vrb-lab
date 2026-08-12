@@ -7,3 +7,6 @@
 [submodule "assets/franka_ros"]
 	path = assets/franka_ros
 	url = https://github.com/frankarobotics/franka_ros.git
+[submodule "assets/garmi_description"]
+	path = assets/garmi_description
+	url = https://github.com/geriatronics/garmi_description.git
