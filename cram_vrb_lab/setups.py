@@ -29,6 +29,7 @@ package decides it on the demo's behalf.
 import math
 from typing import Dict, Tuple
 
+from cram_vrb_lab.robots.garmi.spec import GARMI
 from cram_vrb_lab.robots.panda.spec import PANDA
 from cram_vrb_lab.robots.stretch.spec import STRETCH
 from cram_vrb_lab.scenes.apartment.spec import APARTMENT
@@ -45,7 +46,9 @@ from cram_vrb_lab.specs import (
     Viewport,
 )
 
-ROBOTS: Dict[str, RobotSpec] = {robot.name: robot for robot in (STRETCH, PANDA)}
+ROBOTS: Dict[str, RobotSpec] = {
+    robot.name: robot for robot in (STRETCH, PANDA, GARMI)
+}
 
 SCENES: Dict[str, SceneSpec] = {
     scene.name: scene for scene in (APARTMENT, GARMI_APARTMENT, EMPTY)
@@ -132,6 +135,13 @@ SETUPS: Dict[Tuple[str, str], Setup] = {
             # own articulation -- the kitchen cabinet's doors and drawers, which
             # the MJCF twin models and Isaac renders from the same file.
             # viewport=_arm_and_what_it_faces_viewport,
+        ),
+        Setup(
+            robot=GARMI,
+            scene=GARMI_APARTMENT,
+            # The flat GARMI was built for, and what the robot spec exists for:
+            # the same kitchen articulation the Panda works on, reached from a
+            # standing robot's shoulder height instead of off the floor.
         ),
     )
 }

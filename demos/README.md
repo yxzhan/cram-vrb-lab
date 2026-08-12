@@ -195,6 +195,12 @@ first cell calls `cram_vrb_lab.control.launcher.start_isaac_sim()` /
   no props — and it documents why it stops short of opening a drawer (the
   garmi-apartment USD carries no physics joints, so the MJCF's drawers and doors
   articulate in the twin only).
+- `garmi_robot_demo.py` — the same drawer, opened by **GARMI itself** rather than
+  by a bare arm: `start_isaac_sim(robot="garmi", scene="garmi_apartment",
+  spawn_position=(..., 0.0259), spawn_yaw=math.pi/2)`. The robot stands in front
+  of the kitchen run, parks both arms in the description's own home pose, then
+  opens and closes `drawer_4` with the left one. The base is **frozen**, not
+  driven — see `cram_vrb_lab/robots/garmi/joints.py`.
 
 Manual start (source `/opt/ros/jazzy/setup.bash` and
 `ros2_ws/install/setup.bash` in every terminal):
