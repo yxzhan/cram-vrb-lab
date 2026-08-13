@@ -29,6 +29,7 @@ from tf2_ros import TransformBroadcaster
 
 from cram_vrb_lab.sim.ros_utils import SimBridge, as_np, make_tf, qconj, qmul, qrot
 from cram_vrb_lab.sim.velocity_integrator import (
+    MAX_LEAD,
     StreamedVelocityIntegrator,
     dof_indices,
 )
@@ -88,33 +89,66 @@ the lift sinks under the torso it carries and the head tips forward, which is
 what freezing these joints used to hide.
 """
 
-FINGER_DRIVE_STIFFNESS = 2000.0
-FINGER_DRIVE_DAMPING = 90.0
+FINGER_DRIVE_STIFFNESS = 5000.0
+FINGER_DRIVE_DAMPING = 142.0
 """Finger drive gains as a **force** drive would take them, [N/m] and [N/(m/s)].
 
-Five times NVIDIA's own Franka numbers (400 / 40), which the Panda still runs on.
-The stiffness sets the grip: the integrator lets a target lead the measured
-position by :data:`~cram_vrb_lab.sim.velocity_integrator.MAX_LEAD`, so a blocked
-finger pushes with ``stiffness * MAX_LEAD`` -- 8 N at NVIDIA's value, 40 N here,
-against a 100 N effort limit in the description.
+The stiffness *is* the grip, and there is no other knob for it: the integrator
+lets a target lead the measured position by
+:data:`~cram_vrb_lab.sim.velocity_integrator.MAX_LEAD` and no further, so a
+blocked finger settles at exactly ``stiffness * MAX_LEAD`` -- 8 N at NVIDIA's own
+Franka value of 400 (which the Panda still runs on), 100 N here. That bound is
+not a tuning artefact but the point of the clamp, so a finger will always yield
+to anything that pushes harder; what the gain buys is *how much* harder.
+
+100 N is the ceiling this description allows: it is the ``effort`` the URDF gives
+both finger joints, and above it :data:`FINGER_MAX_EFFORT` would start clipping
+instead. It is also past the real FR3 hand's 70 N continuous grasping force, so
+there is nothing left to raise. If the fingers still lose their hold, the cause
+is geometric -- the arm's drives are three orders of magnitude stronger, so a
+gripper closing anywhere but *around* the rod is prised open no matter the gain.
 
 8 N was sized for a different job. The Panda's note says as much: it is "far
 above the 0.5 N the cube's weight needs", i.e. enough to hold a light object
 against gravity. Opening a drawer is not that -- the arm has to hold a 12 mm
-handle rod against the pull of the container coming out, and at 8 N the rod is
-levered out from between the pads. Slowing the container down is the other half
-of the fix; see ``PRISMATIC_VELOCITY_LIMIT`` in
+handle rod against the pull of the container coming out. Slowing the container
+down is the other half of the fix; see ``PRISMATIC_VELOCITY_LIMIT`` in
 :mod:`cram_vrb_lab.scenes.garmi_apartment.giskard_world`.
 
-Damping is scaled by sqrt(5) rather than 5, which is what keeps the damping ratio
-(``d / (2 * sqrt(k * m))``) where it was: scaling it with the stiffness would
-leave the fingers overdamped and slow to close, leaving it alone would let them
-ring.
+Damping is scaled by sqrt of the stiffness ratio rather than with it, which is
+what keeps the damping ratio ``d / (2 * sqrt(k * m))`` where it was (5.9, i.e.
+firmly overdamped, as NVIDIA's 400/40 pair already was): scaling it with the
+stiffness would leave the fingers slower to close with every raise, leaving it
+alone would let them ring.
 
 Both are divided by :data:`~cram_vrb_lab.robots.garmi.joints.FINGER_MASS` before
 they are handed to ``set_gains``, because the URDF importer authors *acceleration*
 drives -- see the Panda's ``FINGER_MASS`` for the full account of what that costs
 when it is missed.
+"""
+
+FINGER_MAX_EFFORT = FINGER_DRIVE_STIFFNESS * MAX_LEAD / FINGER_MASS
+"""Force budget [N] handed to the finger drives, so ``maxForce`` never binds.
+
+Raising the stiffness alone does nothing if the drive's force limit is reached
+first, and the importer authors that limit from the URDF's ``effort="100"``
+without saying which units it means it in. That matters here and nowhere else,
+because these are the only **acceleration** drives whose limit is anywhere near
+their output: PhysX may read ``maxForce`` in force units (100 N, exactly the
+grip asked for above, so saturating) or in the drive's own acceleration units
+(100 m/s^2, which after the finger's 29 g is **2.9 N** -- limp, and completely
+insensitive to the gain, which is the symptom that led here).
+
+Rather than pin down which, size the budget so it is not the binding constraint
+under either reading: ``stiffness * MAX_LEAD`` is what the drive wants to spend,
+and dividing by the mass expresses it in the pessimistic units. The grip stays
+capped at ``stiffness * MAX_LEAD`` by the integrator's clamp regardless, so a
+generous budget cannot make the fingers stronger than intended -- it can only
+stop them being weaker.
+
+The Stretch does the same thing for the same reason (``set_max_efforts(200.0)``,
+against a URDF that also says 100 for every joint); the Panda does not, and gets
+away with it because a cube needs 0.5 N.
 """
 
 
@@ -243,6 +277,11 @@ def move_to_park(garmi, world, render):
         kps=np.full((1, len(finger_dof)), FINGER_DRIVE_STIFFNESS / FINGER_MASS),
         kds=np.full((1, len(finger_dof)), FINGER_DRIVE_DAMPING / FINGER_MASS),
         joint_indices=finger_dof,
+    )
+    # The gain above is only worth what the drive is allowed to spend: see
+    # FINGER_MAX_EFFORT for why the importer's limit cannot be trusted here.
+    garmi.set_max_efforts(
+        np.full((1, len(finger_dof)), FINGER_MAX_EFFORT), joint_indices=finger_dof
     )
     undrive_wheels(garmi)
 
