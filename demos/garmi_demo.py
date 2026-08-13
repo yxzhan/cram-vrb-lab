@@ -325,33 +325,39 @@ def close_container(handle_body, arm=Arms.LEFT, attempts=3):
     """CloseAction, likewise -- it is the same three steps with ClosingMotion."""
     _work_container(ClosingMotion, handle_body, arm, attempts)
 
-for i in range(1, 4):
-    drawer_id = i
-    drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
-    handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
 
-    if not world.get_semantic_annotations_by_type(Drawer):
-        with world.modify_world():
-            world.add_semantic_annotation_recursively(
-                Drawer(root=drawer_body, handle=Handle(root=handle_body))
-            )
-    print("drawer annotated:", drawer_body.name, "with handle", handle_body.name)
-    print("handle at", np.round(body_position(f"drawer_{drawer_id}_handle"), 3))
+ROUNDS = 10
+"""How many times to work the three drawers, for a long unattended run."""
 
-    drive_to(f"drawer_{drawer_id}_handle")
+for round_id in range(1, ROUNDS + 1):
+    print(f"===== round {round_id}/{ROUNDS} =====")
+    for i in range(1, 4):
+        drawer_id = i
+        drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
+        handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
 
-    run_plan(sequential([
-            ParkArmsAction(Arms.LEFT),
-            ParkArmsAction(Arms.RIGHT),
-            SetGripperAction(Arms.LEFT, GripperState.OPEN),
-            SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-        ], context=context))
+        if not world.get_semantic_annotations_by_type(Drawer):
+            with world.modify_world():
+                world.add_semantic_annotation_recursively(
+                    Drawer(root=drawer_body, handle=Handle(root=handle_body))
+                )
+        print("drawer annotated:", drawer_body.name, "with handle", handle_body.name)
+        print("handle at", np.round(body_position(f"drawer_{drawer_id}_handle"), 3))
 
-    open_container(handle_body, Arms.LEFT)
-    print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
+        drive_to(f"drawer_{drawer_id}_handle")
 
-    close_container(handle_body, Arms.LEFT)
-    print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
+        run_plan(sequential([
+                # ParkArmsAction(Arms.LEFT),
+                # SetGripperAction(Arms.LEFT, GripperState.OPEN),
+                # ParkArmsAction(Arms.RIGHT),
+                # SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+            ], context=context))
+
+        open_container(handle_body, Arms.LEFT)
+        print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
+
+        close_container(handle_body, Arms.LEFT)
+        print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
 
 # %%
 
@@ -384,4 +390,5 @@ for i in range(1, 4):
 #         SetGripperAction(Arms.LEFT, GripperState.OPEN),
 #         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
 #     ], context=context))
+
 stop()
