@@ -311,9 +311,7 @@ def close_container(handle_body, arm=Arms.LEFT, attempts=3):
     """CloseAction, likewise -- it is the same three steps with ClosingMotion."""
     _work_container(ClosingMotion, handle_body, arm, attempts)
 
-from itertools import cycle
-for i in list(cycle([1, 2, 3]))[:30]:
-    print(i)
+for i in range(1, 4):
     drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
     handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
 
