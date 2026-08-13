@@ -12,3 +12,4 @@ iai_apartment/
 # has to stay where it lands. Regenerated on every import.
 /materials/
 .backup/
+NvStreamer-*

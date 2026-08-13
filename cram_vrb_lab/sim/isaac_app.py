@@ -101,3 +101,14 @@ def render_enabled():
     control path (joint states, odometry, TF from the physics view) needs no
     rendering; a head camera does, so ISAAC_RENDER=0 implies no camera image."""
     return os.environ.get("ISAAC_RENDER", "1") != "0"
+
+
+def livestream_enabled():
+    """Livestreaming is opt-in via ISAAC_LIVESTREAM=1: instead of a local
+    viewport, the app streams its viewport over WebRTC, so the scene can be
+    watched (and driven with the mouse) from a browser on another machine.
+
+    Goes with ISAAC_HEADLESS=1 -- there is no point paying for both a local
+    window and the stream -- and needs ISAAC_RENDER=1, since a stream is
+    rendered frames and nothing else."""
+    return os.environ.get("ISAAC_LIVESTREAM", "0") == "1"

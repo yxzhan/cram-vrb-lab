@@ -1,14 +1,26 @@
 import math
+import os
 import sys
 from pathlib import Path
 
 REPO = Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-# import os
 # os.environ["DISPLAY"] = ":0"
 
-from launcher import start_giskard_server, start_isaac_sim, start_rviz, stop
+# No local Isaac window; watch the viewport over WebRTC instead (port 49100).
+os.environ["ISAAC_HEADLESS"] = "1"
+os.environ["ISAAC_LIVESTREAM"] = "1"
+
+from launcher import (
+    start_giskard_server,
+    start_isaac_sim,
+    start_rviz,
+    start_streaming_client,
+    stop,
+)
+
+from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
@@ -20,8 +32,10 @@ SPAWN_YAW = -math.pi / 2
 rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
 sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="none",
                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+stream_proc = start_streaming_client() if livestream_enabled() else None
 giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+
 
 # %%
 import threading
@@ -370,4 +384,4 @@ for i in range(1, 4):
 #         SetGripperAction(Arms.LEFT, GripperState.OPEN),
 #         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
 #     ], context=context))
-
+stop()

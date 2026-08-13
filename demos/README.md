@@ -83,6 +83,18 @@ clients:
   `--camera none` (or `ISAAC_NO_CAMERA=1`) plus `ISAAC_HEADLESS=1` /
   `ISAAC_RENDER=0` let a machine with no usable GPU display still run the control
   path.
+- **Watching the sim from another machine**: `ISAAC_LIVESTREAM=1` streams the
+  viewport over WebRTC (`omni.services.livestream.nvcf`, port 49100) instead of
+  opening a local window, so a browser client can watch and mouse around the
+  scene. Set it next to `ISAAC_HEADLESS=1` before `start_isaac_sim()` — the sim
+  runs as a subprocess and inherits the environment — and leave rendering on
+  (`ISAAC_RENDER=0` would leave nothing to stream). The viewer for that stream,
+  NVIDIA's `isaacsim-webrtc-streaming-client`, is installed in the image
+  (`binder/Dockerfile`) and `start_streaming_client()` opens it on the
+  container's desktop — fire-and-forget like `start_rviz()`, with no ready
+  marker to wait for; the connection is made in the client itself.
+  `garmi_demo.py` calls it only when `ISAAC_LIVESTREAM=1`, and `stop()` closes
+  it with everything else.
 - **Grabbing things in the viewport** (shift + left-drag on a rigid body while
   the sim runs, as in the GUI app): that is `omni.physx.ui`, which the GUI's
   experience file loads through `omni.physx.bundle` but the one a `SimulationApp`

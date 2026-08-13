@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from cram_vrb_lab.sim.isaac_app import (
     create_simulation_app,
+    livestream_enabled,
     parse_scene_args,
     render_enabled,
 )
@@ -51,6 +52,11 @@ enable_extension("isaacsim.ros2.bridge")
 # worth loading when there is a viewport to interact with.
 if RENDER:
     enable_extension("omni.physx.ui")
+
+# Watch the viewport from a browser instead of a local window (ISAAC_LIVESTREAM=1).
+if livestream_enabled():
+    simulation_app.set_setting("/app/window/drawMouse", True)
+    enable_extension("omni.services.livestream.nvcf")
 
 my_world = World(stage_units_in_meters=1.0, physics_dt=1 / 200, rendering_dt=8 / 200)
 my_world.reset()

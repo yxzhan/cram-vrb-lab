@@ -86,6 +86,19 @@ COPY --chown=${NB_USER}:users binder/cram-kernel.json /opt/conda/share/jupyter/k
 # Pinned assets (Isaac USD scenes, stretch_urdf submodule) - rarely change.
 COPY --chown=${NB_USER}:users assets ${REPO_DIR}/assets
 
+# Isaac Sim WebRTC streaming client: the desktop viewer for the stream a sim
+# started with ISAAC_LIVESTREAM=1 serves on port 49100 (see
+# demos/launcher.py start_streaming_client). apt-get resolves the .deb's own
+# dependencies, which dpkg -i would not.
+ENV ISAACSIM_STREAMING_CLIENT_VERSION="2.0.0"
+RUN cd /tmp && \
+    wget https://downloads.isaacsim.nvidia.com/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \
+    sudo apt-get update && \
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        /tmp/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \
+    sudo rm -rf /var/lib/apt/lists/* && \
+    rm /tmp/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb
+
 # Frequently-changing top-level content (package, demos, wrappers).
 # Copied LAST so editing them reuses every cached layer above.
 COPY --chown=${NB_USER}:users cram_vrb_lab ${REPO_DIR}/cram_vrb_lab

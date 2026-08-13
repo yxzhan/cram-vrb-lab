@@ -39,6 +39,10 @@ os.environ.setdefault("ROS_AUTOMATIC_DISCOVERY_RANGE", "LOCALHOST")
 ISAAC_SIM_LOG = "/tmp/isaac_sim.log"
 GISKARD_SERVER_LOG = "/tmp/giskard_server.log"
 RVIZ_LOG = "/tmp/rviz.log"
+STREAMING_CLIENT_LOG = "/tmp/streaming_client.log"
+
+# The NVIDIA WebRTC viewer, installed from the .deb in binder/Dockerfile.
+STREAMING_CLIENT = "isaacsim-webrtc-streaming-client"
 
 SIM_SCRIPT = REPO / "demos" / "sim.py"
 SERVER_SCRIPT = REPO / "demos" / "giskard_server.py"
@@ -208,7 +212,8 @@ def _rviz_command(rviz_config):
     a system binary on ``PATH``, not something a ROS overlay contributes.
     """
     command = ["rviz2", "-d", str(rviz_config)]
-    return command if shutil.which("vglrun") is None else ["vglrun", *command]
+    # return command if shutil.which("vglrun") is None else ["vglrun", *command]
+    return command
 
 
 def start_rviz(rviz_config=None, terminal=False):
@@ -226,14 +231,42 @@ def start_rviz(rviz_config=None, terminal=False):
     )
 
 
+def start_streaming_client(terminal=False):
+    """Open the Isaac Sim WebRTC streaming client; returns immediately (no ready
+    marker), like :func:`start_rviz`.
+
+    The viewer for a sim started with ``ISAAC_LIVESTREAM=1``: that sim renders no
+    local window and serves its viewport over WebRTC instead, and this client
+    shows it on the desktop the container already provides. The connection is
+    made from inside the client, so it can be opened before or after the sim --
+    nothing here waits for either.
+
+    Only useful when livestreaming is on; the demo scripts check that
+    (:func:`cram_vrb_lab.sim.isaac_app.livestream_enabled`) before calling.
+    """
+    if shutil.which(STREAMING_CLIENT) is None:
+        print(f"{STREAMING_CLIENT} is not installed -- skipping the viewer"
+              " (see binder/Dockerfile)")
+        return None
+    # --no-sandbox: the client is an Electron app and its chrome sandbox needs
+    # privileges the container does not have.
+    return _launch(
+        "isaac streaming client",
+        [STREAMING_CLIENT, "--no-sandbox"],
+        STREAMING_CLIENT_LOG,
+        kill_stale=STREAMING_CLIENT,
+        terminal=terminal,
+    )
+
+
 def stop(patterns=None):
-    """Stop the sim, the giskard server and rviz, however they were started and
-    whichever robot/scene they were running."""
+    """Stop the sim, the giskard server, rviz and the streaming client, however
+    they were started and whichever robot/scene they were running."""
     if patterns is None:
-        patterns = (str(SIM_SCRIPT), str(SERVER_SCRIPT), "rviz2")
+        patterns = (str(SIM_SCRIPT), str(SERVER_SCRIPT), "rviz2", STREAMING_CLIENT)
     for pattern in patterns:
         subprocess.run(["pkill", "-f", pattern], stdout=subprocess.DEVNULL)
-    print("stopped isaac sim + giskard server + rviz")
+    print("stopped isaac sim + giskard server + rviz + streaming client")
 
 
 def display_desktop(anchor="split-right"):
