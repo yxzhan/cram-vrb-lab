@@ -74,6 +74,22 @@ def parse_scene_args():
     return args
 
 
+def window_size():
+    """``(width, height)`` for the app window, from ``ISAAC_WINDOW=WxH``.
+
+    A knob because the frame is charged to the *control* loop: the sim steps
+    physics, serves giskard and draws in one thread (see
+    :mod:`cram_vrb_lab.sim.runner`), so an expensive frame slows the controller.
+    Expect little from it, though -- measured on the VNC desktop with the GARMI
+    apartment, dropping 1280x960 to 640x480 (a quarter of the pixels) recovered
+    5 ms of the 27 ms a native window costs per cycle. Most of that cost is per
+    frame, not per pixel, which is why the answer for a remote desktop is the
+    livestream client rather than a smaller window.
+    """
+    width, _, height = os.environ.get("ISAAC_WINDOW", "1280x960").partition("x")
+    return int(width), int(height)
+
+
 def create_simulation_app():
     """Set up the environment and start the SimulationApp (the expensive step)."""
     setup_ros_env()
@@ -81,13 +97,14 @@ def create_simulation_app():
 
     from isaacsim import SimulationApp
 
+    width, height = window_size()
     simulation_app = SimulationApp({
         # Headless is opt-in via ISAAC_HEADLESS=1 (e.g. on a machine with no
         # usable X display); the interactive viewer is the default.
         "headless": os.environ.get("ISAAC_HEADLESS", "0") == "1",
         "hide_ui": True,
-        "width": 1280,
-        "height": 960,
+        "width": width,
+        "height": height,
         "renderer": "RaytracedLighting",
         "display_options": 3286,  # show the default grid
     })

@@ -95,6 +95,50 @@ clients:
   marker to wait for; the connection is made in the client itself.
   `garmi_demo.py` calls it only when `ISAAC_LIVESTREAM=1`, and `stop()` closes
   it with everything else.
+- **Frame rate is control rate** — the thing to check first when giskard starts
+  behaving oddly. The sim loop (`cram_vrb_lab.sim.runner.run`) steps physics,
+  consumes giskard's streamed commands and publishes the joint states / odometry /
+  TF it closes its loop on, all in one thread, so **one cycle of that loop is one
+  control cycle**: nominally 25 Hz (`rendering_dt = 8/200`). Giskard's QP runs at
+  a fixed 15 Hz on the wall clock and never checks whether the feedback it reads
+  is new — its joint-state sync silently re-applies the last message — so a sim
+  loop that drops below 15 Hz feeds a real-time controller stale state, which it
+  answers with overshoot: the robot shakes, grasps land short, drawers do not
+  open. A native Isaac window on the VNC desktop is the worst case (every frame
+  is a CPU copy plus a re-encode), but livestreaming from an RTX 3080 already runs
+  the loop at ~15 Hz and a 2070 well below it.
+  Every 5 s the sim prints where the time goes, as a `WARNING` below RTF 0.8:
+  ```
+  [sim] 24.8 Hz  RTF 0.99  (work 18 ms/cycle)
+  WARNING: [sim] 15.0 Hz  RTF 0.60  (work 65 ms/cycle)
+  ```
+  The loop also sleeps out the rest of each cycle, so sim time tracks the wall
+  clock giskard plans in rather than running ahead on a fast machine.
+  What that costs, measured on an RTX 3080 with the GARMI apartment (no giskard,
+  `--camera none`, `work` is what `world.step` costs per cycle):
+
+  | how the sim is displayed | work/cycle | control rate |
+  |---|---|---|
+  | headless | 18 ms | 24.8 Hz (RTF 0.99) |
+  | headless + livestream extension, no client attached | 18 ms | 24.8 Hz |
+  | native Isaac window on the VNC desktop, 1280×960 | 45 ms, drifting to 81 | 16.7 Hz → 10.4 Hz |
+  | same, `ISAAC_WINDOW=640x480` | 40 ms | 17.9 Hz |
+
+  So **watch the sim through the livestream client, not through a native Isaac
+  window**, on any desktop that is not a local GPU display — including the VNC
+  desktop this container serves. Both put an Isaac viewport in a window you can
+  mouse around in; the difference is that the streaming client decodes in its own
+  process, while the native window's present is charged to the control loop.
+  `ISAAC_WINDOW=WxH` (default `1280x960`) shrinks the window if you must have one,
+  but it buys back only ~5 ms of the ~27 ms a window costs — the cost is per
+  frame, not per pixel. Decimating frames (stepping physics by hand between
+  renders) was tried and measured too: it costs *more* than it saves, because each
+  hand-driven step pays its own PhysX results fetch — 44 ms/cycle against 18.
+- **Reading the report when it says the loop is slow**: livestreaming a viewport
+  that a *client* renders at 15 FPS is not the same thing as a control loop at
+  15 Hz — the `[sim]` line is the one that decides whether giskard is being fed
+  properly. Check it in the mode you actually run in (client attached, RViz open,
+  giskard running), because all of those compete for the same machine.
 - **Grabbing things in the viewport** (shift + left-drag on a rigid body while
   the sim runs, as in the GUI app): that is `omni.physx.ui`, which the GUI's
   experience file loads through `omni.physx.bundle` but the one a `SimulationApp`
