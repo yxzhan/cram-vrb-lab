@@ -349,18 +349,19 @@ for round_id in range(1, ROUNDS + 1):
 
         drive_to(f"drawer_{drawer_id}_handle")
 
-        run_plan(sequential([
-                # ParkArmsAction(Arms.LEFT),
-                # SetGripperAction(Arms.LEFT, GripperState.OPEN),
-                # ParkArmsAction(Arms.RIGHT),
-                # SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-            ], context=context))
 
         open_container(handle_body, Arms.LEFT)
         print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
 
         close_container(handle_body, Arms.LEFT)
         print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
+    
+    run_plan(sequential([
+        ParkArmsAction(Arms.LEFT),
+        SetGripperAction(Arms.LEFT, GripperState.OPEN),
+        # ParkArmsAction(Arms.RIGHT),
+        # SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+    ], context=context))
 
 # %%
 
