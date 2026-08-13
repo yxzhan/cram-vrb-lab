@@ -7,10 +7,13 @@ REPO = Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
 # os.environ["DISPLAY"] = ":0"
+# os.environ["ISAAC_RENDER"] = "0"
 
 # No local Isaac window; watch the viewport over WebRTC instead (port 49100).
 os.environ["ISAAC_HEADLESS"] = "1"
 os.environ["ISAAC_LIVESTREAM"] = "1"
+os.environ["ISAAC_WINDOW"] = "640x360"
+# os.environ["ISAAC_WINDOW"] = "960x540"
 
 from launcher import (
     start_giskard_server,

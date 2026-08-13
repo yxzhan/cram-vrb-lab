@@ -82,7 +82,11 @@ clients:
   `start_isaac_sim(camera="both")`. Because the camera drives RTX rendering,
   `--camera none` (or `ISAAC_NO_CAMERA=1`) plus `ISAAC_HEADLESS=1` /
   `ISAAC_RENDER=0` let a machine with no usable GPU display still run the control
-  path.
+  path. `ISAAC_RENDER=0` is a fallback for hardware that cannot render, **not a
+  speed-up**: Isaac only batches the eight physics substeps of a cycle inside the
+  fused `app.update()` that a rendering step performs, so a non-rendering cycle
+  has to take them by hand and pays a PhysX results fetch for each one — measured
+  on an RTX 3080, 44 ms/cycle against the 18 ms a rendering headless cycle costs.
 - **Watching the sim from another machine**: `ISAAC_LIVESTREAM=1` streams the
   viewport over WebRTC (`omni.services.livestream.nvcf`, port 49100) instead of
   opening a local window, so a browser client can watch and mouse around the
@@ -121,8 +125,15 @@ clients:
   |---|---|---|
   | headless | 18 ms | 24.8 Hz (RTF 0.99) |
   | headless + livestream extension, no client attached | 18 ms | 24.8 Hz |
+  | same at `ISAAC_WINDOW=2560x1920` (4× the pixels) | 33 ms | 21.0 Hz (RTF 0.84) |
   | native Isaac window on the VNC desktop, 1280×960 | 45 ms, drifting to 81 | 16.7 Hz → 10.4 Hz |
   | same, `ISAAC_WINDOW=640x480` | 40 ms | 17.9 Hz |
+
+  The third row is the one to remember on a weaker GPU: rendering cost scales
+  with the pixel count (4× the pixels cost 15 ms more per cycle even on a 3080),
+  so on hardware where a frame is expensive — an RTX 2070 spends ~50 ms on a
+  frame this 3080 draws in single digits — `ISAAC_WINDOW=640x480` is the first
+  thing to try, and the `[sim]` line says immediately whether it paid.
 
   So **watch the sim through the livestream client, not through a native Isaac
   window**, on any desktop that is not a local GPU display — including the VNC
@@ -138,7 +149,30 @@ clients:
   that a *client* renders at 15 FPS is not the same thing as a control loop at
   15 Hz — the `[sim]` line is the one that decides whether giskard is being fed
   properly. Check it in the mode you actually run in (client attached, RViz open,
-  giskard running), because all of those compete for the same machine.
+  giskard running), because all of those compete for the same machine. Then read
+  the one-off `cost probe` line printed just before the ready marker, which splits
+  the cycle the way the fixes divide:
+  ```
+  [sim] cost probe: physics 44 ms/cycle (8 x 5 ms steps), frame 7 ms  -- the cycle has 40 ms to run in real time.
+  ```
+  Frame-dominated is a display problem (livestream client instead of a native
+  window, smaller `ISAAC_WINDOW`); physics-dominated is a scene problem (a bigger
+  `physics_dt` in `demos/sim.py`, fewer dynamic bodies — `spawn_ycb_props` drops
+  five into the GARMI apartment that the drawer demos never touch), and no display
+  change will help it. Hand-stepping inflates the physics number, so treat it as
+  an upper bound.
+- **When the machine simply cannot hold real time** (RTF stays well below 1 after
+  all that), the arm stops tracking for a second reason: the sim's velocity
+  integrator may lead the measured position by at most `MAX_LEAD` per cycle
+  (`cram_vrb_lab.sim.velocity_integrator`), so the fastest a joint can move in
+  wall-clock time is `MAX_LEAD × cycle rate` — 0.5 rad/s at 25 Hz, 0.2 rad/s at
+  10 Hz. Giskard, which plans in wall time, commands more than that and sees a
+  joint that will not follow. Short of making the cycle cheaper, the honest fix is
+  to plan within what the sim can execute: lower the velocity limits giskard uses
+  (see `REVOLUTE_VELOCITY_LIMIT` / `PRISMATIC_VELOCITY_LIMIT` in
+  `cram_vrb_lab.scenes.garmi_apartment.giskard_world` for the container joints,
+  and the robot's own limits for the arm) and drop `target_frequency` in
+  `demos/giskard_server.py` below the sim's measured cycle rate.
 - **Grabbing things in the viewport** (shift + left-drag on a rigid body while
   the sim runs, as in the GUI app): that is `omni.physx.ui`, which the GUI's
   experience file loads through `omni.physx.bundle` but the one a `SimulationApp`

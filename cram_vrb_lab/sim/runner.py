@@ -53,7 +53,55 @@ def smooth(estimate, sample):
     return sample if estimate == 0.0 else estimate + SMOOTHING * (sample - estimate)
 
 
-def report_rate(fps, nominal_fps, work_seconds):
+def probe_costs(world, render, frames=3):
+    """Time physics and a frame separately, once, and print the split.
+
+    :func:`report_rate` can only say that a cycle is slow; this says *what* is
+    slow, which is the difference between a display problem (watch the livestream
+    instead of a native window, shrink ``ISAAC_WINDOW``) and a physics one (fewer
+    bodies, a larger ``physics_dt``) -- and the two want opposite fixes.
+
+    Deliberately not merged into the loop: a fused ``world.step(render=True)``
+    cannot be split after the fact, and hand-stepping physics for every cycle
+    just to measure it costs more than it reports (see the note in :func:`run`).
+    Here it is paid once, over a cycle's worth of steps, before the loop starts.
+
+    Both numbers are bounds, in opposite directions, so read them as a ratio and
+    let :func:`report_rate` say what a cycle really costs. Physics is an upper
+    bound (hand-stepping pays a results fetch per step). The frame is a lower
+    bound: a standalone ``render()`` does not do everything a fused update does,
+    and it collapses to a few ms when nothing is consuming frames -- on an RTX
+    3080 it read 5-6 ms whether the app was 1280x960 or 2560x1920, while the
+    cycle those two actually cost was 18 ms and 33 ms.
+    """
+    physics_dt = world.get_physics_dt()
+    substeps = max(round(world.get_rendering_dt() / physics_dt), 1)
+
+    started = time.time()
+    for _ in range(substeps):
+        world.step(render=False)
+    physics_seconds = time.time() - started
+
+    frame_seconds = 0.0
+    if render:
+        started = time.time()
+        for _ in range(frames):
+            world.render()
+        frame_seconds = (time.time() - started) / frames
+
+    budget = substeps * physics_dt
+    print(
+        f"[sim] cost probe: physics {physics_seconds * 1e3:.0f} ms/cycle"
+        f" ({substeps} x {physics_dt * 1e3:.0f} ms steps)"
+        + (f", frame {frame_seconds * 1e3:.0f} ms" if render else ", not rendering")
+        + f"  -- the cycle has {budget * 1e3:.0f} ms to run in real time."
+        " Hand-stepping costs more than a fused step, so treat the physics"
+        " number as an upper bound.",
+        flush=True,
+    )
+
+
+def report_rate(fps, nominal_fps, work_seconds, render=True):
     """Print the control-cycle rate, the real-time factor, and the work per cycle.
 
     ``work_seconds`` is what ``world.step`` costs; the rest of the cycle is the
@@ -68,15 +116,16 @@ def report_rate(fps, nominal_fps, work_seconds):
     """
     rtf = fps / nominal_fps if nominal_fps else 0.0
     slow = rtf < SLOW_RTF
+    hint = (
+        "  -- giskard closes its loop at 15 Hz on this feedback; a native window"
+        " on a remote desktop is the usual cause"
+        if render
+        else "  -- giskard closes its loop at 15 Hz on this feedback; ISAAC_RENDER=0"
+        " hand-steps physics and is slower here than rendering, not faster"
+    )
     print(
         f"{'WARNING: ' if slow else ''}[sim] {fps:.1f} Hz  RTF {rtf:.2f}"
-        f"  (work {work_seconds * 1e3:.0f} ms/cycle)"
-        + (
-            "  -- giskard closes its loop at 15 Hz on this feedback; a native"
-            " window on a remote desktop is the usual cause"
-            if slow
-            else ""
-        ),
+        f"  (work {work_seconds * 1e3:.0f} ms/cycle)" + (hint if slow else ""),
         flush=True,
     )
 
@@ -132,6 +181,7 @@ def run(simulation_app, world, render, args):
     # loop below never writes enough to fill. Without the flush the sim comes up
     # fully, publishes every topic, and the notebook's first cell still sits there
     # until it times out.
+    probe_costs(world, render)
     print(f"{setup.name} at {spawn_pose}: {READY_MARKER}", flush=True)
 
     # One thread does everything, so a cycle of this loop is three things at once:
@@ -156,7 +206,15 @@ def run(simulation_app, world, render, args):
     # each hand-driven step pays its own PhysX results fetch, which the substeps
     # inside one app.update() share -- 44 ms per cycle against those 18. Do not
     # reach for it again without measuring first.
-    cycle_dt = world.get_rendering_dt() if render else world.get_physics_dt()
+    #
+    # ISAAC_RENDER=0 has no fused call available and must hand-step, which is why
+    # it is a fallback for hardware that cannot render at all and NOT a way to go
+    # faster: it pays that same penalty, and it is the one path where a cycle
+    # costs more without a frame in it than the other paths cost with one.
+    physics_dt = world.get_physics_dt()
+    rendering_dt = world.get_rendering_dt()
+    steps_per_cycle = 1 if render else max(round(rendering_dt / physics_dt), 1)
+    cycle_dt = rendering_dt if render else steps_per_cycle * physics_dt
     work_seconds = 0.0
     cycles = 0
     window_start = deadline = time.time()
@@ -166,7 +224,11 @@ def run(simulation_app, world, render, args):
                 node.apply_commands(cycle_dt)
 
             started = time.time()
-            world.step(render=render)
+            # One fused call when rendering (physics substeps included), else a
+            # cycle's worth of physics steps by hand -- either way the cycle
+            # advances the cycle_dt that apply_commands was just told about.
+            for _ in range(steps_per_cycle):
+                world.step(render=render)
             work_seconds = smooth(work_seconds, time.time() - started)
 
             for _ in range(SPINS_PER_STEP):
@@ -194,7 +256,7 @@ def run(simulation_app, world, render, args):
             cycles += 1
             elapsed = time.time() - window_start
             if elapsed >= RATE_REPORT_PERIOD:
-                report_rate(cycles / elapsed, 1.0 / cycle_dt, work_seconds)
+                report_rate(cycles / elapsed, 1.0 / cycle_dt, work_seconds, render)
                 cycles, window_start = 0, time.time()
     except KeyboardInterrupt:
         pass

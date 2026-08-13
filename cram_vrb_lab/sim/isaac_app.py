@@ -80,11 +80,22 @@ def window_size():
     A knob because the frame is charged to the *control* loop: the sim steps
     physics, serves giskard and draws in one thread (see
     :mod:`cram_vrb_lab.sim.runner`), so an expensive frame slows the controller.
-    Expect little from it, though -- measured on the VNC desktop with the GARMI
-    apartment, dropping 1280x960 to 640x480 (a quarter of the pixels) recovered
-    5 ms of the 27 ms a native window costs per cycle. Most of that cost is per
-    frame, not per pixel, which is why the answer for a remote desktop is the
-    livestream client rather than a smaller window.
+
+    What it is worth depends on which half of the frame cost dominates, and the
+    ``cost probe`` line says which:
+
+    - the *presentation* half (getting the finished frame onto a remote desktop:
+      a CPU copy and a re-encode per frame) is flat in the pixel count. Measured
+      on the VNC desktop with an RTX 3080, 1280x960 -> 640x480 recovered 5 ms of
+      the 27 ms a native window costs. Little to gain; watch the livestream
+      instead.
+    - the *rendering* half is not flat, and on a GPU that cannot draw this scene
+      quickly it is the whole problem -- an RTX 2070 spends 50 ms on a frame that
+      a 3080 renders in single digits.
+
+    Not verified here for the second case: an idle livestream (no client
+    attached) does not actually render, so measuring the pixel scaling needs a
+    machine where the frame is expensive in the first place.
     """
     width, _, height = os.environ.get("ISAAC_WINDOW", "1280x960").partition("x")
     return int(width), int(height)
