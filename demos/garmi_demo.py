@@ -1,4 +1,3 @@
-# %%
 import math
 import sys
 from pathlib import Path
@@ -14,8 +13,6 @@ from launcher import start_giskard_server, start_isaac_sim, start_rviz, stop
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
 
-# SPAWN_POSITION = (0.5, 6.0, 0.0259)
-# SPAWN_YAW = math.pi / 2
 
 SPAWN_POSITION = (0, 5.0, 0.0259)
 SPAWN_YAW = -math.pi / 2
@@ -141,11 +138,6 @@ from semantic_digital_twin.datastructures.definitions import GripperState
 #         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
 #     ], context=context))
 
-# %%
-# Driving is what the mobile base buys: the kitchen run is 2.5 m wide, so no one
-# standing position reaches all of it, and the demo drives to each handle instead
-# of being spawned in front of one. The base is an OmniDrive, so giskard is free
-# to solve this sideways as well as forwards; the sim consumes linear.y.
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -181,7 +173,7 @@ ARRIVED = 0.05
 """How close to the station counts as arrived [m]."""
 
 
-def drive_to(handle_name, attempts=3):
+def drive_to(handle_name, attempts=10):
     """Drive to the handle, repeating until the base is actually there.
 
     The first NavigateAction routinely ends short -- it drives most of the way
@@ -263,7 +255,7 @@ def report_grasp_geometry(handle_body, arm=Arms.LEFT):
     print(f'  -> CRAM aims {np.linalg.norm(centre) * 1000:.1f} mm off the collision centre')
 
 
-def grasp_handle(handle_body, arm=Arms.LEFT, attempts=3):
+def grasp_handle(handle_body, arm=Arms.LEFT, attempts=6):
     """Reach and close on the handle, repeating while the tool lands short.
 
     Same shape as :func:`drive_to`, and for the same reason: a Cartesian goal in
@@ -284,7 +276,7 @@ def grasp_handle(handle_body, arm=Arms.LEFT, attempts=3):
     for attempt in range(1, attempts + 1):
         run_plan(execute_single(GraspingAction(handle_body, arm, grasp),
                                 context=context),
-                 collision_avoidance=False)
+                 collision_avoidance=True)
         residual = tool_position(arm) - goal
         # Resolved along the axes of the pose that was *asked* for, so the three
         # numbers keep meaning the same thing however the arm ended up oriented.
@@ -305,9 +297,9 @@ def _work_container(motion, handle_body, arm, attempts):
     report_grasp_geometry(handle_body, arm)
     grasp_handle(handle_body, arm, attempts)
     run_plan(execute_single(motion(handle_body, arm), context=context),
-             collision_avoidance=False)
+             collision_avoidance=True)
     run_plan(execute_single(MoveGripperMotion(GripperState.OPEN, arm), context=context),
-             collision_avoidance=False)
+             collision_avoidance=True)
 
 
 def open_container(handle_body, arm=Arms.LEFT, attempts=3):
@@ -319,9 +311,9 @@ def close_container(handle_body, arm=Arms.LEFT, attempts=3):
     """CloseAction, likewise -- it is the same three steps with ClosingMotion."""
     _work_container(ClosingMotion, handle_body, arm, attempts)
 
-
-for i in range (1, 3):
-    drawer_id = i
+from itertools import cycle
+for i in list(cycle([1, 2, 3]))[:30]:
+    print(i)
     drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
     handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
 
@@ -335,14 +327,6 @@ for i in range (1, 3):
 
     drive_to(f"drawer_{drawer_id}_handle")
 
-    open_container(handle_body, Arms.LEFT)
-    print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
-
-    close_container(handle_body, Arms.LEFT)
-    print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
-
-    drive_to(f"drawer_{drawer_id}_handle")
-
     run_plan(sequential([
             ParkArmsAction(Arms.LEFT),
             ParkArmsAction(Arms.RIGHT),
@@ -350,33 +334,41 @@ for i in range (1, 3):
             SetGripperAction(Arms.RIGHT, GripperState.OPEN),
         ], context=context))
 
+    open_container(handle_body, Arms.LEFT)
+    print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
 
-door_id = "1"
-door_body = world.get_body_by_name(f"cabinet_door_{door_id}")
-door_handle_body = world.get_body_by_name(f"cabinet_door_{door_id}_handle")
-
-if not world.get_semantic_annotations_by_type(Door):
-    with world.modify_world():
-        world.add_semantic_annotation_recursively(
-            Door(root=door_body, handle=Handle(root=door_handle_body))
-        )
-print("Door annotated:", door_body.name, "with handle", door_handle_body.name)
-
-drive_to(f"cabinet_door_{door_id}_handle")
-open_container(door_handle_body, Arms.RIGHT)
-print("Opened, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
+    close_container(handle_body, Arms.LEFT)
+    print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
 
 # %%
-close_container(door_handle_body, Arms.RIGHT)
-print("Closed, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
+
+# door_id = "1"
+# door_body = world.get_body_by_name(f"cabinet_door_{door_id}")
+# door_handle_body = world.get_body_by_name(f"cabinet_door_{door_id}_handle")
+
+# if not world.get_semantic_annotations_by_type(Door):
+#     with world.modify_world():
+#         world.add_semantic_annotation_recursively(
+#             Door(root=door_body, handle=Handle(root=door_handle_body))
+#         )
+# print("Door annotated:", door_body.name, "with handle", door_handle_body.name)
+
+# drive_to(f"cabinet_door_{door_id}_handle")
+# open_container(door_handle_body, Arms.RIGHT)
+# # run_plan(
+# #     execute_single(OpenAction(door_handle_body, Arms.RIGHT), context=context),
+# #     collision_avoidance=False,
+# # )
+# print("Opened, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
+
+# close_container(door_handle_body, Arms.RIGHT)
+# print("Closed, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
 
 
-run_plan(sequential([
-        ParkArmsAction(Arms.LEFT),
-        ParkArmsAction(Arms.RIGHT),
-        SetGripperAction(Arms.LEFT, GripperState.OPEN),
-        SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-    ], context=context))
+# run_plan(sequential([
+#         ParkArmsAction(Arms.LEFT),
+#         ParkArmsAction(Arms.RIGHT),
+#         SetGripperAction(Arms.LEFT, GripperState.OPEN),
+#         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+#     ], context=context))
 
-# %%
-# stop()
