@@ -157,7 +157,7 @@ from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
-STANDOFF = 1.5
+STANDOFF = 1.3
 """How far south of the cabinet fronts (y = 7.12) to stand [m].
 
 The home pose holds the hands 0.79 m in front of base_link, so anything closer
@@ -326,34 +326,36 @@ def close_container(handle_body, arm=Arms.LEFT, attempts=3):
     """CloseAction, likewise -- it is the same three steps with ClosingMotion."""
     _work_container(ClosingMotion, handle_body, arm, attempts)
 
-drawer_id = "1"
-drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
-handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
 
-if not world.get_semantic_annotations_by_type(Drawer):
-    with world.modify_world():
-        world.add_semantic_annotation_recursively(
-            Drawer(root=drawer_body, handle=Handle(root=handle_body))
-        )
-print("drawer annotated:", drawer_body.name, "with handle", handle_body.name)
-print("handle at", np.round(body_position(f"drawer_{drawer_id}_handle"), 3))
+for i in range (1, 4):
+    drawer_id = i
+    drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
+    handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
 
-drive_to(f"drawer_{drawer_id}_handle")
+    if not world.get_semantic_annotations_by_type(Drawer):
+        with world.modify_world():
+            world.add_semantic_annotation_recursively(
+                Drawer(root=drawer_body, handle=Handle(root=handle_body))
+            )
+    print("drawer annotated:", drawer_body.name, "with handle", handle_body.name)
+    print("handle at", np.round(body_position(f"drawer_{drawer_id}_handle"), 3))
 
-open_container(handle_body, Arms.RIGHT)
-print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
+    drive_to(f"drawer_{drawer_id}_handle")
 
-# close_container(handle_body, Arms.RIGHT)
-# print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
+    open_container(handle_body, Arms.LEFT)
+    print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
 
-drive_to(f"drawer_{drawer_id}_handle")
+    close_container(handle_body, Arms.LEFT)
+    print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
 
-run_plan(sequential([
-        ParkArmsAction(Arms.LEFT),
-        ParkArmsAction(Arms.RIGHT),
-        SetGripperAction(Arms.LEFT, GripperState.OPEN),
-        SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-    ], context=context))
+    drive_to(f"drawer_{drawer_id}_handle")
+
+    run_plan(sequential([
+            ParkArmsAction(Arms.LEFT),
+            ParkArmsAction(Arms.RIGHT),
+            SetGripperAction(Arms.LEFT, GripperState.OPEN),
+            SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+        ], context=context))
 
 
 door_id = "1"
