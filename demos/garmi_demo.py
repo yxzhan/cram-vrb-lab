@@ -14,15 +14,8 @@ from launcher import start_giskard_server, start_isaac_sim, start_rviz, stop
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
 
-# Where GARMI *starts*, not where it works from -- the base drives, so the demo
-# navigates to the cabinet below. Anywhere with clear floor will do; this is the
-# middle of the living room, facing map +y. z is BASE_LINK_HEIGHT: the base is
-# teleported rather than rolled (see undrive_wheels), so nothing settles the
-# wheels onto the floor by itself.
-# Only the sim is told this. Giskard learns the pose from /odom and the static
-# map->odom, the way a real robot's localization would deliver it.
-SPAWN_POSITION = (0.5, 6.0, 0.0259)
-SPAWN_YAW = math.pi / 2
+# SPAWN_POSITION = (0.5, 6.0, 0.0259)
+# SPAWN_YAW = math.pi / 2
 
 SPAWN_POSITION = (0, 5.0, 0.0259)
 SPAWN_YAW = -math.pi / 2
@@ -138,15 +131,15 @@ from semantic_digital_twin.datastructures.definitions import GripperState
 #         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
 #     ], context=context))
 
-run_plan(sequential([
-        SetGripperAction(Arms.LEFT, GripperState.CLOSE),
-        SetGripperAction(Arms.RIGHT, GripperState.CLOSE),
-    ], context=context))
+# run_plan(sequential([
+#         SetGripperAction(Arms.LEFT, GripperState.CLOSE),
+#         SetGripperAction(Arms.RIGHT, GripperState.CLOSE),
+#     ], context=context))
 
-run_plan(sequential([
-        SetGripperAction(Arms.LEFT, GripperState.OPEN),
-        SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-    ], context=context))
+# run_plan(sequential([
+#         SetGripperAction(Arms.LEFT, GripperState.OPEN),
+#         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+#     ], context=context))
 
 # %%
 # Driving is what the mobile base buys: the kitchen run is 2.5 m wide, so no one
@@ -327,7 +320,7 @@ def close_container(handle_body, arm=Arms.LEFT, attempts=3):
     _work_container(ClosingMotion, handle_body, arm, attempts)
 
 
-for i in range (1, 4):
+for i in range (1, 3):
     drawer_id = i
     drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
     handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
@@ -369,21 +362,21 @@ if not world.get_semantic_annotations_by_type(Door):
         )
 print("Door annotated:", door_body.name, "with handle", door_handle_body.name)
 
-# drive_to(f"cabinet_door_{door_id}_handle")
-# open_container(door_handle_body, Arms.RIGHT)
-# print("Opened, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
+drive_to(f"cabinet_door_{door_id}_handle")
+open_container(door_handle_body, Arms.RIGHT)
+print("Opened, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
 
 # %%
-# close_container(door_handle_body, Arms.RIGHT)
-# print("Closed, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
+close_container(door_handle_body, Arms.RIGHT)
+print("Closed, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
 
 
-# run_plan(sequential([
-#         ParkArmsAction(Arms.LEFT),
-#         ParkArmsAction(Arms.RIGHT),
-#         SetGripperAction(Arms.LEFT, GripperState.OPEN),
-#         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-#     ], context=context))
+run_plan(sequential([
+        ParkArmsAction(Arms.LEFT),
+        ParkArmsAction(Arms.RIGHT),
+        SetGripperAction(Arms.LEFT, GripperState.OPEN),
+        SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+    ], context=context))
 
 # %%
 # stop()

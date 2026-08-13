@@ -116,8 +116,8 @@ def hand_link(side: str) -> str:
 def tool_frame_link(side: str) -> str:
     return f"{ARM_PREFIX[side]}_gripper_fr3_hand_tcp"
 
-
-TOOL_FRAME_OFFSET = 0.1034
+# TOOL_FRAME_OFFSET = 0.1034
+TOOL_FRAME_OFFSET = "0 0.02 0.1034"
 """Distance [m] along the hand's +z to the point between the fingertips."""
 
 MAX_FINGER_TRAVEL = 0.04
@@ -265,7 +265,9 @@ def load_patched_urdf() -> str:
     - mesh paths are made absolute (nothing resolves
       ``package://garmi_description`` here) and, where the file name would not
       survive Isaac's importer, aliased -- see :func:`_usd_safe_mesh`;
-    - the TCP frames are given :data:`_TOOL_FRAME_RPY`;
+    - the TCP frames are given :data:`_TOOL_FRAME_RPY` and re-anchored at
+      :data:`TOOL_FRAME_OFFSET` (the same value the description already carries,
+      written back so that constant is the one knob for the grasp point);
     - the arms, grippers and head joints are renamed to what the upstream
       semantic model expects -- see :func:`_upstream_renames`.
 
@@ -283,7 +285,9 @@ def load_patched_urdf() -> str:
         for mimic in joint.findall("mimic"):
             joint.remove(mimic)
         if joint.get("name", "").endswith("_hand_tcp_joint"):
-            joint.find("origin").set("rpy", _TOOL_FRAME_RPY)
+            origin = joint.find("origin")
+            origin.set("rpy", _TOOL_FRAME_RPY)
+            origin.set("xyz", f"{TOOL_FRAME_OFFSET}")
 
     for mesh in root.iter("mesh"):
         filename = mesh.get("filename")

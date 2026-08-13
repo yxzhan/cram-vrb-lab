@@ -1,14 +1,49 @@
 # cram-vrb-lab
 
+[![Binder](https://binder.intel4coro.de/badge_logo.svg)](https://binder.dev.intel4coro.de/v2/gh/yxzhan/cram-vrb-lab/main?urlpath=lab%2Ftree%2Fdemos%2Fpanda_aicor_apartment.ipynb)
+
 A virtual research lab for running
 [CRAM](https://github.com/cram2/cognitive_robot_abstract_machine)
 (Cognitive Robot Abstract Machine) household tasks in NVIDIA Isaac Sim: an
 Isaac scene publishes a real-robot-shaped ROS 2 interface, a
 [giskardpy](https://github.com/SemRoCo/giskardpy) server does closed-loop
 whole-body control against it, and CRAM plans drive the robot through
-high-level actions. Current demo: a Hello Robot Stretch in an apartment scene;
-the code is organized so further robots and scenes plug in alongside it.
+high-level actions. Three robots (a Hello Robot Stretch, a Franka Panda and
+GARMI) across two apartment scenes; the code is organized so further robots and
+scenes plug in alongside them.
 
+## Quick start
+
+The docker image is pre-built on the GPU-enabled
+[AIRCOR Virtual Research Building](https://vrb.ease-crc.org/) and ships this
+repository, Isaac Sim, the CRAM venv and the `ros2_ws` overlay already set up.
+
+### Run the pre-built image locally
+
+> Note: Needs Ubuntu 22.04+, an NVIDIA RTX GPU with the drivers installed (`nvidia-smi`), ~16 GB RAM and ~50 GB
+of free disk, plus [Docker](https://docs.docker.com/engine/install/) and the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+
+```bash
+xhost +local:root && \
+mkdir -p ~/isaac_cache && \
+cd ~/isaac_cache && \
+sudo docker run --rm --gpus all -it \
+  --user root \
+  --env NVIDIA_DRIVER_CAPABILITIES=all \
+  --env ACCEPT_EULA="YES" \
+  --env PRIVACY_CONSENT="YES" \
+  --env OMNI_KIT_ACCEPT_EULA="YES" \
+  --env OMNI_KIT_ALLOW_ROOT=1 \
+  --env DISPLAY=${DISPLAY} \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v /usr/share/vulkan/icd.d/:/etc/vulkan/icd.d \
+  -v ${PWD}:/isaac-sim/kit/cache \
+  intel4coro/yxzhan-2dcram-2dvrb-2dlab-eb909a:0ddf3e65b6484e03ff6d026cc35350433ff6bf5c \
+  /home/jovyan/cram-vrb-lab/binder/cram_python_wrapper.sh demos/garmi_demo.py
+```
+
+## Architecture
 ```
 CRAM plan (notebook, CRAM kernel)
    └─► giskard server (CRAM venv)  ◄── joint states / odom / tf ──┐
@@ -21,7 +56,7 @@ CRAM plan (notebook, CRAM kernel)
 | `cram_vrb_lab/` | The Python package (see layout below) |
 | `demos/` | Entry scripts + notebooks composing the package into runnable demos |
 | `cognitive_robot_abstract_machine/` | CRAM monorepo (git submodule; also provides the python venv) |
-| `assets/` | USD scenes/robots; `stretch_urdf/` is the official URDF submodule |
+| `assets/` | USD scenes/robots; `stretch_urdf/`, `garmi_description/` and `franka_ros/` are the official description submodules |
 | `ros2_ws/` | Generated ROS 2 workspace (not tracked — see below) |
 | `binder/` | Docker image definition and the jupyter kernel wrappers |
 
@@ -36,6 +71,7 @@ cram_vrb_lab/
 ├── control/            # generic control infra: robot+scene giskard world, giskard client/server helpers
 ├── robots/stretch/     # everything Stretch: joint/topic contract, sim node, giskard interface
 ├── robots/panda/       # everything Panda: URDF patching, semantic model, sim node, giskard interface
+├── robots/garmi/       # everything GARMI: URDF patching, omni-drive base, two FR3 arms, CRAM motion overrides
 ├── scenes/apartment/   # everything apartment: asset paths + USD/URDF alignment, sim loader, giskard world
 ├── scenes/garmi_apartment/  # the other flat: USD + its MJCF twin, tabletop objects for perception
 ├── scenes/empty/       # ground and lights, for a robot that needs no scenery
@@ -62,23 +98,6 @@ Adding a robot means adding one directory under `robots/` plus one line in
 `setups.py`. The Panda is the worked example, and the smaller one: a joint/topic contract, a semantic model
 for the digital twin (`semantic_digital_twin` ships none for the Panda), a
 giskard world and interface config, and an Isaac Sim node.
-
-## Quick start
-
-```bash
-git clone --recurse-submodules https://github.com/yxzhan/cram-vrb-lab.git
-# environment setup: see binder/Dockerfile (or run the image via binder/docker-compose.yml)
-```
-
-Open `demos/panda_pick_place_cram.ipynb` (kernel: **CRAM**) — it starts the
-simulation and the giskard server and runs the simplest full task end to end: a
-Franka Panda mounted in the apartment picks a cube off the table it is bolted to
-and puts it down further along. `demos/stretch_pick_place_cram.ipynb` is the same task on a mobile
-robot, `demos/stretch_apartment_cram.ipynb` goes further into the apartment and
-its drawers, and for hand-built giskard motion goals use
-`demos/stretch_apartment_giskard.ipynb`.
-
-Details and troubleshooting: `demos/README.md`.
 
 ## Rebuilding ros2_ws
 

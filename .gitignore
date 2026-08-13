@@ -11,3 +11,4 @@ iai_apartment/
 # relative to the working directory, and records them relative too, so this
 # has to stay where it lands. Regenerated on every import.
 /materials/
+.backup/
