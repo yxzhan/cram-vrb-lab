@@ -312,6 +312,7 @@ def close_container(handle_body, arm=Arms.LEFT, attempts=3):
     _work_container(ClosingMotion, handle_body, arm, attempts)
 
 for i in range(1, 4):
+    drawer_id = i
     drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
     handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
 
