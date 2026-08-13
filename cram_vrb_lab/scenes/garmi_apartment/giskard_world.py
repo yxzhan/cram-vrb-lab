@@ -63,18 +63,38 @@ from cram_vrb_lab.specs import EnvironmentSpec
 
 from .constants import GARMI_APARTMENT_MJCF_PATH, garmi_apartment_pose_in_map
 
-REVOLUTE_VELOCITY_LIMIT = math.pi / 2
+REVOLUTE_VELOCITY_LIMIT = math.pi / 8
 """Velocity limit [rad/s] given to the MJCF's doors and cabinet doors.
 
-Not invented: this is the value every revolute environment joint in
-``iai_apartment/urdf/apartment.urdf`` carries (``velocity="1.5708"``), so the two
-scenes present giskard with furniture that swings at the same speed.
+Deliberately a quarter of what ``iai_apartment/urdf/apartment.urdf`` gives its
+revolute joints (``velocity="1.5708"``), which is what this used to carry so that
+the two flats' furniture moved alike. **What matters is not the hinge rate but
+how fast the handle travels**: a cabinet-door handle sits about 0.41 m from its
+hinge, so pi/2 rad/s drags it through 0.64 m/s -- faster than the drawers were,
+and far faster than a gripper can hold on to. At pi/8 that is 0.16 m/s. Like
+:data:`PRISMATIC_VELOCITY_LIMIT` this is a tuning value: multiply by the 0.41 m
+lever arm to compare the two.
 """
 
-PRISMATIC_VELOCITY_LIMIT = 0.5
+PRISMATIC_VELOCITY_LIMIT = 0.1
 """Velocity limit [m/s] given to the MJCF's drawers.
 
-The value the apartment URDF uses for every drawer (``velocity="0.5"``).
+Far below the ``velocity="0.5"`` the apartment URDF gives its drawers, which is
+what this used to carry, and the reason both constants deviate from it.
+
+This is the speed a drawer is *pulled out at*, and it is a property of the
+furniture rather than of the robot: giskard's ``Open`` goal
+(:class:`giskardpy.motion_statechart.goals.open_close.Open`) drives the
+container's own DOF towards its limit, and the QP takes the tightest of that
+DOF's velocity limit and the task's ``max_velocity`` (1.0 by default, and
+:class:`~coraplex.robot_plans.actions.core.container.OpenAction` does not expose
+it) -- so this constant, not anything on the arm, is what sets the pace.
+
+At 0.5 m/s a 0.466 m drawer was out in under a second, which levered the handle
+straight out from between the gripper's pads. Lowering it is half the fix; see
+``FINGER_DRIVE_STIFFNESS`` in :mod:`cram_vrb_lab.robots.garmi.isaac_node` for the
+other half. A tuning value, not a measured one -- a full drawer takes roughly
+``0.466 / this`` seconds, so raise it once a grasp survives the pull.
 """
 
 

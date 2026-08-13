@@ -88,15 +88,33 @@ the lift sinks under the torso it carries and the head tips forward, which is
 what freezing these joints used to hide.
 """
 
-FINGER_DRIVE_STIFFNESS = 400.0
-FINGER_DRIVE_DAMPING = 40.0
+FINGER_DRIVE_STIFFNESS = 2000.0
+FINGER_DRIVE_DAMPING = 90.0
 """Finger drive gains as a **force** drive would take them, [N/m] and [N/(m/s)].
 
-NVIDIA's own Franka numbers. Divided by
-:data:`~cram_vrb_lab.robots.garmi.joints.FINGER_MASS` before they are handed to
-``set_gains``, because the URDF importer authors *acceleration* drives -- see the
-Panda's ``FINGER_MASS`` for the full account of what that costs when it is
-missed.
+Five times NVIDIA's own Franka numbers (400 / 40), which the Panda still runs on.
+The stiffness sets the grip: the integrator lets a target lead the measured
+position by :data:`~cram_vrb_lab.sim.velocity_integrator.MAX_LEAD`, so a blocked
+finger pushes with ``stiffness * MAX_LEAD`` -- 8 N at NVIDIA's value, 40 N here,
+against a 100 N effort limit in the description.
+
+8 N was sized for a different job. The Panda's note says as much: it is "far
+above the 0.5 N the cube's weight needs", i.e. enough to hold a light object
+against gravity. Opening a drawer is not that -- the arm has to hold a 12 mm
+handle rod against the pull of the container coming out, and at 8 N the rod is
+levered out from between the pads. Slowing the container down is the other half
+of the fix; see ``PRISMATIC_VELOCITY_LIMIT`` in
+:mod:`cram_vrb_lab.scenes.garmi_apartment.giskard_world`.
+
+Damping is scaled by sqrt(5) rather than 5, which is what keeps the damping ratio
+(``d / (2 * sqrt(k * m))``) where it was: scaling it with the stiffness would
+leave the fingers overdamped and slow to close, leaving it alone would let them
+ring.
+
+Both are divided by :data:`~cram_vrb_lab.robots.garmi.joints.FINGER_MASS` before
+they are handed to ``set_gains``, because the URDF importer authors *acceleration*
+drives -- see the Panda's ``FINGER_MASS`` for the full account of what that costs
+when it is missed.
 """
 
 

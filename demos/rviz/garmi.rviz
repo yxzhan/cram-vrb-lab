@@ -41,7 +41,63 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        base_imu:
+        arm_0_fr3_link0:
+          Value: true
+        arm_0_fr3_link1:
+          Value: true
+        arm_0_fr3_link2:
+          Value: true
+        arm_0_fr3_link3:
+          Value: true
+        arm_0_fr3_link4:
+          Value: true
+        arm_0_fr3_link5:
+          Value: true
+        arm_0_fr3_link6:
+          Value: true
+        arm_0_fr3_link7:
+          Value: true
+        arm_0_fr3_link8:
+          Value: true
+        arm_0_gripper_fr3_hand:
+          Value: true
+        arm_0_gripper_fr3_hand_tcp:
+          Value: true
+        arm_0_gripper_fr3_leftfinger:
+          Value: true
+        arm_0_gripper_fr3_rightfinger:
+          Value: true
+        arm_1_fr3_link0:
+          Value: true
+        arm_1_fr3_link1:
+          Value: true
+        arm_1_fr3_link2:
+          Value: true
+        arm_1_fr3_link3:
+          Value: true
+        arm_1_fr3_link4:
+          Value: true
+        arm_1_fr3_link5:
+          Value: true
+        arm_1_fr3_link6:
+          Value: true
+        arm_1_fr3_link7:
+          Value: true
+        arm_1_fr3_link8:
+          Value: true
+        arm_1_gripper_fr3_hand:
+          Value: true
+        arm_1_gripper_fr3_hand_tcp:
+          Value: true
+        arm_1_gripper_fr3_leftfinger:
+          Value: true
+        arm_1_gripper_fr3_rightfinger:
+          Value: true
+        arm_mount_left_link:
+          Value: true
+        arm_mount_right_link:
+          Value: true
+        axle_link:
           Value: true
         base_link:
           Value: true
@@ -52,6 +108,8 @@ Visualization Manager:
         bay_window_platform_1:
           Value: true
         bed_0:
+          Value: true
+        body_link:
           Value: true
         book_0:
           Value: true
@@ -93,41 +151,17 @@ Visualization Manager:
           Value: true
         cabinet_door_4_handle:
           Value: true
-        camera_accel_frame:
-          Value: true
-        camera_accel_optical_frame:
-          Value: true
-        camera_bottom_screw_frame:
-          Value: true
-        camera_color_frame:
-          Value: true
-        camera_color_optical_frame:
-          Value: true
-        camera_depth_frame:
-          Value: true
-        camera_depth_optical_frame:
-          Value: true
-        camera_gyro_frame:
-          Value: true
-        camera_gyro_optical_frame:
-          Value: true
-        camera_infra1_frame:
-          Value: true
-        camera_infra1_optical_frame:
-          Value: true
-        camera_infra2_frame:
-          Value: true
-        camera_infra2_optical_frame:
-          Value: true
-        camera_link:
-          Value: true
-        caster_link:
-          Value: true
         chair_0:
           Value: true
         chair_1:
           Value: true
+        chassis_link:
+          Value: true
         coffee_table_0:
+          Value: true
+        cover_link:
+          Value: true
+        default_mount:
           Value: true
         dining_table_0:
           Value: true
@@ -175,27 +209,17 @@ Visualization Manager:
           Value: true
         flowers_0:
           Value: true
+        front_cover_link:
+          Value: true
+        front_left_wheel_link:
+          Value: true
+        front_lights_link:
+          Value: true
+        front_right_wheel_link:
+          Value: true
+        front_rocker_link:
+          Value: true
         green_plants_0:
-          Value: true
-        gripper_camera_bottom_screw_frame:
-          Value: true
-        gripper_camera_color_frame:
-          Value: true
-        gripper_camera_color_optical_frame:
-          Value: true
-        gripper_camera_depth_frame:
-          Value: true
-        gripper_camera_depth_optical_frame:
-          Value: true
-        gripper_camera_infra1_frame:
-          Value: true
-        gripper_camera_infra1_optical_frame:
-          Value: true
-        gripper_camera_infra2_frame:
-          Value: true
-        gripper_camera_infra2_optical_frame:
-          Value: true
-        gripper_camera_link:
           Value: true
         hand_sanitizer_0:
           Value: true
@@ -203,77 +227,45 @@ Visualization Manager:
           Value: true
         handrail_1:
           Value: true
+        head:
+          Value: true
+        imu_0_link:
+          Value: true
+        imu_1_base_link:
+          Value: true
+        imu_1_link:
+          Value: true
         kitchen_cabinet:
           Value: true
-        laser:
+        left_side_cover_link:
           Value: true
-        link_arm_l0:
+        lidar2d_0_laser:
           Value: true
-        link_arm_l1:
+        lidar2d_0_link:
           Value: true
-        link_arm_l2:
+        lidar2d_1_laser:
           Value: true
-        link_arm_l3:
+        lidar2d_1_link:
           Value: true
-        link_arm_l4:
+        lift_0_base_link:
           Value: true
-        link_aruco_d405:
+        lift_0_lower_link:
           Value: true
-        link_aruco_fingertip_left:
+        lift_0_mount:
           Value: true
-        link_aruco_fingertip_right:
+        lift_0_mount_rotated_link:
           Value: true
-        link_aruco_inner_wrist:
+        lift_0_plate_link:
           Value: true
-        link_aruco_left_base:
-          Value: true
-        link_aruco_right_base:
-          Value: true
-        link_aruco_shoulder:
-          Value: true
-        link_aruco_top_wrist:
-          Value: true
-        link_grasp_center:
-          Value: true
-        link_gripper_finger_left:
-          Value: true
-        link_gripper_finger_right:
-          Value: true
-        link_gripper_fingertip_left:
-          Value: true
-        link_gripper_fingertip_right:
-          Value: true
-        link_gripper_s3_body:
-          Value: true
-        link_head:
-          Value: true
-        link_head_nav_cam:
-          Value: true
-        link_head_pan:
-          Value: true
-        link_head_tilt:
-          Value: true
-        link_left_wheel:
-          Value: true
-        link_lift:
-          Value: true
-        link_mast:
-          Value: true
-        link_right_wheel:
-          Value: true
-        link_straight_gripper:
-          Value: true
-        link_wrist_pitch:
-          Value: true
-        link_wrist_quick_connect:
-          Value: true
-        link_wrist_roll:
-          Value: true
-        link_wrist_yaw:
-          Value: true
-        link_wrist_yaw_bottom:
+        lift_0_upper_link:
           Value: true
         map:
+          Value: true
+        mounting_plate_link:
+          Value: true
+        neck_1:
+          Value: true
+        neck_2:
           Value: true
         nightstand_0:
           Value: true
@@ -283,7 +275,19 @@ Visualization Manager:
           Value: true
         radiator_0:
           Value: true
-        respeaker_base:
+        rear_cover_link:
+          Value: true
+        rear_left_wheel_link:
+          Value: true
+        rear_lights_link:
+          Value: true
+        rear_right_wheel_link:
+          Value: true
+        rear_rocker_link:
+          Value: true
+        right_side_cover_link:
+          Value: true
+        riser_link:
           Value: true
         sofa_0:
           Value: true
@@ -336,104 +340,132 @@ Visualization Manager:
         map:
           odom:
             base_link:
-              base_imu:
+              arm_0_fr3_link0:
                 {}
-              caster_link:
+              arm_0_fr3_link1:
                 {}
-              laser:
+              arm_0_fr3_link2:
                 {}
-              link_arm_l0:
-                link_aruco_inner_wrist:
-                  {}
-                link_aruco_top_wrist:
-                  {}
-              link_arm_l1:
+              arm_0_fr3_link3:
                 {}
-              link_arm_l2:
+              arm_0_fr3_link4:
                 {}
-              link_arm_l3:
+              arm_0_fr3_link5:
                 {}
-              link_aruco_left_base:
+              arm_0_fr3_link6:
                 {}
-              link_aruco_right_base:
+              arm_0_fr3_link7:
                 {}
-              link_gripper_finger_left:
-                link_aruco_fingertip_left:
-                  {}
-                link_gripper_fingertip_left:
-                  {}
-              link_gripper_finger_right:
-                link_aruco_fingertip_right:
-                  {}
-                link_gripper_fingertip_right:
-                  {}
-              link_head_pan:
+              arm_0_fr3_link8:
                 {}
-              link_head_tilt:
-                camera_bottom_screw_frame:
-                  camera_link:
-                    camera_accel_frame:
-                      camera_accel_optical_frame:
-                        {}
-                    camera_color_frame:
-                      camera_color_optical_frame:
-                        {}
-                    camera_depth_frame:
-                      camera_depth_optical_frame:
-                        {}
-                    camera_gyro_frame:
-                      camera_gyro_optical_frame:
-                        {}
-                    camera_infra1_frame:
-                      camera_infra1_optical_frame:
-                        {}
-                    camera_infra2_frame:
-                      camera_infra2_optical_frame:
-                        {}
-                link_head_nav_cam:
-                  {}
-              link_left_wheel:
+              arm_0_gripper_fr3_hand:
                 {}
-              link_lift:
-                link_arm_l4:
-                  {}
-                link_aruco_shoulder:
-                  {}
-              link_mast:
-                link_head:
-                  {}
-                respeaker_base:
-                  {}
-              link_right_wheel:
+              arm_0_gripper_fr3_hand_tcp:
                 {}
-              link_wrist_pitch:
+              arm_0_gripper_fr3_leftfinger:
                 {}
-              link_wrist_roll:
-                link_straight_gripper:
-                  link_gripper_s3_body:
-                    gripper_camera_bottom_screw_frame:
-                      gripper_camera_link:
-                        gripper_camera_color_frame:
-                          gripper_camera_color_optical_frame:
-                            {}
-                        gripper_camera_depth_frame:
-                          gripper_camera_depth_optical_frame:
-                            {}
-                        gripper_camera_infra1_frame:
-                          gripper_camera_infra1_optical_frame:
-                            {}
-                        gripper_camera_infra2_frame:
-                          gripper_camera_infra2_optical_frame:
-                            {}
-                    link_aruco_d405:
-                      {}
-                    link_grasp_center:
-                      {}
-                link_wrist_quick_connect:
-                  {}
-              link_wrist_yaw:
-                link_wrist_yaw_bottom:
-                  {}
+              arm_0_gripper_fr3_rightfinger:
+                {}
+              arm_1_fr3_link0:
+                {}
+              arm_1_fr3_link1:
+                {}
+              arm_1_fr3_link2:
+                {}
+              arm_1_fr3_link3:
+                {}
+              arm_1_fr3_link4:
+                {}
+              arm_1_fr3_link5:
+                {}
+              arm_1_fr3_link6:
+                {}
+              arm_1_fr3_link7:
+                {}
+              arm_1_fr3_link8:
+                {}
+              arm_1_gripper_fr3_hand:
+                {}
+              arm_1_gripper_fr3_hand_tcp:
+                {}
+              arm_1_gripper_fr3_leftfinger:
+                {}
+              arm_1_gripper_fr3_rightfinger:
+                {}
+              arm_mount_left_link:
+                {}
+              arm_mount_right_link:
+                {}
+              axle_link:
+                {}
+              body_link:
+                {}
+              chassis_link:
+                {}
+              cover_link:
+                {}
+              default_mount:
+                {}
+              front_cover_link:
+                {}
+              front_left_wheel_link:
+                {}
+              front_lights_link:
+                {}
+              front_right_wheel_link:
+                {}
+              front_rocker_link:
+                {}
+              head:
+                {}
+              imu_0_link:
+                {}
+              imu_1_base_link:
+                {}
+              imu_1_link:
+                {}
+              left_side_cover_link:
+                {}
+              lidar2d_0_laser:
+                {}
+              lidar2d_0_link:
+                {}
+              lidar2d_1_laser:
+                {}
+              lidar2d_1_link:
+                {}
+              lift_0_base_link:
+                {}
+              lift_0_lower_link:
+                {}
+              lift_0_mount:
+                {}
+              lift_0_mount_rotated_link:
+                {}
+              lift_0_plate_link:
+                {}
+              lift_0_upper_link:
+                {}
+              mounting_plate_link:
+                {}
+              neck_1:
+                {}
+              neck_2:
+                {}
+              rear_cover_link:
+                {}
+              rear_left_wheel_link:
+                {}
+              rear_lights_link:
+                {}
+              rear_right_wheel_link:
+                {}
+              rear_rocker_link:
+                {}
+              right_side_cover_link:
+                {}
+              riser_link:
+                {}
           world:
             basin_0:
               {}
@@ -621,12 +653,34 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        base_imu: true
-        base_link: true
+        arm_0_fr3_link0: true
+        arm_0_fr3_link1: true
+        arm_0_fr3_link2: true
+        arm_0_fr3_link3: true
+        arm_0_fr3_link4: true
+        arm_0_fr3_link5: true
+        arm_0_fr3_link6: true
+        arm_0_fr3_link7: true
+        arm_0_gripper_fr3_hand: true
+        arm_0_gripper_fr3_leftfinger: true
+        arm_0_gripper_fr3_rightfinger: true
+        arm_1_fr3_link0: true
+        arm_1_fr3_link1: true
+        arm_1_fr3_link2: true
+        arm_1_fr3_link3: true
+        arm_1_fr3_link4: true
+        arm_1_fr3_link5: true
+        arm_1_fr3_link6: true
+        arm_1_fr3_link7: true
+        arm_1_gripper_fr3_hand: true
+        arm_1_gripper_fr3_leftfinger: true
+        arm_1_gripper_fr3_rightfinger: true
+        axle_link: true
         basin_0: true
         bay_window_platform_0: true
         bay_window_platform_1: true
         bed_0: true
+        body_link: true
         book_0: true
         book_1: true
         book_10: true
@@ -647,11 +701,11 @@ Visualization Manager:
         cabinet_door_3_handle: true
         cabinet_door_4: true
         cabinet_door_4_handle: true
-        camera_link: true
-        caster_link: true
         chair_0: true
         chair_1: true
+        chassis_link: true
         coffee_table_0: true
+        cover_link: true
         dining_table_0: true
         door_0: true
         door_0_handle_inner: true
@@ -675,47 +729,38 @@ Visualization Manager:
         drawer_4_handle: true
         floor_lamp_0: true
         flowers_0: true
+        front_cover_link: true
+        front_left_wheel_link: true
+        front_lights_link: true
+        front_right_wheel_link: true
+        front_rocker_link: true
         green_plants_0: true
-        gripper_camera_link: true
         hand_sanitizer_0: true
         handrail_0: true
         handrail_1: true
+        head: true
+        imu_1_link: true
         kitchen_cabinet: true
-        laser: true
-        link_arm_l0: true
-        link_arm_l1: true
-        link_arm_l2: true
-        link_arm_l3: true
-        link_arm_l4: true
-        link_aruco_d405: true
-        link_aruco_fingertip_left: true
-        link_aruco_fingertip_right: true
-        link_aruco_inner_wrist: true
-        link_aruco_left_base: true
-        link_aruco_right_base: true
-        link_aruco_shoulder: true
-        link_aruco_top_wrist: true
-        link_gripper_finger_left: true
-        link_gripper_finger_right: true
-        link_gripper_fingertip_left: true
-        link_gripper_fingertip_right: true
-        link_gripper_s3_body: true
-        link_head: true
-        link_head_nav_cam: true
-        link_head_pan: true
-        link_head_tilt: true
-        link_left_wheel: true
-        link_lift: true
-        link_mast: true
-        link_right_wheel: true
-        link_wrist_pitch: true
-        link_wrist_roll: true
-        link_wrist_yaw: true
-        link_wrist_yaw_bottom: true
+        left_side_cover_link: true
+        lidar2d_0_link: true
+        lidar2d_1_link: true
+        lift_0_base_link: true
+        lift_0_lower_link: true
+        lift_0_plate_link: true
+        lift_0_upper_link: true
+        mounting_plate_link: true
+        neck_1: true
+        neck_2: true
         nightstand_0: true
         pipe_0: true
         radiator_0: true
-        respeaker_base: true
+        rear_cover_link: true
+        rear_left_wheel_link: true
+        rear_lights_link: true
+        rear_right_wheel_link: true
+        rear_rocker_link: true
+        right_side_cover_link: true
+        riser_link: true
         sofa_0: true
         toilet_0: true
         toilet_paper_holder_0: true
@@ -763,25 +808,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 8.793176651000977
+      Distance: 11.69014835357666
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -1.7627909183502197
-        Y: 4.943386554718018
-        Z: 1.4898110628128052
+        X: -0.2103428840637207
+        Y: 6.936500072479248
+        Z: -0.1526876538991928
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8897966146469116
+      Pitch: 0.7797962427139282
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.3718180656433105
+      Yaw: 4.391817569732666
     Saved: ~
 Window Geometry:
   Displays:
