@@ -12,8 +12,13 @@ sys.path.insert(0, str(REPO))
 # No local Isaac window; watch the viewport over WebRTC instead (port 49100).
 os.environ["ISAAC_HEADLESS"] = "1"
 os.environ["ISAAC_LIVESTREAM"] = "1"
-os.environ["ISAAC_WINDOW"] = "640x360"
+
+# os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
+# os.environ["ISAAC_WINDOW"] = "854x480"
+# os.environ["ISAAC_WINDOW"] = "768x432"
+os.environ["ISAAC_WINDOW"] = "640x360"
+# os.environ["ISAAC_WINDOW"] = "512x288"
 
 from launcher import (
     start_giskard_server,
@@ -355,12 +360,13 @@ for round_id in range(1, ROUNDS + 1):
 
         close_container(handle_body, Arms.LEFT)
         print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
-    
+
+    drive_to(f"drawer_{drawer_id}_handle")
     run_plan(sequential([
         ParkArmsAction(Arms.LEFT),
         SetGripperAction(Arms.LEFT, GripperState.OPEN),
-        # ParkArmsAction(Arms.RIGHT),
-        # SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+        ParkArmsAction(Arms.RIGHT),
+        SetGripperAction(Arms.RIGHT, GripperState.OPEN),
     ], context=context))
 
 # %%
