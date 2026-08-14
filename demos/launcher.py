@@ -197,34 +197,25 @@ def start_giskard_server(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
     )
 
 
-def _rviz_command(rviz_config):
-    """``rviz2 -d <config>``, wrapped in ``vglrun`` only where that exists.
-
-    VirtualGL is how an OpenGL application reaches the GPU on the VRB server,
-    whose desktop is a VNC session with no direct 3D context; it is part of that
-    image rather than of ROS. Off the server -- a plain workstation, or the
-    container run with ``-v /tmp/.X11-unix`` as the README describes -- there is
-    no ``vglrun`` and none is wanted: the X server already is the real one, and
-    an unconditional ``vglrun`` would just fail to start rviz at all.
-
-    Probed with :func:`shutil.which` in this process. That is the right test even
-    for ``terminal=True``, which re-sources ROS in a fresh shell first: vglrun is
-    a system binary on ``PATH``, not something a ROS overlay contributes.
-    """
-    command = ["rviz2", "-d", str(rviz_config)]
-    # return command if shutil.which("vglrun") is None else ["vglrun", *command]
-    return command
-
-
-def start_rviz(rviz_config=None, terminal=False):
+def start_rviz(rviz_config=None, terminal=False, vgl=False):
     """Launch rviz2 with a config file; returns immediately (no ready marker).
 
     :param rviz_config: rviz config file (default: the Stretch demo config).
+    :param vgl: run rviz through ``vglrun``. VirtualGL is how an OpenGL
+        application reaches the GPU on the VRB server, whose desktop is a VNC
+        session with no direct 3D context; it is part of that image rather than
+        of ROS. Off the server -- a plain workstation, or the container run with
+        ``-v /tmp/.X11-unix`` as the README describes -- leave it off: the X
+        server already is the real one, and ``vglrun`` would just fail to start
+        rviz at all.
     """
     rviz_config = Path(rviz_config) if rviz_config else DEFAULT_RVIZ_CONFIG
+    command = ["rviz2", "-d", str(rviz_config)]
+    if vgl:
+        command = ["vglrun", *command]
     return _launch(
         "rviz2",
-        _rviz_command(rviz_config),
+        command,
         RVIZ_LOG,
         kill_stale="rviz2",
         terminal=terminal,
