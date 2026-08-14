@@ -1,18 +1,38 @@
 
 import sys
+import os
 from pathlib import Path
 
 REPO = Path.cwd().resolve()  # this notebook lives in demos/
 sys.path.insert(0, str(REPO))
 
-# import os
 # os.environ["DISPLAY"] = ":0"
+# os.environ["ISAAC_RENDER"] = "0"
 
-from launcher import start_isaac_sim, start_giskard_server, start_rviz, stop
+# No local Isaac window; watch the viewport over WebRTC instead (port 49100).
+os.environ["ISAAC_HEADLESS"] = "1"
+os.environ["ISAAC_LIVESTREAM"] = "1"
+# os.environ["ISAAC_WINDOW"] = "1280x720"
+# os.environ["ISAAC_WINDOW"] = "960x540"
+os.environ["ISAAC_WINDOW"] = "854x480"
+# os.environ["ISAAC_WINDOW"] = "768x432"
+# os.environ["ISAAC_WINDOW"] = "640x360"
+# os.environ["ISAAC_WINDOW"] = "512x288"
+
+from launcher import (
+    start_giskard_server,
+    start_isaac_sim,
+    start_rviz,
+    start_streaming_client,
+    stop,
+)
+
+from cram_vrb_lab.sim.isaac_app import livestream_enabled
 SPAWN_POSITION = (-1.5, 0.0, 0.05)
 
 rviz_proc = start_rviz()
 sim_proc = start_isaac_sim(spawn_position=SPAWN_POSITION, camera="both")   # both RGB and depth
+stream_proc = start_streaming_client() if livestream_enabled() else None
 giskard_proc = start_giskard_server(spawn_position=SPAWN_POSITION)
 
 # %%
