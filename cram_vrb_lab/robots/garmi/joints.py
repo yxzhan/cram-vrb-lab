@@ -116,9 +116,26 @@ def hand_link(side: str) -> str:
 def tool_frame_link(side: str) -> str:
     return f"{ARM_PREFIX[side]}_gripper_fr3_hand_tcp"
 
-# TOOL_FRAME_OFFSET = 0.1034
-TOOL_FRAME_OFFSET = "0 0.02 0.1034"
+TOOL_FRAME_REACH = 0.1034
 """Distance [m] along the hand's +z to the point between the fingertips."""
+
+TOOL_FRAME_LATERAL_OFFSET = 0.02
+"""Shift [m] of the TCP along the hand's closing axis.
+
+CRAM aims a grasp at the handle body's *origin*, which is not where the rod it
+has to close around actually is -- see ``report_grasp_geometry`` in the demo.
+This takes up that gap.
+
+Signed **in the hand frame**, so it has to be mirrored between the two arms
+(:func:`tool_frame_offset`): the correction is fixed in the world, while the two
+hands meet a grasp rolled 180 degrees apart.
+"""
+
+
+def tool_frame_offset(side: str) -> str:
+    """Where to anchor ``*_hand_tcp``, in its hand's frame."""
+    lateral = TOOL_FRAME_LATERAL_OFFSET if side == "left" else -TOOL_FRAME_LATERAL_OFFSET
+    return f"0 {lateral} {TOOL_FRAME_REACH}"
 
 MAX_FINGER_TRAVEL = 0.04
 """Per-finger stroke [m] from the URDF; the pads stand at most 0.08 m apart."""
@@ -198,8 +215,11 @@ def _upstream_renames() -> list[tuple[str, str]]:
 
 UPSTREAM_RENAMES = _upstream_renames()
 
-_TOOL_FRAME_RPY = "0 -1.5707963267948966 0"
-"""Rotation put on the ``*_hand_tcp_joint``, replacing the description's ``0 0 0``.
+_TOOL_FRAME_RPY = {
+    "left": "0 -1.5707963267948966 0",
+    "right": "3.141592653589793 -1.5707963267948966 0",
+}
+"""Rotation put on each ``*_hand_tcp_joint``, replacing the description's ``0 0 0``.
 
 Reconciles two conventions that would otherwise disagree silently.
 :class:`~semantic_digital_twin.robots.robot_parts.EndEffector` derives its
@@ -220,6 +240,29 @@ its first column, so only ``-pi/2`` puts the tool's x on the hand's ``+z``.
 ``+pi/2`` lands on ``-z``, which preserves the closing axis and looks entirely
 plausible while making every grasp approach the object from behind. Checked by
 comparing the tool frame's x against the hand's z in the parked pose.
+
+The right side carries an extra half turn about that same x, which is what makes
+the two arms usable with one grasp description. The hands are attached to their
+``link8`` identically, but ``arm_mount_right_joint`` mirrors
+``arm_mount_left_joint`` (rpy ``1.0389 0.1675 0.6876`` against ``-1.0389 0.1675
+-0.6876``), so at :data:`PARK_CONFIGURATION` -- the same numbers on both arms --
+the right hand hangs rolled half a turn from the left: in ``base_link`` the
+closing axis reads ``(-0.211, -0.483, 0.850)`` on the left and ``(0.211, -0.483,
+-0.850)`` on the right, up against down.
+
+``GraspDescription.grasp_orientation`` knows nothing about which arm it is
+planning for -- for a ``FRONT``/``NoAlignment`` grasp it is the identity, and
+both grippers pass the identity ``front_facing_orientation`` -- so both arms get
+commanded the *same* tool roll. The left arm is already there; the right one has
+to twist its wrist half a turn out of its natural posture to reach it, which is
+the contorted reach at the drawers. Rolling its tool frame instead lets it hold
+the goal the way its shoulder wants to.
+
+A parallel gripper is symmetric about its approach axis, so this changes nothing
+physical: the fingers still close on the same line, just labelled the other way
+round. What it does change is the sign of
+:data:`TOOL_FRAME_LATERAL_OFFSET`, which is why
+:func:`tool_frame_offset` mirrors it.
 """
 
 
@@ -266,8 +309,8 @@ def load_patched_urdf() -> str:
       ``package://garmi_description`` here) and, where the file name would not
       survive Isaac's importer, aliased -- see :func:`_usd_safe_mesh`;
     - the TCP frames are given :data:`_TOOL_FRAME_RPY` and re-anchored at
-      :data:`TOOL_FRAME_OFFSET` (the same value the description already carries,
-      written back so that constant is the one knob for the grasp point);
+      :func:`tool_frame_offset`, both of which differ between the two arms
+      because their shoulders are mirrored;
     - the arms, grippers and head joints are renamed to what the upstream
       semantic model expects -- see :func:`_upstream_renames`.
 
@@ -284,10 +327,13 @@ def load_patched_urdf() -> str:
     for joint in root.findall("joint"):
         for mimic in joint.findall("mimic"):
             joint.remove(mimic)
-        if joint.get("name", "").endswith("_hand_tcp_joint"):
+        name = joint.get("name", "")
+        if name.endswith("_hand_tcp_joint"):
+            # still the description's own names here; the renames run further down
+            side = next(s for s in SIDES if name.startswith(f"{s}_"))
             origin = joint.find("origin")
-            origin.set("rpy", _TOOL_FRAME_RPY)
-            origin.set("xyz", f"{TOOL_FRAME_OFFSET}")
+            origin.set("rpy", _TOOL_FRAME_RPY[side])
+            origin.set("xyz", tool_frame_offset(side))
 
     for mesh in root.iter("mesh"):
         filename = mesh.get("filename")
