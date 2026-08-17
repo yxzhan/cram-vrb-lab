@@ -1,3 +1,4 @@
+# %%
 import math
 import os
 import sys
@@ -6,12 +7,12 @@ from pathlib import Path
 REPO = Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-os.environ["DISPLAY"] = ":0"
+# os.environ["DISPLAY"] = ":0"
 # os.environ["ISAAC_RENDER"] = "0"
 
 # No local Isaac window; watch the viewport over WebRTC instead (port 49100).
-# os.environ["ISAAC_HEADLESS"] = "1"
-# os.environ["ISAAC_LIVESTREAM"] = "1"
+os.environ["ISAAC_HEADLESS"] = "1"
+os.environ["ISAAC_LIVESTREAM"] = "1"
 
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
@@ -27,13 +28,10 @@ from launcher import (
     start_streaming_client,
     stop,
 )
-
 from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
-
-
 SPAWN_POSITION = (0, 5.0, 0.0259)
 SPAWN_YAW = -math.pi / 2
 
@@ -44,9 +42,6 @@ stream_proc = start_streaming_client() if livestream_enabled() else None
 giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
-from time import sleep
-while True:
-    sleep(10)
 # %%
 import threading
 
@@ -58,58 +53,44 @@ from rclpy.executors import MultiThreadedExecutor
 nest_asyncio.apply()
 
 from coraplex.datastructures.dataclasses import Context
+from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlignment
+from coraplex.datastructures.grasp import GraspDescription
+from coraplex.execution_environment import real_robot
+from coraplex.plans.factories import execute_single, sequential
+from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.pick_up import GraspingAction
+from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, SetGripperAction
+from coraplex.robot_plans.motions.container import ClosingMotion, OpeningMotion
+from coraplex.robot_plans.motions.gripper import MoveGripperMotion
+from coraplex.robot_plans.motions.robot_body import MoveJointsMotion
+from coraplex.view_manager import ViewManager
+from giskardpy.data_types.exceptions import GiskardException
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
+from semantic_digital_twin.datastructures.definitions import GripperState
+from semantic_digital_twin.robots.garmi import Garmi
+from semantic_digital_twin.semantic_annotations.semantic_annotations import (
+    Door,
+    Drawer,
+    Handle,
+)
+from semantic_digital_twin.spatial_types import Point3, Quaternion
+from semantic_digital_twin.spatial_types.spatial_types import Pose
 
 from cram_vrb_lab.robots.garmi.motions import GARMI_MOTION_MAPPINGS
-from semantic_digital_twin.robots.garmi import Garmi
 
 if not rclpy.ok():
     rclpy.init()
-node = rclpy.create_node('cram_garmi_node')
+node = rclpy.create_node("cram_garmi_node")
 executor = MultiThreadedExecutor()
 executor.add_node(node)
-threading.Thread(target=executor.spin, daemon=True, name='rclpy-executor').start()
+threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor").start()
 
 world = fetch_world_from_service(node=node, timeout_seconds=300)
 WorldSynchronizer(_world=world, node=node)
 
 robot = world.get_semantic_annotations_by_type(Garmi)
 robot = robot[0] if robot else Garmi.from_world(world)
-
-# Reach with the arm, not with the whole robot.
-#
-# GARMI ships whole-body controlled (`GarmiMobileBase` sets this True), which
-# makes MoveToolCenterPointMotion pose its Cartesian goal from `map` rather than
-# from `base_link` -- so the base becomes one more thing giskard may move to put
-# a tool frame on a handle. It does move it, and that is what drives the *other*
-# arm into the cabinet: no task constrains the idle arm, so it rides along at
-# whatever configuration it was parked in, and there is no collision avoidance in
-# the chart to stop it (see run_plan below).
-#
-# Measured on drawer 1, left hand, from the station drive_to leaves the base at:
-#
-#                     whole-body (stock)      arm only (this line)
-#   grasp converged   yes, 219 cycles         yes, 977 cycles
-#   base moved        0.883 m                 0.000 m
-#   idle hand ends    0.097 m *inside* the    0.216 m clear of it -- exactly
-#                     cabinet front           where it started
-#
-# The cost is the cycle count: converging on the handle takes about four times as
-# long without the base to help. Worth paying, because drive_to has already put
-# the base where the reach is meant to start from.
-#
-# NavigateAction is unaffected: it drives the base through its own Cartesian goal
-# on base_link, whatever this says.
-#
-# Working a container is a separate story. Coraplex reads this flag in exactly one
-# module -- motions/gripper.py, the TCP motions -- so OpeningMotion / ClosingMotion
-# used to pull with the whole robot even with the flag off, because their goal is
-# rooted at the handle and the drive's DOFs are in that chain regardless.
-# GarmiOpeningMotion / GarmiClosingMotion in cram_vrb_lab/robots/garmi/motions.py
-# now pin the base for the pull whenever this is False, so the switch means one
-# thing throughout.
-robot.mobile_base.full_body_controlled = False
 
 context = Context(
     world=world,
@@ -118,322 +99,156 @@ context = Context(
     evaluate_conditions=False,
     alternative_motion_mappings=GARMI_MOTION_MAPPINGS,
 )
-print('connected, robot:', type(robot).__name__)
-print('bodies in the twin:', len(world.bodies), '-- GARMI plus the whole flat')
+print("connected:", type(robot).__name__, "|", len(world.bodies), "bodies")
 
 # %%
-from coraplex.datastructures.enums import Arms
-from coraplex.execution_environment import real_robot, simulated_robot
-from coraplex.plans.factories import execute_single, sequential
-from coraplex.view_manager import ViewManager
-from giskardpy.data_types.exceptions import GiskardException
+robot.mobile_base.full_body_controlled = True
+
+STANDOFF = {Drawer: (1.5, 0.0), Door: (1.2, -0.3)}
+ARRIVED = 0.05
+GRASPED = 0.01
+
+ARM_PREFIX = {Arms.LEFT: "arm_0", Arms.RIGHT: "arm_1"}
+TUCK_JOINTS = ["fr3_joint2", "fr3_joint3"]
+TUCK_POSITIONS = {Arms.LEFT: [-2, -1], Arms.RIGHT: [-2, 1]}
+HOME = "cabinet_door_1"
 
 
-def run_plan(plan, collision_avoidance=True, strict=False):
-    """Perform ``plan`` on the real-robot interface, reporting giskard failures.
-
-    .. warning::
-       ``collision_avoidance`` does nothing on this path, and the robot is
-       genuinely running without it. ``GiskardExecutable.motion_state_chart``
-       (coraplex/plans/executables.py) builds the ``ExecutionType.REAL`` chart in
-       its own branch and returns from it *before* reaching the
-       ``if GiskardExecutable.collision_avoidance:`` line that adds an
-       :class:`~giskardpy.motion_statechart.goals.collision_avoidance.ExternalCollisionAvoidance`
-       node -- and nothing else in giskardpy adds one either; in this version it
-       is a chart node, not a behaviour-tree default. So every motion here is
-       planned with the furniture in the world model but no constraint keeping the
-       robot out of it. Moving the ``add_node`` above the early return would fix
-       it; whether the QP can still hold 15 Hz while collision-checking a
-       full-resolution apartment is the open question.
-    """
+# %%
+def run_plan(plan):
     try:
-        with real_robot(collision_avoidance=collision_avoidance):
+        with real_robot(collision_avoidance=True):
             plan.perform()
     except GiskardException as failure:
-        if strict:
-            raise
-        # str() on these carries giskard's own error_message() and, where it has
-        # one, its suggested correction.
-        print(f'giskard failed -- {type(failure).__name__}: {failure}')
+        print(f"  giskard failed -- {type(failure).__name__}: {failure}")
         return False
-    print('done')
     return True
-
-
-def tool_frame_matrix(arm=Arms.LEFT):
-    """The tool frame's 4x4 pose in map."""
-    tool = ViewManager.get_end_effector_view(arm, robot).tool_frame
-    return np.asarray(tool.global_pose.to_np())
-
-
-def tool_position(arm=Arms.LEFT):
-    return tool_frame_matrix(arm)[:3, 3].ravel()
-
-
-def tool_axis(arm=Arms.LEFT):
-    """Where the gripper points: the tool frame's **x**-axis, in map.
-
-    Column 0, not 2. The Franka Hand points its z out between the fingers, but
-    CRAM reads the approach direction off the x column
-    (``EndEffector.__post_init__``), so ``load_patched_urdf`` turns the TCP
-    frame a quarter turn about y -- see ``_TOOL_FRAME_RPY`` in
-    ``cram_vrb_lab/robots/garmi/joints.py``. Reading z here would report the
-    hand's -x and quietly send any grasp debugging off in the wrong direction.
-    """
-    return tool_frame_matrix(arm)[:3, 0].ravel()
-
-
-def closing_axis(arm=Arms.LEFT):
-    """The axis the fingers close along, in map -- the tool frame's y.
-
-    Reads the same way round on both arms. The shoulders are mirrored, so the
-    right hand hangs rolled half a turn from the left at any given joint
-    configuration; ``_TOOL_FRAME_RPY`` rolls the right tool frame to match rather
-    than making the right arm twist its wrist to meet a left-handed grasp goal.
-    """
-    return tool_frame_matrix(arm)[:3, 1].ravel()
 
 
 def body_position(name):
     return np.asarray(world.get_body_by_name(name).global_pose.to_np())[:3, 3].ravel()
 
-# %%
-from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, SetGripperAction
-from semantic_digital_twin.datastructures.definitions import GripperState
 
-from coraplex.robot_plans.actions.core.navigation import NavigateAction
-from semantic_digital_twin.spatial_types import Point3, Quaternion
-from semantic_digital_twin.spatial_types.spatial_types import Pose
+def tool_position(arm):
+    tool = ViewManager.get_end_effector_view(arm, robot).tool_frame
+    return np.asarray(tool.global_pose.to_np())[:3, 3].ravel()
 
-STANDOFF = 1.2
-"""How far south of the cabinet fronts (y = 7.12) to stand [m].
 
-The home pose holds the hands 0.79 m in front of base_link, so anything closer
-parks them inside the cabinet.
-"""
+def other_arm(arm):
+    return Arms.RIGHT if arm == Arms.LEFT else Arms.LEFT
 
-def station_facing(handle_x):
-    """A base pose in front of ``handle_x`` on the kitchen run, facing map +y.
 
-    ``reference_frame`` is not optional: without it the pose reaches giskard with
-    no frame to resolve against and the Cartesian goal is built with a null tip,
-    which fails inside the solver rather than at the call.
-    """
+def annotate(view_type, name):
+    body = world.get_body_by_name(name)
+    handle = world.get_body_by_name(f"{name}_handle")
+    if not any(view.root is body
+               for view in world.get_semantic_annotations_by_type(view_type)):
+        with world.modify_world():
+            world.add_semantic_annotation_recursively(
+                view_type(root=body, handle=Handle(root=handle))
+            )
+    return handle
+
+
+def station_facing(handle_x, standoff, lateral):
     return Pose(
-        Point3.from_iterable([handle_x, 7.12 - STANDOFF, 0.0]),
-        Quaternion.from_iterable([0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]),
+        Point3.from_iterable([handle_x + lateral, 7.12 - standoff, 0.0]),
+        Quaternion.from_iterable(
+            [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
+        ),
         reference_frame=world.root,
     )
 
 
-ARRIVED = 0.05
-"""How close to the station counts as arrived [m]."""
-
-
-def drive_to(handle_name, attempts=10):
-    """Drive to the handle, repeating until the base is actually there.
-
-    The first NavigateAction routinely ends short -- it drives most of the way
-    and then the goal finishes -- while a second one closes the remaining
-    distance to a millimetre. Rather than paper over that with a longer motion,
-    the demo just asks again until the base has arrived; a call that is already
-    there returns in about a second, so the retry costs nothing when it is not
-    needed.
-    """
-    target = station_facing(float(body_position(handle_name)[0]))
+def drive_to(handle_name, standoff, lateral, attempts=10):
+    target = station_facing(float(body_position(handle_name)[0]), standoff, lateral)
     goal = np.asarray(target.to_np())[:2, 3].ravel()
     for attempt in range(1, attempts + 1):
         run_plan(execute_single(NavigateAction(target), context=context))
-        error = float(np.linalg.norm(body_position('base_link')[:2] - goal))
-        print(f'  navigate {attempt}: base {np.round(body_position("base_link"), 3)}'
-              f' error {error:.3f} m')
+        error = float(np.linalg.norm(body_position("base_link")[:2] - goal))
         if error <= ARRIVED:
-            break
-    else:
-        print(f'  WARNING: still {error:.3f} m from the station after {attempts} tries')
-    print('at', handle_name, np.round(body_position(handle_name), 3))
-
-# %%
-# Opening a container, decomposed so the reach can be measured and repeated.
-#
-# This mirrors OpenAction._action_plan
-# (coraplex/robot_plans/actions/core/container.py): grasp the handle, drive the
-# container's own joint to its limit, let go. OpenAction runs those three as one
-# sequence and exposes nothing in between, so a grasp that lands slightly off --
-# which is what stops the drawer opening -- is invisible and unrepeatable. Keep
-# this in step if OpenAction changes upstream.
-from coraplex.datastructures.enums import ApproachDirection, VerticalAlignment
-from coraplex.datastructures.grasp import GraspDescription
-from coraplex.robot_plans.actions.core.pick_up import GraspingAction
-from coraplex.robot_plans.motions.container import ClosingMotion, OpeningMotion
-from coraplex.robot_plans.motions.gripper import MoveGripperMotion
-from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    Drawer,
-    Handle,
-    Door,
-)
-
-from coraplex.robot_plans.actions.core.container import OpenAction, CloseAction
-
-GRASPED = 0.01
-"""How close the tool frame has to land to the commanded grasp pose [m]."""
+            print(f"  at {handle_name}, error {error:.3f} m")
+            return True
+    print(f"  WARNING: {error:.3f} m from the station after {attempts} tries")
+    return False
 
 
-def _grasp_description(arm):
-    """The grasp OpenAction uses internally: approach the handle head on."""
-    return GraspDescription(
+def tuck_arm(arm, positions=None):
+    positions = TUCK_POSITIONS[arm] if positions is None else positions
+    names = [f"{ARM_PREFIX[arm]}_{joint}" for joint in TUCK_JOINTS]
+    return run_plan(
+        execute_single(MoveJointsMotion(names, list(positions)), context=context)
+    )
+
+
+def grasp_handle(handle, arm, attempts=3):
+    grasp = GraspDescription(
         ApproachDirection.FRONT,
         VerticalAlignment.NoAlignment,
         ViewManager.get_end_effector_view(arm, robot),
     )
-
-
-def report_grasp_geometry(handle_body, arm=Arms.LEFT):
-    """Print what CRAM aims at versus what is actually there.
-
-    Worth having in front of you because the two are *not* the same point: CRAM
-    grasps at the handle body's origin (``grasp_pose_sequence`` builds its pose
-    from ``Pose(reference_frame=body)``), while the collision geometry -- the rod
-    the fingers actually have to close around -- sits a centimetre and a half in
-    front of it.
-    """
-    box = handle_body.collision.as_bounding_box_collection_in_frame(
-        handle_body
-    ).bounding_box()
-    # min_*/max_* are relative to the box's own origin, not to the body frame.
-    centre = np.array([
-        float(box.origin.x) + (box.min_x + box.max_x) / 2,
-        float(box.origin.y) + (box.min_y + box.max_y) / 2,
-        float(box.origin.z) + (box.min_z + box.max_z) / 2,
-    ])
-    print(f'  handle origin (grasp target): {np.round(body_position(handle_body.name.name), 4)}')
-    print(f'  collision box in body frame : centre {np.round(centre, 4)}'
-          f' size {np.round(np.array(box.dimensions), 4)}')
-    print(f'  -> CRAM aims {np.linalg.norm(centre) * 1000:.1f} mm off the collision centre')
-
-
-def grasp_handle(handle_body, arm=Arms.LEFT, attempts=6):
-    """Reach and close on the handle, repeating while the tool lands short.
-
-    Same shape as :func:`drive_to`, and for the same reason: a Cartesian goal in
-    this stack can finish without having converged, and the residual is only
-    visible if you measure it. Reported **in the tool frame** -- approach,
-    closing and lift -- because that is what says whether the gripper stopped too
-    early, too high, or off to one side; a single distance would not.
-    """
-    grasp = _grasp_description(arm)
-    _, commanded, _ = grasp.grasp_pose_sequence(handle_body)
-    # grasp_pose_sequence works in the *handle's* frame (it starts from
-    # Pose(reference_frame=body)), so it has to be lifted into map before it can
-    # be compared with where the tool actually is.
-    goal_frame = (np.asarray(handle_body.global_pose.to_np())
-                  @ np.asarray(commanded.to_np()))
+    _, commanded, _ = grasp.grasp_pose_sequence(handle)
+    goal_frame = np.asarray(handle.global_pose.to_np()) @ np.asarray(commanded.to_np())
     goal = goal_frame[:3, 3].ravel()
-
     for attempt in range(1, attempts + 1):
-        run_plan(execute_single(GraspingAction(handle_body, arm, grasp),
-                                context=context),
-                 collision_avoidance=True)
-        residual = tool_position(arm) - goal
-        # Resolved along the axes of the pose that was *asked* for, so the three
-        # numbers keep meaning the same thing however the arm ended up oriented.
-        approach, closing, lift = (
-            float(residual @ goal_frame[:3, i]) for i in range(3)
-        )
-        error = float(np.linalg.norm(residual))
-        print(f'  grasp {attempt}: residual {error * 1000:6.1f} mm'
-              f'  (approach {approach * 1000:+6.1f}, closing {closing * 1000:+6.1f},'
-              f' lift {lift * 1000:+6.1f} mm)')
+        run_plan(execute_single(GraspingAction(handle, arm, grasp), context=context))
+        error = float(np.linalg.norm(tool_position(arm) - goal))
+        print(f"  grasp {attempt}: {error * 1000:.1f} mm")
         if error <= GRASPED:
             return True
-    print(f'  WARNING: tool still {error * 1000:.1f} mm off after {attempts} tries')
     return False
 
 
-def _work_container(motion, handle_body, arm, attempts):
-    report_grasp_geometry(handle_body, arm)
-    grasp_handle(handle_body, arm, attempts)
-    run_plan(execute_single(motion(handle_body, arm), context=context),
-             collision_avoidance=True)
-    run_plan(execute_single(MoveGripperMotion(GripperState.OPEN, arm), context=context),
-             collision_avoidance=True)
+def work_container(motion, handle, arm, attempts=3):
+    tuck_arm(other_arm(arm))
+    grasp_handle(handle, arm, attempts)
+    run_plan(execute_single(motion(handle, arm), context=context))
+    run_plan(execute_single(MoveGripperMotion(GripperState.OPEN, arm), context=context))
 
 
-def open_container(handle_body, arm=Arms.LEFT, attempts=3):
-    """OpenAction, with the reach measured and retried. See the note above."""
-    _work_container(OpeningMotion, handle_body, arm, attempts)
+def open_container(handle, arm, attempts=3):
+    work_container(OpeningMotion, handle, arm, attempts)
 
 
-def close_container(handle_body, arm=Arms.LEFT, attempts=3):
-    """CloseAction, likewise -- it is the same three steps with ClosingMotion."""
-    _work_container(ClosingMotion, handle_body, arm, attempts)
+def close_container(handle, arm, attempts=3):
+    work_container(ClosingMotion, handle, arm, attempts)
 
 
-ROUNDS = 1
-"""How many times to work the three drawers, for a long unattended run."""
-
-for round_id in range(1, ROUNDS + 1):
-    print(f"===== round {round_id}/{ROUNDS} =====")
-    for i in range(1, 5):
-        # _arm = Arms.RIGHT if i == 4 else Arms.LEFT
-        _arm = Arms.RIGHT
-        drawer_id = i
-        drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
-        handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
-
-        if not world.get_semantic_annotations_by_type(Drawer):
-            with world.modify_world():
-                world.add_semantic_annotation_recursively(
-                    Drawer(root=drawer_body, handle=Handle(root=handle_body))
-                )
-        print("drawer annotated:", drawer_body.name, "with handle", handle_body.name)
-        print("handle at", np.round(body_position(f"drawer_{drawer_id}_handle"), 3))
-
-        drive_to(f"drawer_{drawer_id}_handle")
-        open_container(handle_body, _arm)
-        print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
-
-        close_container(handle_body, _arm)
-        print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
-
-    drive_to(f"drawer_{drawer_id}_handle")
+def reset_pos():
     run_plan(sequential([
-        ParkArmsAction(Arms.LEFT),
         SetGripperAction(Arms.LEFT, GripperState.OPEN),
-        ParkArmsAction(Arms.RIGHT),
         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+        ParkArmsAction(Arms.LEFT),
+        ParkArmsAction(Arms.RIGHT),
     ], context=context))
 
 # %%
+drive_to(f"{HOME}_handle", *STANDOFF[Door])
+reset_pos()
 
-door_id = "1"
-door_body = world.get_body_by_name(f"cabinet_door_{door_id}")
-door_handle_body = world.get_body_by_name(f"cabinet_door_{door_id}_handle")
+# %%
+ROUNDS = 10
+TASKS = [
+    (Drawer, "drawer_1", Arms.LEFT),
+    (Door, "cabinet_door_1", Arms.RIGHT),
+    (Drawer, "drawer_2", Arms.LEFT),
+    (Drawer, "drawer_3", Arms.LEFT),
+    # (Drawer, "drawer_4", Arms.RIGHT),
+]
 
-if not world.get_semantic_annotations_by_type(Door):
-    with world.modify_world():
-        world.add_semantic_annotation_recursively(
-            Door(root=door_body, handle=Handle(root=door_handle_body))
-        )
-print("Door annotated:", door_body.name, "with handle", door_handle_body.name)
-
-drive_to(f"cabinet_door_{door_id}_handle")
-open_container(door_handle_body, Arms.RIGHT)
-# run_plan(
-#     execute_single(OpenAction(door_handle_body, Arms.RIGHT), context=context),
-#     collision_avoidance=False,
-# )
-print("Opened, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
-
-close_container(door_handle_body, Arms.RIGHT)
-print("Closed, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
+# %%
+for round_id in range(1, ROUNDS + 1):
+    print(f"===== round {round_id}/{ROUNDS} =====")
+    for view_type, name, arm in TASKS:
+        handle = annotate(view_type, name)
+        joint = world.get_connection_by_name(f"{name}_joint")
+        print(f"{name} with {arm.name} arm")
+        drive_to(f"{name}_handle", *STANDOFF[view_type])
+        reset_pos()
+        open_container(handle, arm)
+        print(f"  opened: {joint.position}")
+        close_container(handle, arm)
+        print(f"  closed: {joint.position}")
+    reset_pos()
 
 
-run_plan(sequential([
-        ParkArmsAction(Arms.LEFT),
-        ParkArmsAction(Arms.RIGHT),
-        SetGripperAction(Arms.LEFT, GripperState.OPEN),
-        SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-    ], context=context))
-
-stop()
