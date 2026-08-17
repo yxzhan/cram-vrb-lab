@@ -63,7 +63,7 @@ from cram_vrb_lab.specs import EnvironmentSpec
 
 from .constants import GARMI_APARTMENT_MJCF_PATH, garmi_apartment_pose_in_map
 
-REVOLUTE_VELOCITY_LIMIT = math.pi / 8
+REVOLUTE_VELOCITY_LIMIT = math.pi / 32
 """Velocity limit [rad/s] given to the MJCF's doors and cabinet doors.
 
 Deliberately a quarter of what ``iai_apartment/urdf/apartment.urdf`` gives its

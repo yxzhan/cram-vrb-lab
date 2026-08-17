@@ -92,7 +92,7 @@ COPY --chown=${NB_USER}:users assets ${REPO_DIR}/assets
 # dependencies, which dpkg -i would not.
 ENV ISAACSIM_STREAMING_CLIENT_VERSION="2.0.0"
 RUN cd /tmp && \
-    wget https://downloads.isaacsim.nvidia.com/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \
+    wget --no-check-certificate https://downloads.isaacsim.nvidia.com/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \
     sudo apt-get update && \
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         /tmp/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \

@@ -6,12 +6,12 @@ from pathlib import Path
 REPO = Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-# os.environ["DISPLAY"] = ":0"
+os.environ["DISPLAY"] = ":0"
 # os.environ["ISAAC_RENDER"] = "0"
 
 # No local Isaac window; watch the viewport over WebRTC instead (port 49100).
-os.environ["ISAAC_HEADLESS"] = "1"
-os.environ["ISAAC_LIVESTREAM"] = "1"
+# os.environ["ISAAC_HEADLESS"] = "1"
+# os.environ["ISAAC_LIVESTREAM"] = "1"
 
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
@@ -44,7 +44,9 @@ stream_proc = start_streaming_client() if livestream_enabled() else None
 giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
-
+from time import sleep
+while True:
+    sleep(10)
 # %%
 import threading
 
@@ -75,6 +77,40 @@ WorldSynchronizer(_world=world, node=node)
 robot = world.get_semantic_annotations_by_type(Garmi)
 robot = robot[0] if robot else Garmi.from_world(world)
 
+# Reach with the arm, not with the whole robot.
+#
+# GARMI ships whole-body controlled (`GarmiMobileBase` sets this True), which
+# makes MoveToolCenterPointMotion pose its Cartesian goal from `map` rather than
+# from `base_link` -- so the base becomes one more thing giskard may move to put
+# a tool frame on a handle. It does move it, and that is what drives the *other*
+# arm into the cabinet: no task constrains the idle arm, so it rides along at
+# whatever configuration it was parked in, and there is no collision avoidance in
+# the chart to stop it (see run_plan below).
+#
+# Measured on drawer 1, left hand, from the station drive_to leaves the base at:
+#
+#                     whole-body (stock)      arm only (this line)
+#   grasp converged   yes, 219 cycles         yes, 977 cycles
+#   base moved        0.883 m                 0.000 m
+#   idle hand ends    0.097 m *inside* the    0.216 m clear of it -- exactly
+#                     cabinet front           where it started
+#
+# The cost is the cycle count: converging on the handle takes about four times as
+# long without the base to help. Worth paying, because drive_to has already put
+# the base where the reach is meant to start from.
+#
+# NavigateAction is unaffected: it drives the base through its own Cartesian goal
+# on base_link, whatever this says.
+#
+# Working a container is a separate story. Coraplex reads this flag in exactly one
+# module -- motions/gripper.py, the TCP motions -- so OpeningMotion / ClosingMotion
+# used to pull with the whole robot even with the flag off, because their goal is
+# rooted at the handle and the drive's DOFs are in that chain regardless.
+# GarmiOpeningMotion / GarmiClosingMotion in cram_vrb_lab/robots/garmi/motions.py
+# now pin the base for the pull whenever this is False, so the switch means one
+# thing throughout.
+robot.mobile_base.full_body_controlled = False
+
 context = Context(
     world=world,
     robot=robot,
@@ -87,13 +123,29 @@ print('bodies in the twin:', len(world.bodies), '-- GARMI plus the whole flat')
 
 # %%
 from coraplex.datastructures.enums import Arms
-from coraplex.execution_environment import real_robot
+from coraplex.execution_environment import real_robot, simulated_robot
 from coraplex.plans.factories import execute_single, sequential
 from coraplex.view_manager import ViewManager
 from giskardpy.data_types.exceptions import GiskardException
 
 
 def run_plan(plan, collision_avoidance=True, strict=False):
+    """Perform ``plan`` on the real-robot interface, reporting giskard failures.
+
+    .. warning::
+       ``collision_avoidance`` does nothing on this path, and the robot is
+       genuinely running without it. ``GiskardExecutable.motion_state_chart``
+       (coraplex/plans/executables.py) builds the ``ExecutionType.REAL`` chart in
+       its own branch and returns from it *before* reaching the
+       ``if GiskardExecutable.collision_avoidance:`` line that adds an
+       :class:`~giskardpy.motion_statechart.goals.collision_avoidance.ExternalCollisionAvoidance`
+       node -- and nothing else in giskardpy adds one either; in this version it
+       is a chart node, not a behaviour-tree default. So every motion here is
+       planned with the furniture in the world model but no constraint keeping the
+       robot out of it. Moving the ``add_node`` above the early return would fix
+       it; whether the QP can still hold 15 Hz while collision-checking a
+       full-resolution apartment is the open question.
+    """
     try:
         with real_robot(collision_avoidance=collision_avoidance):
             plan.perform()
@@ -132,7 +184,13 @@ def tool_axis(arm=Arms.LEFT):
 
 
 def closing_axis(arm=Arms.LEFT):
-    """The axis the fingers close along, in map -- the tool frame's y."""
+    """The axis the fingers close along, in map -- the tool frame's y.
+
+    Reads the same way round on both arms. The shoulders are mirrored, so the
+    right hand hangs rolled half a turn from the left at any given joint
+    configuration; ``_TOOL_FRAME_RPY`` rolls the right tool frame to match rather
+    than making the right arm twist its wrist to meet a left-handed grasp goal.
+    """
     return tool_frame_matrix(arm)[:3, 1].ravel()
 
 
@@ -143,39 +201,16 @@ def body_position(name):
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, SetGripperAction
 from semantic_digital_twin.datastructures.definitions import GripperState
 
-# run_plan(sequential([
-#         ParkArmsAction(Arms.LEFT),
-#         ParkArmsAction(Arms.RIGHT),
-#         SetGripperAction(Arms.LEFT, GripperState.OPEN),
-#         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-#     ], context=context))
-
-# run_plan(sequential([
-#         SetGripperAction(Arms.LEFT, GripperState.CLOSE),
-#         SetGripperAction(Arms.RIGHT, GripperState.CLOSE),
-#     ], context=context))
-
-# run_plan(sequential([
-#         SetGripperAction(Arms.LEFT, GripperState.OPEN),
-#         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-#     ], context=context))
-
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose
 
-STANDOFF = 1.3
+STANDOFF = 1.2
 """How far south of the cabinet fronts (y = 7.12) to stand [m].
 
 The home pose holds the hands 0.79 m in front of base_link, so anything closer
 parks them inside the cabinet.
 """
-
-SHOULDER_OFFSET = 0.061
-"""The left shoulder's y offset in the base frame [m]. Facing map +y that is an
-offset in -x, so a base standing at ``handle_x + this`` puts the shoulder on the
-handle."""
-
 
 def station_facing(handle_x):
     """A base pose in front of ``handle_x`` on the kitchen run, facing map +y.
@@ -185,7 +220,7 @@ def station_facing(handle_x):
     which fails inside the solver rather than at the call.
     """
     return Pose(
-        Point3.from_iterable([handle_x + SHOULDER_OFFSET, 7.12 - STANDOFF, 0.0]),
+        Point3.from_iterable([handle_x, 7.12 - STANDOFF, 0.0]),
         Quaternion.from_iterable([0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]),
         reference_frame=world.root,
     )
@@ -334,12 +369,14 @@ def close_container(handle_body, arm=Arms.LEFT, attempts=3):
     _work_container(ClosingMotion, handle_body, arm, attempts)
 
 
-ROUNDS = 10
+ROUNDS = 1
 """How many times to work the three drawers, for a long unattended run."""
 
 for round_id in range(1, ROUNDS + 1):
     print(f"===== round {round_id}/{ROUNDS} =====")
-    for i in range(1, 4):
+    for i in range(1, 5):
+        # _arm = Arms.RIGHT if i == 4 else Arms.LEFT
+        _arm = Arms.RIGHT
         drawer_id = i
         drawer_body = world.get_body_by_name(f"drawer_{drawer_id}")
         handle_body = world.get_body_by_name(f"drawer_{drawer_id}_handle")
@@ -353,12 +390,10 @@ for round_id in range(1, ROUNDS + 1):
         print("handle at", np.round(body_position(f"drawer_{drawer_id}_handle"), 3))
 
         drive_to(f"drawer_{drawer_id}_handle")
-
-
-        open_container(handle_body, Arms.LEFT)
+        open_container(handle_body, _arm)
         print("Opened: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
 
-        close_container(handle_body, Arms.LEFT)
+        close_container(handle_body, _arm)
         print("Closed: drawer joint:", world.get_connection_by_name(f"drawer_{drawer_id}_joint").position)
 
     drive_to(f"drawer_{drawer_id}_handle")
@@ -371,34 +406,34 @@ for round_id in range(1, ROUNDS + 1):
 
 # %%
 
-# door_id = "1"
-# door_body = world.get_body_by_name(f"cabinet_door_{door_id}")
-# door_handle_body = world.get_body_by_name(f"cabinet_door_{door_id}_handle")
+door_id = "1"
+door_body = world.get_body_by_name(f"cabinet_door_{door_id}")
+door_handle_body = world.get_body_by_name(f"cabinet_door_{door_id}_handle")
 
-# if not world.get_semantic_annotations_by_type(Door):
-#     with world.modify_world():
-#         world.add_semantic_annotation_recursively(
-#             Door(root=door_body, handle=Handle(root=door_handle_body))
-#         )
-# print("Door annotated:", door_body.name, "with handle", door_handle_body.name)
+if not world.get_semantic_annotations_by_type(Door):
+    with world.modify_world():
+        world.add_semantic_annotation_recursively(
+            Door(root=door_body, handle=Handle(root=door_handle_body))
+        )
+print("Door annotated:", door_body.name, "with handle", door_handle_body.name)
 
-# drive_to(f"cabinet_door_{door_id}_handle")
-# open_container(door_handle_body, Arms.RIGHT)
-# # run_plan(
-# #     execute_single(OpenAction(door_handle_body, Arms.RIGHT), context=context),
-# #     collision_avoidance=False,
-# # )
-# print("Opened, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
+drive_to(f"cabinet_door_{door_id}_handle")
+open_container(door_handle_body, Arms.RIGHT)
+# run_plan(
+#     execute_single(OpenAction(door_handle_body, Arms.RIGHT), context=context),
+#     collision_avoidance=False,
+# )
+print("Opened, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
 
-# close_container(door_handle_body, Arms.RIGHT)
-# print("Closed, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
+close_container(door_handle_body, Arms.RIGHT)
+print("Closed, Door joint:", world.get_connection_by_name(f"cabinet_door_{door_id}_joint").position)
 
 
-# run_plan(sequential([
-#         ParkArmsAction(Arms.LEFT),
-#         ParkArmsAction(Arms.RIGHT),
-#         SetGripperAction(Arms.LEFT, GripperState.OPEN),
-#         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
-#     ], context=context))
+run_plan(sequential([
+        ParkArmsAction(Arms.LEFT),
+        ParkArmsAction(Arms.RIGHT),
+        SetGripperAction(Arms.LEFT, GripperState.OPEN),
+        SetGripperAction(Arms.RIGHT, GripperState.OPEN),
+    ], context=context))
 
 stop()
