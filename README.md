@@ -36,15 +36,21 @@ sudo docker run --rm --gpus all -it \
   --env PRIVACY_CONSENT="YES" \
   --env OMNI_KIT_ACCEPT_EULA="YES" \
   --env OMNI_KIT_ALLOW_ROOT=1 \
+  --env DISPLAY=${DISPLAY} \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v /usr/share/vulkan/icd.d/:/etc/vulkan/icd.d \
   -v ${PWD}:/isaac-sim/kit/cache \
   -p 8888:8888\
   intel4coro/yxzhan-2dcram-2dvrb-2dlab-eb909a:13bb3119f80dec205939d0de64c04656946393ec \
   jupyter lab --allow-root --NotebookApp.token='' --no-browser --ip=0.0.0.0
 ```
-1. Open http://localhost:8888/proxy/8899
+1. Open http://localhost:8888/vscode
 
-1. Open the demo shortcut `GARMI_apartment.desktop` or `AICOR-Apartment.desktop`
+1. Run Garmi Demo in Terminal
+
+```
+/home/jovyan/cram-vrb-lab/binder/cram_python_wrapper.sh /home/jovyan/cram-vrb-lab/demos/garmi_demo.py
+```
 
 ## Architecture
 ```
