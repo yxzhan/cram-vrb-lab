@@ -104,7 +104,8 @@ print("connected:", type(robot).__name__, "|", len(world.bodies), "bodies")
 # %%
 robot.mobile_base.full_body_controlled = True
 
-STANDOFF = {Drawer: (1.5, 0.0), Door: (1.2, -0.3)}
+# STANDOFF = {Drawer: (1.5, 0.0), Door: (1.2, -0.3)}
+STANDOFF = {Drawer: (1.5, 0.0), Door: (1.3, -0.4)}
 ARRIVED = 0.05
 GRASPED = 0.01
 

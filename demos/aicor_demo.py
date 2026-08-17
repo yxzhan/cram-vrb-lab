@@ -10,8 +10,8 @@ sys.path.insert(0, str(REPO))
 # os.environ["ISAAC_RENDER"] = "0"
 
 # No local Isaac window; watch the viewport over WebRTC instead (port 49100).
-os.environ["ISAAC_HEADLESS"] = "1"
-os.environ["ISAAC_LIVESTREAM"] = "1"
+# os.environ["ISAAC_HEADLESS"] = "1"
+# os.environ["ISAAC_LIVESTREAM"] = "1"
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
 os.environ["ISAAC_WINDOW"] = "854x480"
@@ -30,7 +30,7 @@ from launcher import (
 from cram_vrb_lab.sim.isaac_app import livestream_enabled
 SPAWN_POSITION = (-1.5, 0.0, 0.05)
 
-rviz_proc = start_rviz()
+rviz_proc = start_rviz(vgl=True)
 sim_proc = start_isaac_sim(spawn_position=SPAWN_POSITION, camera="both")   # both RGB and depth
 stream_proc = start_streaming_client() if livestream_enabled() else None
 giskard_proc = start_giskard_server(spawn_position=SPAWN_POSITION)
