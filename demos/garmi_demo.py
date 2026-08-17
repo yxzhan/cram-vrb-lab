@@ -233,7 +233,7 @@ TASKS = [
     (Drawer, "drawer_1", Arms.LEFT),
     (Door, "cabinet_door_1", Arms.RIGHT),
     (Drawer, "drawer_2", Arms.LEFT),
-    (Drawer, "drawer_3", Arms.LEFT),
+    (Drawer, "drawer_3", Arms.RIGHT),
     # (Drawer, "drawer_4", Arms.RIGHT),
 ]
 
@@ -250,6 +250,7 @@ for round_id in range(1, ROUNDS + 1):
         print(f"  opened: {joint.position}")
         close_container(handle, arm)
         print(f"  closed: {joint.position}")
+    drive_to(f"{HOME}_handle", *STANDOFF[Door])
     reset_pos()
 
 
