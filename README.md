@@ -42,7 +42,7 @@ sudo docker run --rm --gpus all -it \
   intel4coro/yxzhan-2dcram-2dvrb-2dlab-eb909a:13bb3119f80dec205939d0de64c04656946393ec \
   jupyter lab --allow-root --NotebookApp.token='' --no-browser --ip=0.0.0.0
 ```
-1. Open http:localhost:8899
+1. Open http://localhost:8888/proxy/8899
 
 1. Open the demo shortcut `GARMI_apartment.desktop` or `AICOR-Apartment.desktop`
 
