@@ -118,12 +118,16 @@
       return BASE + path;                                              // relative to BASE
     }
 
+    // running locally -> no desktop service available, hide that tab
+    const isLocalhost = ["localhost", "127.0.0.1", "::1", ""].includes(window.location.hostname);
+
     const targets = [
-      { name: "Desktop", path: "desktop/" },
+      { name: "Desktop", path: "desktop/", skipLocal: true },
       { name: "NeemHub", path: "https://cramera.informatik.uni-bremen.de/?scene=garmi_pick_place" },
       { name: "VS Code", path: "vscode/" },
       { name: "JupyterLab", path: "lab" }
-    ].map(t => ({ name: t.name, url: resolve(t.path) }));
+    ].filter(t => !(isLocalhost && t.skipLocal))
+     .map(t => ({ name: t.name, url: resolve(t.path) }));
 
     const header = document.querySelector("header");
     const main = document.querySelector("main");
