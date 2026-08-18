@@ -99,6 +99,11 @@ RUN cd /tmp && \
     sudo rm -rf /var/lib/apt/lists/* && \
     rm /tmp/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb
 
+RUN cd /tmp && \
+    wget https://github.com/VirtualGL/virtualgl/releases/download/3.1.5/virtualgl_3.1.5_amd64.deb && \
+    apt install ./virtualgl_3.1.5_amd64.deb && \
+    rm ./virtualgl_3.1.5_amd64.deb
+
 # Frequently-changing top-level content (package, demos, wrappers).
 # Copied LAST so editing them reuses every cached layer above.
 COPY --chown=${NB_USER}:users cram_vrb_lab ${REPO_DIR}/cram_vrb_lab

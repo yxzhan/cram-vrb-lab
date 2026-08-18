@@ -23,6 +23,13 @@
       border-bottom: 1px solid #313244;
       flex-wrap: wrap;
     }
+    header .logo {
+      height: 28px;
+      width: auto;
+      margin-right: 12px;
+      display: block;
+      object-fit: contain;
+    }
     header .title {
       font-weight: 600;
       margin-right: 12px;
@@ -85,7 +92,8 @@
 </head>
 <body>
   <header>
-    <span class="title">CRAM Workspace</span>
+    <!-- <img class="logo" src="https://cramera.informatik.uni-bremen.de/img/aicor-logo.png" alt="CRAM Workspace"> -->
+     <span class="title">CRAM Workspace</span>
     <!-- tabs injected by script -->
   </header>
   <main></main>
@@ -101,11 +109,21 @@
 
     const BASE = detectBase();
 
+    // absolute url (http://, https://, //host/...) or protocol-relative -> use as-is
+    const isAbsolute = p => /^(https?:)?\/\//i.test(p);
+
+    function resolve(path) {
+      if (isAbsolute(path)) return path;
+      if (path.startsWith("/")) return window.location.origin + path;  // site-root relative
+      return BASE + path;                                              // relative to BASE
+    }
+
     const targets = [
       { name: "Desktop", path: "desktop/" },
+      { name: "NeemHub", path: "https://cramera.informatik.uni-bremen.de/?scene=garmi_pick_place" },
       { name: "VS Code", path: "vscode/" },
       { name: "JupyterLab", path: "lab" }
-    ].map(t => ({ name: t.name, url: BASE + t.path }));
+    ].map(t => ({ name: t.name, url: resolve(t.path) }));
 
     const header = document.querySelector("header");
     const main = document.querySelector("main");
