@@ -101,7 +101,7 @@ RUN cd /tmp && \
 
 RUN cd /tmp && \
     wget https://github.com/VirtualGL/virtualgl/releases/download/3.1.5/virtualgl_3.1.5_amd64.deb && \
-    apt install ./virtualgl_3.1.5_amd64.deb && \
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ./virtualgl_3.1.5_amd64.deb && \
     rm ./virtualgl_3.1.5_amd64.deb
 
 # Frequently-changing top-level content (package, demos, wrappers).
