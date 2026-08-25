@@ -1,0 +1,46 @@
+#usda 1.0
+(
+    doc = """SM_SmallBowl, extracted as a standalone asset from
+    assets/apartment/apartmentICRA.usda.
+
+    The root prim sits at the origin here; in the apartment scene it stood at
+    (7.05, -4.92, 0.89484) in world coordinates."""
+    defaultPrim = "SM_SmallBowl"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "SM_SmallBowl" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+)
+{
+    point3f physics:centerOfMass = (-6.0343575e-9, 2.0324245e-8, -0.0060715917)
+    float3 physics:diagonalInertia = (0.00010421462, 0.00010421526, 0.00015145572)
+    float physics:mass = 0.058381543
+    quatf physics:principalAxes = (0.99985737, 1.0665053e-7, -1.0084469e-8, -0.016888605)
+    bool physics:rigidBodyEnabled = 1
+    matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+
+    def Mesh "SM_SmallBowl" (
+        prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxConvexDecompositionCollisionAPI"]
+        prepend references = @./meshes/usd/SmallBowl.usda@</SM_SmallBowl>
+    )
+    {
+        rel material:binding = </SM_SmallBowl/SM_SmallBowl/Materials/M_SmallBowl>
+        uniform token physics:approximation = "convexDecomposition"
+        bool physics:collisionEnabled = 1
+        int physxConvexDecompositionCollision:maxConvexHulls = 32
+        matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+
+        def Scope "Materials"
+        {
+            def Material "M_SmallBowl" (
+                prepend references = @./materials/usd/M_SmallBowl.usda@</M_SmallBowl>
+            )
+            {
+            }
+        }
+    }
+}

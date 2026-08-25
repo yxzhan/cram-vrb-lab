@@ -1,0 +1,46 @@
+#usda 1.0
+(
+    doc = """SM_Cup, extracted as a standalone asset from
+    assets/apartment/apartmentICRA.usda.
+
+    The root prim sits at the origin here; in the apartment scene it stood at
+    (7.05, -5.17, 0.90433) in world coordinates."""
+    defaultPrim = "SM_Cup"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "SM_Cup" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+)
+{
+    point3f physics:centerOfMass = (-0.005028542, 0.000016319951, -0.00084282004)
+    float3 physics:diagonalInertia = (0.00015035328, 0.00018498531, 0.00018978423)
+    float physics:mass = 0.11976868
+    quatf physics:principalAxes = (-0.702637, 0.70271075, 0.07895587, 0.07915071)
+    bool physics:rigidBodyEnabled = 1
+    matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+
+    def Mesh "SM_Cup" (
+        prepend apiSchemas = ["MaterialBindingAPI", "PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysxConvexDecompositionCollisionAPI"]
+        prepend references = @./meshes/usd/cup.usda@</SM_Cup>
+    )
+    {
+        rel material:binding = </SM_Cup/SM_Cup/Materials/M_Cup>
+        uniform token physics:approximation = "convexDecomposition"
+        bool physics:collisionEnabled = 1
+        int physxConvexDecompositionCollision:maxConvexHulls = 32
+        matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+
+        def Scope "Materials"
+        {
+            def Material "M_Cup" (
+                prepend references = @./materials/usd/M_Cup.usda@</M_Cup>
+            )
+            {
+            }
+        }
+    }
+}
