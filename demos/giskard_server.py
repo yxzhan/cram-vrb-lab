@@ -64,7 +64,7 @@ def main():
     # Needed by an interface config that syncs the map->odom tf frame; started
     # for the others too because RViz and the prop poses are stamped in `odom`
     # and would otherwise have no path to `map`.
-    localization = start_localization_stand_in()
+    localization = start_localization_stand_in(setup.robot.base_link_height)
     try:
         giskard = Giskard(
             world_config=setup.robot.giskard_world(environment, spawn_pose),

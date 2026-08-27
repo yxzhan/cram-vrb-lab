@@ -6,6 +6,8 @@ Isaac python (which has no giskardpy) and the CRAM venv (which has no isaacsim).
 
 from cram_vrb_lab.specs import RobotSpec
 
+from .joints import BASE_LINK_HEIGHT
+
 
 def _giskard_world(environment, spawn_pose):
     """GARMI on its omni drive, with ``environment`` merged in after it.
@@ -48,10 +50,20 @@ def _spawn(world, render, spawn_pose):
 
 
 def _ros_node(world, render, robot, args):
-    """No cameras: the Stretch demos cover perception."""
-    from .isaac_node import GarmiROS
+    """The ROS bridge plus, unless ``--camera none``, the head camera it publishes."""
+    from .isaac_node import GarmiROS, create_head_camera
 
-    return GarmiROS(robot)
+    head_cam = (
+        create_head_camera(world, render, want_depth=args.want_depth)
+        if args.camera != "none"
+        else None
+    )
+    return GarmiROS(
+        robot,
+        head_cam=head_cam,
+        publish_rgb=args.want_rgb,
+        publish_depth=args.want_depth,
+    )
 
 
 def _park(robot, world, render):
@@ -69,4 +81,7 @@ GARMI = RobotSpec(
     # Last: spawning a body resets the world, which throws away the drive gains
     # and the park pose. See move_to_park's warning.
     park=_park,
+    # base_link rides above the wheels, and the twin's OmniDrive cannot represent
+    # that -- so map -> odom carries it. See BASE_LINK_HEIGHT.
+    base_link_height=BASE_LINK_HEIGHT,
 )

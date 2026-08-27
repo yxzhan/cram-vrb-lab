@@ -36,6 +36,48 @@ DETECTION_COLOR = (0.1, 0.7, 0.9, 0.6)
 which boxes came from perception rather than from the URDF."""
 
 
+def ensure_camera_body(world, parent_link, translation, quaternion_xyzw,
+                       name=CAMERA_FRAME_ID):
+    """Make sure ``world`` has a body called ``name`` rigidly attached to
+    ``parent_link``; return it. A no-op if one is already there.
+
+    The Stretch needs none of this: its URDF carries the whole RealSense frame
+    chain, so :func:`camera_pose_in_map` finds ``camera_color_optical_frame`` in the
+    twin the moment the world is fetched. GARMI's URDF has **no camera link at all**
+    -- 63 joints, two IMUs, two 2D lidars, and nothing optical -- so a demo that
+    mounts a camera on GARMI in Isaac has to tell the twin where that camera sits, or
+    every detection is stuck in the camera frame with no way into ``map``.
+
+    Give it the same offset the sim publishes as static tf (for GARMI, the
+    ``CAMERA_*`` constants in :mod:`cram_vrb_lab.robots.garmi.joints`) and the two
+    descriptions agree by construction.
+
+    :param parent_link: name of the body to hang the camera off, e.g. ``"head"``.
+    :param translation: ``(x, y, z)`` [m] in the parent's frame.
+    :param quaternion_xyzw: the parent -> optical-frame rotation, ROS order.
+    """
+    existing = [body for body in world.bodies if body.name.name == name]
+    if existing:
+        return existing[0]
+
+    parent = world.get_body_by_name(parent_link)
+    camera = Body(name=PrefixedName(name))
+    with world.modify_world():
+        world.add_kinematic_structure_entity(camera)
+        world.add_connection(
+            FixedConnection(
+                parent=parent,
+                child=camera,
+                parent_T_connection_expression=(
+                    HomogeneousTransformationMatrix.from_xyz_quaternion(
+                        *translation, *quaternion_xyzw
+                    )
+                ),
+            )
+        )
+    return camera
+
+
 def camera_pose_in_map(world):
     """``map_T_camera`` as a 4x4 numpy array, from the twin's forward kinematics."""
     camera_body = world.get_body_by_name(CAMERA_FRAME_ID)

@@ -15,11 +15,13 @@ from pxr import Gf, Usd, UsdGeom, UsdPhysics
 from .constants import (
     GARMI_APARTMENT_USD_PATH,
     GRID_USD_PATH,
+    KITCHEN_PROPS,
     USD_PRIM_POSITION_IN_MAP,
     YCB_ASSET_DIR,
     YCB_DROP_HEIGHT,
     YCB_PROPS,
     YCB_UPRIGHT_ROLL,
+    kitchen_props_enabled,
 )
 
 APARTMENT_PRIM = "/World/GarmiApartment"
@@ -28,9 +30,18 @@ WORKTOP_MESH_PRIM = f"{APARTMENT_PRIM}/Meshes/Assets/cabinet/Actor_0000/Static/g
 """The kitchen run's static mesh -- carcase, plinth and worktop in one mesh.
 
 The surface the objects on :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.KITCHEN_WORKTOP`
-rest on. It ships without a collider, so :func:`spawn_ycb_props` adds one; see there.
+rest on. It ships without a collider, so :func:`spawn_ycb_props` and
+:func:`spawn_kitchen_props` both add one; see there.
 The drawer fronts and cabinet doors are separate prims under the same asset and are
 left alone -- nothing is standing on those.
+"""
+
+KITCHEN_PROPS_ROOT = "/World/KitchenProps"
+"""Prim the kitchen objects are spawned under.
+
+Separate from :data:`YCB_PROPS_ROOT` so the two groups can be told apart in the stage
+tree and switched independently, and outside ``/World/GarmiApartment`` for the same
+reason that one is -- see there.
 """
 
 YCB_PROPS_ROOT = "/World/YCBProps"
@@ -110,9 +121,14 @@ def spawn_ycb_props(world, render, props=YCB_PROPS):
 
     Referenced straight from the Isaac Sim assets root, made into rigid bodies, rolled
     upright, yawed, released :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.YCB_DROP_HEIGHT`
-    above their surface and then stepped until they stop moving. The worktop gets a
-    collider first, because it has none of its own -- without it the two kitchen
-    objects fall through the cabinet and land on the floor.
+    above their surface and then stepped until they stop moving.
+
+    All four stand on the dining table, which ships with a collider of its own. The
+    worktop still gets one here, because it has none -- nothing in :data:`YCB_PROPS`
+    needs it any more, but :func:`spawn_kitchen_props` is opt-in and every other
+    caller that puts something on the worktop would otherwise watch it fall through
+    the cabinet onto the floor. ``_add_static_collider`` is idempotent, so the two
+    spawns asking for it independently costs nothing.
 
     :return: ``{name: (settled_centre, size)}`` for every object, in ``map``. Printed
         as well: the release poses are known from the constants, but where an object
@@ -163,6 +179,60 @@ def spawn_ycb_props(world, render, props=YCB_PROPS):
     return placed
 
 
+def spawn_kitchen_props(world, render, props=KITCHEN_PROPS):
+    """Put the kitchen objects in :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.KITCHEN_PROPS`
+    on the worktop and settle them.
+
+    Shorter than :func:`spawn_ycb_props` by exactly the work those assets need and
+    these do not. Each kitchen asset is referenced as a complete physics body --
+    ``PhysicsRigidBodyAPI``, an authored mass and inertia tensor, and its own collider
+    (``convexDecomposition`` for the cup and the bowl, so the handle opening and the
+    bowl's cavity survive; see ``assets/kitchen-objects/README.md``). So nothing here
+    applies a rigid body or a collider: doing so would overwrite those masses and
+    collapse the decompositions to a single hull.
+
+    What is still needed is the same as for the YCB props: a collider on the worktop,
+    which the apartment ships without, and grounding each object on its own measured
+    bounding box so the constants can stay surface heights.
+
+    :return: ``{name: (settled_centre, size)}`` in ``map``, and prints the same --
+    where an object came to rest is only knowable from the simulation.
+    """
+    stage = world.stage
+    # Idempotent: spawn_ycb_props has usually applied this already, but this function
+    # has to stand on its own -- without it every object falls through to the floor.
+    _add_static_collider(stage.GetPrimAtPath(WORKTOP_MESH_PRIM))
+
+    define_prim(KITCHEN_PROPS_ROOT, "Xform")
+    sizes = {}
+    for prop in props:
+        prim = create_prim(
+            prim_path=f"{KITCHEN_PROPS_ROOT}/{prop.name}",
+            usd_path=prop.usd_path,
+            position=np.array(prop.position),  # z corrected below
+            orientation=euler_angles_to_quat([0.0, 0.0, prop.yaw]),
+        )
+        sizes[prop.name] = _release_above_surface(
+            stage, prim, prop.position[2], YCB_DROP_HEIGHT
+        )
+
+    world.reset()
+    for _ in range(120):
+        world.step(render=render)
+
+    placed = {}
+    for prop in props:
+        minimum, maximum = _world_aabb(stage, stage.GetPrimAtPath(
+            f"{KITCHEN_PROPS_ROOT}/{prop.name}"))
+        centre = tuple(round(float((lo + hi) / 2), 4)
+                       for lo, hi in zip(minimum, maximum))
+        placed[prop.name] = (centre, sizes[prop.name])
+        print(f"Kitchen prop {prop.name}: released at {prop.position} + "
+              f"{YCB_DROP_HEIGHT} m, settled centre {centre}, "
+              f"size {sizes[prop.name]}", flush=True)
+    return placed
+
+
 def load_garmi_apartment_scene(world, render, camera_eye=None, camera_target=None):
     """Ground grid, the apartment USD, the tabletop objects, and the camera view.
 
@@ -188,6 +258,12 @@ def load_garmi_apartment_scene(world, render, camera_eye=None, camera_target=Non
     # find; these four put objects on the worktop and the dining table without
     # touching either the USD or its MJCF twin.
     spawn_ycb_props(world, render)
+
+    # Cup, bowl, cereal and milk on the worktop right of the sink -- opt-in, because
+    # the other garmi demos were tuned against a worktop carrying only the two YCB
+    # objects. demos/garmi_demo.py sets ISAAC_KITCHEN_PROPS=1.
+    if kitchen_props_enabled():
+        spawn_kitchen_props(world, render)
 
     # Defaults lifted from world.usda's saved Perspective camera, i.e. the view
     # the scene was authored from: over the robot's shoulder into the living room.

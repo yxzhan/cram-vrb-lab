@@ -133,6 +133,21 @@ CLUSTER_TUNING = {
     "min_on_plane_point_count": 20,
 }
 
+PLANE_TUNING = {
+    # How far from the fitted plane a point may lie and still count as part of it.
+    # This number decides how much of every object's bottom is thrown away, twice
+    # over: PointCloudClusterExtractor drops the RANSAC inliers outright
+    # (`select_by_index(inliers, invert=True)`), and then crops what is left to a
+    # box stacked on the *top face* of the slab those inliers occupy -- a slab
+    # roughly two thresholds thick. At robokudo's 0.02 the bottom 2 cm of a carton
+    # standing on the worktop is gone, so the detected box comes out 2 cm short with
+    # its top correct and a gap underneath.
+    #
+    # 0.02 is right for a real Kinect. Isaac's depth is raytraced and essentially
+    # noiseless, so the fit needs nothing like that much slack.
+    "distance_threshold": 0.005,
+}
+
 CAMERA_CROP = {
     # Camera optical frame: +x right, +y down, +z forward. Keeps the counter and
     # drops the floor and the far wall, either of which the plane fit would
@@ -244,7 +259,7 @@ def camera_descriptor():
     )
 
 
-def build_pipeline(descriptor, crop=None, tuning=None):
+def build_pipeline(descriptor, crop=None, tuning=None, plane=None):
     """The geometric analysis engine: crop, fit the dominant plane, cluster what
     stands on it, fit an oriented box to each cluster.
 
@@ -266,6 +281,10 @@ def build_pipeline(descriptor, crop=None, tuning=None):
     for name, value in {**CLUSTER_TUNING, **(tuning or {})}.items():
         setattr(cluster_config.parameters, name, value)
 
+    plane_config = PlaneAnnotator.Descriptor()
+    for name, value in {**PLANE_TUNING, **(plane or {})}.items():
+        setattr(plane_config.parameters, name, value)
+
     pipeline = robokudo.pipeline.Pipeline("StretchHeadCameraPipeline")
     pipeline.add_children(
         [
@@ -273,7 +292,7 @@ def build_pipeline(descriptor, crop=None, tuning=None):
             CollectionReaderAnnotator(descriptor=descriptor),
             ImagePreprocessorAnnotator("ImagePreprocessor"),
             PointcloudCropAnnotator(descriptor=crop_config),
-            PlaneAnnotator(),
+            PlaneAnnotator(descriptor=plane_config),
             PointCloudClusterExtractor(descriptor=cluster_config),
             ClusterPoseBBAnnotator(),
         ]
@@ -294,6 +313,34 @@ def make_pipeline_node():
        on it would silently stop working for the rest of the session.
     """
     return rclpy.create_node(PIPELINE_NODE_NAME)
+
+
+def stop_camera(descriptor):
+    """Tear down the camera interface's image subscriptions; it stops reading frames.
+
+    :func:`camera_descriptor` starts a daemon thread running ``rclpy.spin`` on the
+    interface's own node, and the synchroniser callback calls tf ``lookup_transform``
+    for **every** RGB-D pair. The lookup asks for the latest time common to the whole
+    ``map -> ... -> camera_color_optical_frame`` chain, so the moment any link in it
+    stops being published the callback logs a warning per frame -- at camera rate,
+    for as long as the descriptor exists, whether or not a pipeline is ticking. A
+    demo that looks once has no reason to keep that running.
+
+    The subscriptions go, not the node: ``destroy_node`` on a node another thread is
+    blocked spinning raises in that thread, and the traceback reads worse than the
+    warnings it removes. What is left behind is idle -- a tf listener, and no image
+    callbacks to fail.
+
+    Call it after the last :func:`detect`. Looking again needs a fresh
+    :func:`camera_descriptor`.
+    """
+    interface = descriptor.parameters.camera_interface
+    for subscriber in (
+        interface.color_subscriber,
+        interface.depth_subscriber,
+        interface.camera_info_subscriber,
+    ):
+        interface.node.destroy_subscription(subscriber.sub)
 
 
 def detect(pipeline_node, descriptor, pipeline=None, max_iterations=120, tick_rate=10):

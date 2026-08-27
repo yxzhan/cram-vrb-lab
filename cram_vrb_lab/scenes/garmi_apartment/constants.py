@@ -17,6 +17,7 @@ and giskard's collision world stay aligned by construction.
    ``(-1.4967, 4.8020, 1.5)``.
 """
 
+import os
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -275,10 +276,11 @@ The rays come back 0.945 across the whole free run.
    to x = 1.00 (rays fall through to the basin at 0.76, with a rim at 0.956) and the
    tap stands behind it at (1.00, 7.60). Solid worktop runs from x = 0.10 to x = 0.65
    at every depth y in [7.14, 7.70], and again from x = 1.10 to x = 1.50. This centre
-   is kept as the anchor because it is the middle of the worktop; :data:`YCB_PROPS`
-   offsets its two objects into the free stretch to its left. A soup can released at
+   is kept as the anchor because it is the middle of the worktop; :data:`KITCHEN_PROPS`
+   offsets its four objects into the free stretch to its left. A soup can released at
    x = 0.62 -- 0.08 m short of the cut-out -- slid off the edge and ended up in the
-   sink, which is how the cut-out was found.
+   sink, which is how the cut-out was found, and why nothing here is placed past
+   x = 0.56.
 """
 
 DINING_TABLE_TOP = (1.85, 4.78, 0.771)
@@ -296,32 +298,33 @@ number measured off the geometry is the wrong one to place from.
 """
 
 YCB_PROPS = (
-    # Two on the worktop, spread along the run (the cabinets face -y, so the free
-    # direction is x) and pushed left of centre to clear the sink cut-out that starts
-    # at x = 0.70 -- see the warning on KITCHEN_WORKTOP. 0.28 m apart centre-to-centre
-    # leaves ~0.19 m of bare worktop between them, which is what keeps them two
-    # clusters rather than one for the Euclidean clustering in
-    # cram_vrb_lab.perception.pipeline.
-    YCBProp("mustard_bottle", "006_mustard_bottle.usd",
-            (KITCHEN_WORKTOP[0] - 0.20, KITCHEN_WORKTOP[1], KITCHEN_WORKTOP[2]),
-            mass=0.603, yaw=0.35),
-    YCBProp("tomato_soup_can", "005_tomato_soup_can.usd",
-            (KITCHEN_WORKTOP[0] + 0.08, KITCHEN_WORKTOP[1] + 0.03, KITCHEN_WORKTOP[2]),
-            mass=0.349),
-    # Two on the dining table, spread along its long axis (y) for the same reason.
-    # The banana is 0.197 m long and lies along x, well inside the table's 0.85 m.
+    # All four on the dining table, spread along its long axis (y) so the gaps stay
+    # wide enough for the Euclidean clustering in cram_vrb_lab.perception.pipeline to
+    # call them four objects rather than one. The banana is 0.197 m long and lies
+    # along x, well inside the table's 0.85 m; the tightest pair here clears by
+    # 0.153 m. Bounds checked against the rendered table top,
+    # x in [1.433, 2.283], y in [4.101, 5.452].
+    #
+    # The worktop is left to KITCHEN_PROPS -- the mustard bottle and the soup can
+    # used to stand on it, and moved here when those four took the free run over.
     YCBProp("banana", "011_banana.usd",
             (DINING_TABLE_TOP[0], DINING_TABLE_TOP[1] - 0.13, DINING_TABLE_TOP[2]),
             mass=0.066, yaw=-0.5),
     YCBProp("tuna_fish_can", "007_tuna_fish_can.usd",
             (DINING_TABLE_TOP[0] + 0.03, DINING_TABLE_TOP[1] + 0.13, DINING_TABLE_TOP[2]),
             mass=0.171),
+    YCBProp("mustard_bottle", "006_mustard_bottle.usd",
+            (DINING_TABLE_TOP[0], DINING_TABLE_TOP[1] - 0.44, DINING_TABLE_TOP[2]),
+            mass=0.603, yaw=0.35),
+    YCBProp("tomato_soup_can", "005_tomato_soup_can.usd",
+            (DINING_TABLE_TOP[0], DINING_TABLE_TOP[1] + 0.40, DINING_TABLE_TOP[2]),
+            mass=0.349),
 )
 """The four YCB objects the Isaac side adds to this apartment.
 
-Both surfaces get a tall object and a low one, so a detection can be scored on
-height as well as position. The positions here are where each object is *released*;
-what it settles at is decided by physics and printed by
+Tall objects and low ones together, so a detection can be scored on height as well as
+position. The positions here are where each object is *released*; what it settles at
+is decided by physics and printed by
 :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props`.
 
 .. note::
@@ -335,4 +338,104 @@ what it settles at is decided by physics and printed by
    apartment's floor mesh. The dining table therefore supports an object out of the
    box; the worktop needs a collider adding first, or anything released above it
    falls straight through to the floor.
+"""
+
+
+# --- Kitchen objects on the cabinet worktop ---------------------------------
+#
+# The four props extracted out of ``apartmentICRA.usda`` into
+# ``assets/kitchen-objects`` (see the README there). Unlike the YCB objects above
+# these are *not* bare meshes: each asset already carries its own rigid body,
+# mass, inertia tensor and collider, so the Isaac side only has to place it.
+
+KITCHEN_OBJECTS_DIR = ASSETS_DIR / "kitchen-objects"
+"""Directory of the standalone kitchen assets, vendored into this repo.
+
+Local, unlike :data:`YCB_ASSET_DIR`, which resolves against the Isaac assets root:
+these four were cut out of the ICRA apartment rather than downloaded, so nothing
+here needs the Isaac asset bucket to be reachable.
+"""
+
+KITCHEN_PROPS_ENV = "ISAAC_KITCHEN_PROPS"
+"""Environment variable that opts these objects in; see :func:`kitchen_props_enabled`."""
+
+
+def kitchen_props_enabled() -> bool:
+    """Whether to put the kitchen objects on the worktop. Off unless asked.
+
+    An environment variable rather than a ``--`` flag because that is how the
+    notebooks already steer the Isaac process (``ISAAC_RENDER``, ``ISAAC_HEADLESS``,
+    ``ISAAC_WINDOW``): the demo sets it at the top of the file and
+    ``launcher.start_isaac_sim`` inherits it into the sim subprocess. A scene flag
+    would have to be threaded through the launcher, the entry script and the runner
+    to reach the one place that reads it.
+
+    Off by default so the other garmi demos keep the worktop they were tuned with.
+    """
+    return os.environ.get(KITCHEN_PROPS_ENV, "0") == "1"
+
+
+@dataclass(frozen=True)
+class KitchenProp:
+    """One kitchen object standing on a surface, in the giskard ``map`` frame."""
+
+    name: str
+    """Asset directory name under :data:`KITCHEN_OBJECTS_DIR`, which is also the
+    prim name and the name the spawn report prints."""
+
+    position: Tuple[float, float, float]
+    """(x, y, surface_z) -- the **surface** height, like :class:`YCBProp`, not the
+    object's centre. The spawn measures each asset's bounding box and releases it
+    :data:`YCB_DROP_HEIGHT` above the surface."""
+
+    yaw: float = 0.0
+    """Rotation [rad] about world Z. No roll: unlike the YCB ``Axis_Aligned``
+    assets these are authored Z-up and stand the right way up unrotated (their
+    bounding boxes measure 0.070 x 0.200 x **0.300** for the cereal box,
+    0.133 x 0.133 x **0.067** for the bowl)."""
+
+    @property
+    def usd_path(self) -> str:
+        """The asset's entry-point layer, whose ``defaultPrim`` is the object."""
+        return str(KITCHEN_OBJECTS_DIR / self.name / f"{self.name}.usda")
+
+
+KITCHEN_PROPS = (
+    # All four go on the stretch of worktop LEFT of the sink, x in [0.10, 0.65] --
+    # see the warning on KITCHEN_WORKTOP; the 0.70..1.00 cut-out to their right is
+    # the sink itself. This is the run the mustard bottle and the soup can used to
+    # stand on, before YCB_PROPS moved them to the dining table. It is the better of
+    # the two runs to work: 0.55 m against 0.40 m, and no tap standing over it.
+    #
+    # Two rows, because even 0.55 m of run does not hold four objects side by side
+    # with clustering gaps between them (their x footprints sum to 0.384 m). Tall at
+    # the back, low at the front, so nothing hides behind anything else from a camera
+    # looking in from -y:
+    #
+    #     back  (y = 7.55)   cereal box (0.30 m)   milk box (0.20 m)
+    #     front (y = 7.30)   bowl (0.067 m)        cup (0.087 m)
+    #
+    # Every footprint below was checked against the free run and the sink cut-out
+    # with the yaws applied; the tightest pair clears by 0.062 m, and the rightmost
+    # edge (the cup's, at x = 0.556) keeps 0.094 m from where the worktop ends.
+    KitchenProp("SM_CerealBox", (-0.15, 7.2, KITCHEN_WORKTOP[2]), yaw=1.5707963267948966),
+    KitchenProp("SM_MilkBox", (0.5, 7.2, KITCHEN_WORKTOP[2]), yaw=-1.5707963267948966),
+    KitchenProp("SM_SmallBowl", (0.15, 7.25, KITCHEN_WORKTOP[2])),
+    # -pi/2 turns the handle, which the mesh puts on +x, to face -y -- i.e. towards
+    # the robot, which works this run from the open side of the room.
+    KitchenProp("SM_Cup", (0.3, 7.30, KITCHEN_WORKTOP[2]), yaw=-1.5707963267948966),
+)
+"""The four kitchen objects the Isaac side puts on the worktop when
+:func:`kitchen_props_enabled`.
+
+Cereal box, milk box, bowl and cup: the makings of one breakfast task, which is why
+these four were the ones cut out of the ICRA apartment.
+
+.. note::
+   These carry their own physics, so the spawn must **not** re-apply a rigid body or
+   a collider the way :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props`
+   does for the YCB meshes -- that would overwrite the authored masses and flatten the
+   cup's and bowl's convex decompositions back to a single hull, filling in the
+   handle and the bowl's cavity. The worktop still needs its collider adding, exactly
+   as for the YCB props.
 """

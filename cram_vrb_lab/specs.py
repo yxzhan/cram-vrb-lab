@@ -123,6 +123,22 @@ class RobotSpec:
     whose drive gains and park pose must be set *after* the last
     ``world.reset()``; ``None`` when the robot needs nothing."""
 
+    base_link_height: float = 0.0
+    """Height [m] of the robot's root link above the floor, i.e. where ``odom``
+    sits.
+
+    Zero for a robot whose root link *is* on the floor, and for one bolted to
+    ``map`` with no odometry at all. It is not zero for GARMI, whose ``base_link``
+    rides above its wheels -- and a wheeled robot's odometry is planar, so the
+    ``OmniDrive`` / ``DifferentialDrive`` the twin hangs it off has no z degree of
+    freedom to carry that height in. The only place left for it is ``map -> odom``,
+    which :func:`cram_vrb_lab.control.giskard_server.start_localization_stand_in`
+    is given this value for; the sim keeps ``odom -> base_link`` planar to match.
+
+    Get it wrong and nothing errors -- the whole robot is simply this much lower
+    in the twin than in the sim, so giskard reaches a modelled handle high by it
+    and perception sinks what it sees into the surface by it."""
+
 
 @dataclass(frozen=True)
 class SceneSpec:

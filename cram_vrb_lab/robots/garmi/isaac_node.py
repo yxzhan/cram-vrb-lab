@@ -23,11 +23,21 @@ import omni.kit.commands
 from geometry_msgs.msg import Twist
 from isaacsim.core.prims import Articulation, XFormPrim
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import Float64, Float64MultiArray
-from tf2_ros import TransformBroadcaster
+from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
-from cram_vrb_lab.sim.ros_utils import SimBridge, as_np, make_tf, qconj, qmul, qrot
+from cram_vrb_lab.sim.ros_utils import (
+    SimBridge,
+    as_np,
+    build_camera_info,
+    depth_msg,
+    image_msg,
+    make_tf,
+    qconj,
+    qmul,
+    qrot,
+)
 from cram_vrb_lab.sim.velocity_integrator import (
     MAX_LEAD,
     StreamedVelocityIntegrator,
@@ -36,8 +46,15 @@ from cram_vrb_lab.sim.velocity_integrator import (
 
 from .joints import (
     ARM_JOINTS,
+    BASE_LINK_HEIGHT,
+    CAMERA_FRAME_ID,
+    CAMERA_IN_HEAD,
+    CAMERA_OPTICAL_IN_HEAD_QUAT,
+    CAMERA_PARENT_LINK,
     CMD_VEL_TOPIC,
     CONTROLLED_JOINTS,
+    DEPTH_IMAGE_TOPIC,
+    DEPTH_INFO_TOPIC,
     FINGER_JOINTS,
     FINGER_MASS,
     GRIPPER_CMD_TOPIC,
@@ -47,6 +64,8 @@ from .joints import (
     LIFT_JOINTS,
     ODOM_TOPIC,
     PARK_CONFIGURATION,
+    RGB_IMAGE_TOPIC,
+    RGB_INFO_TOPIC,
     ROBOT_NAME,
     SIDES,
     VELOCITY_CMD_TOPIC,
@@ -60,13 +79,16 @@ GARMI_PRIM_PATH = f"/{ROBOT_NAME}"
 which :func:`~cram_vrb_lab.robots.garmi.joints.load_patched_urdf` rewrites to a
 name that survives the importer's prim-path sanitising."""
 
-BASE_LINK_HEIGHT = 0.0259
-"""Height [m] of ``base_link`` above the floor when the wheels are on it.
+HEAD_LINK_PRIM = f"{GARMI_PRIM_PATH}/{CAMERA_PARENT_LINK}"
+"""The head link's prim. The importer lays the links out flat under the robot prim
+rather than nested as the link tree is, so this is a direct child."""
 
-The wheel centres sit 0.05 m above ``base_link`` and the wheels have a 0.0759 m
-radius; the description's own MuJoCo ``home`` keyframe opens with the same
-number. A demo that spawns GARMI at z = 0 sinks it into the floor by this much.
-"""
+HEAD_CAM_PRIM = f"{HEAD_LINK_PRIM}/head_camera"
+"""The camera sensor, parented to the head so it pans and tilts with it."""
+
+CAMERA_RESOLUTION = (640, 360)
+"""Same as the Stretch's head camera, and the same reason: enough to see a worktop
+across a room, cheap enough that RTX raytracing it does not cost the control rate."""
 
 WHEEL_RADIUS = 0.0759
 """[m], from the wheels' collision cylinders. Only used for the cosmetic spin."""
@@ -298,6 +320,63 @@ def move_to_park(garmi, world, render):
     print(f"GARMI parked, both arms at {PARK_CONFIGURATION}, lift down, head level")
 
 
+def create_head_camera(world, render, want_depth=False):
+    """One RGBD camera on GARMI's head; the caller picks which streams
+    :class:`GarmiROS` publishes.
+
+    The Stretch mounts its camera straight onto ``camera_color_optical_frame``, a
+    real link of its URDF, and needs no pose maths. GARMI has no camera link -- see
+    :data:`~cram_vrb_lab.robots.garmi.joints.CAMERA_FRAME_ID` -- so the sensor is
+    parented to the ``head`` link itself and given the pose that puts it behind the
+    face looking forward. It pans and tilts with the head for free, because the head
+    prim is the one the articulation moves.
+
+    The orientation is set on the prim rather than through ``Camera(orientation=...)``
+    for the reason the Stretch's version documents: that argument goes through
+    Isaac's own ROS<->USD camera axis conversion. Here the parent is the head's own
+    body frame (+x forward, +y left, +z up) and a USD camera looks down its own -z
+    with +y up, so the quaternion below is the one that makes -z point along head +x
+    and +y point along head +z, i.e. the optical frame of
+    :data:`~cram_vrb_lab.robots.garmi.joints.CAMERA_OPTICAL_IN_HEAD_QUAT` turned
+    half a turn about x.
+
+    The camera does RTX raytraced rendering, so ``--camera none`` /
+    ``ISAAC_NO_CAMERA=1`` skipping it also lets machines whose GPU cannot render it
+    run the control path, which does not use the camera.
+    """
+    import omni
+    from pxr import UsdGeom
+    from isaacsim.sensors.camera import Camera
+
+    stage = omni.usd.get_context().get_stage()
+    if not stage.GetPrimAtPath(HEAD_LINK_PRIM):
+        raise RuntimeError(f"no {HEAD_LINK_PRIM} to mount the head camera on")
+
+    UsdGeom.Camera.Define(stage, HEAD_CAM_PRIM)
+    head_cam = Camera(
+        prim_path=HEAD_CAM_PRIM,
+        frequency=30,
+        resolution=CAMERA_RESOLUTION,
+    )
+    XFormPrim(HEAD_CAM_PRIM).set_local_poses(
+        translations=np.array([CAMERA_IN_HEAD]),
+        orientations=np.array([[0.5, 0.5, -0.5, -0.5]]),  # (w, x, y, z)
+    )
+    head_cam.initialize()
+    # The Stretch's numbers, unchanged: the published CameraInfo is derived from the
+    # USD focal length and aperture by build_camera_info, so the intrinsics stay
+    # self-consistent with whatever is set here.
+    head_cam.set_focal_length(1.5)
+    head_cam.set_clipping_range(near_distance=0.05, far_distance=20)
+    if want_depth:
+        # distance_to_image_plane = metric depth (m), read back by get_depth().
+        head_cam.add_distance_to_image_plane_to_frame()
+
+    for _ in range(20):
+        world.step(render=render)
+    return head_cam
+
+
 class GarmiROS(SimBridge):
     """ROS 2 bridge for the simulated GARMI.
 
@@ -313,9 +392,12 @@ class GarmiROS(SimBridge):
     the robot across the flat forever.
     """
 
-    def __init__(self, robot):
+    def __init__(self, robot, head_cam=None, publish_rgb=True, publish_depth=False):
         super().__init__("garmi_ros")
         self.robot = robot
+        self.head_cam = head_cam
+        self.publish_rgb = publish_rgb
+        self.publish_depth = publish_depth
         self.integrator = StreamedVelocityIntegrator(
             robot, CONTROLLED_JOINTS, holding_joints=FINGER_JOINTS
         )
@@ -331,7 +413,21 @@ class GarmiROS(SimBridge):
             JointState, JOINT_STATES_TOPIC, 10
         )
         self.pub_odom = self.create_publisher(Odometry, ODOM_TOPIC, 10)
+        # Intrinsics are constant; build the CameraInfo once and just restamp it.
+        self._camera_info = (
+            build_camera_info(self.head_cam, *CAMERA_RESOLUTION, CAMERA_FRAME_ID)
+            if self.head_cam is not None else None)
+        if self.head_cam is not None and self.publish_rgb:
+            self.pub_head_img = self.create_publisher(Image, RGB_IMAGE_TOPIC, 10)
+            self.pub_head_info = self.create_publisher(CameraInfo, RGB_INFO_TOPIC, 10)
+        if self.head_cam is not None and self.publish_depth:
+            self.pub_head_depth = self.create_publisher(Image, DEPTH_IMAGE_TOPIC, 10)
+            self.pub_head_depth_info = self.create_publisher(
+                CameraInfo, DEPTH_INFO_TOPIC, 10)
         self.tf_broadcaster = TransformBroadcaster(self)
+        self.static_tf_broadcaster = StaticTransformBroadcaster(self)
+        if self.head_cam is not None:
+            self.publish_camera_static_tf()
 
         # Commanded base pose for kinematic dead-reckoning, seeded from where the
         # robot was spawned; integrate_base advances it from cmd_vel.
@@ -431,6 +527,47 @@ class GarmiROS(SimBridge):
         self.publish_joint_states()
         self.publish_odom()
         self.publish_tf()
+        self.publish_camera()
+
+    def publish_camera_static_tf(self):
+        """Publish ``head -> camera_color_optical_frame`` once, latched.
+
+        One transform, not a chain: this frame has no URDF behind it (see
+        :data:`~cram_vrb_lab.robots.garmi.joints.CAMERA_FRAME_ID`), and its parent is
+        a real link that :meth:`publish_tf` already emits every step. Static rather
+        than per-step because it never changes -- the head moving is the ``head``
+        frame moving, which the per-step tf already carries.
+        """
+        self.static_tf_broadcaster.sendTransform([
+            make_tf(
+                self.get_clock().now().to_msg(),
+                CAMERA_PARENT_LINK,
+                CAMERA_FRAME_ID,
+                CAMERA_IN_HEAD,
+                CAMERA_OPTICAL_IN_HEAD_QUAT,
+            )
+        ])
+
+    def _publish_camera_info(self, pub, stamp):
+        self._camera_info.header.stamp = stamp
+        pub.publish(self._camera_info)
+
+    def publish_camera(self):
+        if self.head_cam is None:
+            return
+        stamp = self.get_clock().now().to_msg()
+        if self.publish_rgb:
+            rgba = self.head_cam.get_rgba()
+            if rgba is not None and len(rgba) > 0:
+                self.pub_head_img.publish(
+                    image_msg(rgba[:, :, :3], stamp, CAMERA_FRAME_ID))
+                self._publish_camera_info(self.pub_head_info, stamp)
+        if self.publish_depth:
+            depth = self.head_cam.get_depth()
+            if depth is not None and len(depth) > 0:
+                self.pub_head_depth.publish(
+                    depth_msg(depth, stamp, CAMERA_FRAME_ID))
+                self._publish_camera_info(self.pub_head_depth_info, stamp)
 
     def publish_joint_states(self):
         msg = JointState()
@@ -444,6 +581,9 @@ class GarmiROS(SimBridge):
 
         The twist is estimated by finite differences and reported in the base
         frame, which is what an omni drive's odometry means.
+
+        ``odom`` sits at :data:`~cram_vrb_lab.robots.garmi.joints.BASE_LINK_HEIGHT`,
+        so the reported z is 0 -- see :meth:`publish_tf`.
         """
         transforms = as_np(
             self.robot._physics_view.get_link_transforms()
@@ -458,7 +598,7 @@ class GarmiROS(SimBridge):
         msg.child_frame_id = "base_link"
         msg.pose.pose.position.x = float(position[0])
         msg.pose.pose.position.y = float(position[1])
-        msg.pose.pose.position.z = float(position[2])
+        msg.pose.pose.position.z = float(position[2] - BASE_LINK_HEIGHT)
         msg.pose.pose.orientation.x = float(quaternion[0])
         msg.pose.pose.orientation.y = float(quaternion[1])
         msg.pose.pose.orientation.z = float(quaternion[2])
@@ -499,7 +639,18 @@ class GarmiROS(SimBridge):
         base_quaternion_inv = qconj(base_quaternion)
         now = self.get_clock().now().to_msg()
 
-        tfs = [make_tf(now, "odom", "base_link", base_position, base_quaternion)]
+        # odom sits at BASE_LINK_HEIGHT, not on the floor: odometry on a wheeled
+        # robot is planar and the twin's OmniDrive has no z dof to put the height
+        # in. The localization stand-in publishes it in map -> odom instead.
+        tfs = [
+            make_tf(
+                now,
+                "odom",
+                "base_link",
+                base_position - np.array([0.0, 0.0, BASE_LINK_HEIGHT]),
+                base_quaternion,
+            )
+        ]
         for index, name in enumerate(self.body_names):
             if index == self.base_idx:
                 continue

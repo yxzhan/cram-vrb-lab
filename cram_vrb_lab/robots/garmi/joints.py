@@ -100,9 +100,76 @@ GRIPPER_CMD_TOPIC = "/garmi/gripper_command"
 CMD_VEL_TOPIC = "/garmi/cmd_vel"
 
 ODOM_TOPIC = "/odom"
+
+# --- Head camera ----------------------------------------------------------
+#
+# The same topic names and the same frame id as the Stretch's head camera, and
+# deliberately so rather than by copy-paste: demos/rviz/garmi.rviz already ships a
+# DepthCloud pointed at these two topics, and cram_vrb_lab.perception.pipeline
+# imports CAMERA_FRAME_ID and the topics straight out of the Stretch's joints
+# module. Reusing the names is what lets both work against GARMI unchanged, and
+# only one sim runs at a time so there is nothing to collide with.
+
+RGB_IMAGE_TOPIC = "/head_camera/image_raw"
+RGB_INFO_TOPIC = "/head_camera/camera_info"
+DEPTH_IMAGE_TOPIC = "/head_camera/depth/image_raw"
+DEPTH_INFO_TOPIC = "/head_camera/depth/camera_info"
+
+CAMERA_FRAME_ID = "camera_color_optical_frame"
+"""Frame the head-camera images are stamped in.
+
+Unlike the Stretch, GARMI's URDF has **no camera link at all** -- 63 joints and not
+one of them a camera; the description carries two IMUs and two 2D lidars and nothing
+else. So this frame is not a link the twin or giskard knows about: it is invented
+here and published by the sim as static tf off :data:`CAMERA_PARENT_LINK`, which the
+per-step tf already emits.
+"""
+
+CAMERA_PARENT_LINK = "head"
+"""Link the camera rides on -- the tip of the ``neck_1 -> neck_2 -> head`` chain, so
+it pans and tilts with :data:`HEAD_JOINTS`."""
+
+CAMERA_IN_HEAD = (0.13, 0.034, 0.02)
+"""Where the camera sits in the ``head`` link frame [m].
+
+Measured off ``head.obj``, which lands in that frame at x in [-0.087, 0.127],
+y in [-0.101, 0.169], z in [-0.112, 0.090] once the visual origin's rpy is applied.
+x = 0.13 puts the lens just proud of the face, y = 0.034 is the head's own centre
+line (the tilt joint is mounted 34 mm off it), and z = 0.02 is a little above centre,
+where eyes would be.
+"""
+
+CAMERA_OPTICAL_IN_HEAD_QUAT = (-0.5, 0.5, -0.5, 0.5)
+"""``head -> camera_color_optical_frame`` rotation as (x, y, z, w).
+
+The head looks along its own **+x** (the same axis
+``semantic_digital_twin.robots.garmi.GarmiCamera`` declares as its
+``forward_facing_axis``), with +y left and +z up. A REP-103 optical frame wants +z
+forward, +x right and +y down, and this quaternion is exactly that relabelling:
+optical +z -> head +x, optical +x -> head -y, optical +y -> head -z.
+"""
 """Unnamespaced, as on the Stretch: the localization stand-in
 (:func:`cram_vrb_lab.control.giskard_server.start_localization_stand_in`)
 publishes a static ``map -> odom`` and only one robot runs at a time."""
+
+BASE_LINK_HEIGHT = 0.0259
+"""Height [m] of ``base_link`` above the floor when the wheels are on it.
+
+The wheel centres sit 0.05 m above ``base_link`` and the wheels have a 0.0759 m
+radius; the description's own MuJoCo ``home`` keyframe opens with the same number.
+A demo that spawns GARMI at z = 0 sinks it into the floor by this much.
+
+It is also where ``odom`` sits. Odometry on a wheeled robot is planar, so the
+``OmniDrive`` the twin hangs the robot off has no z degree of freedom at all
+("we can't measure its z-axis position, so z=0" -- ``OmniDrive``'s own
+docstring). The only place that height can live is therefore ``map -> odom``:
+:func:`cram_vrb_lab.control.giskard_server.start_localization_stand_in` publishes
+it there, and :meth:`~cram_vrb_lab.robots.garmi.isaac_node.GarmiROS.publish_tf`
+subtracts it again so ``odom -> base_link`` stays planar. Leave the two out of
+step and every frame above the base is this much lower in the twin than in the
+sim -- which reaches a modelled handle 2.6 cm high and sinks a perceived object
+2.6 cm into the worktop.
+"""
 
 ROBOT_ROOT_LINK = "base_link"
 BASE_LINK = "chassis_link"
@@ -116,10 +183,10 @@ def hand_link(side: str) -> str:
 def tool_frame_link(side: str) -> str:
     return f"{ARM_PREFIX[side]}_gripper_fr3_hand_tcp"
 
-TOOL_FRAME_REACH = 0.1034
+TOOL_FRAME_REACH = 0.1034 - 0.01
 """Distance [m] along the hand's +z to the point between the fingertips."""
 
-TOOL_FRAME_LATERAL_OFFSET = 0.02
+TOOL_FRAME_LATERAL_OFFSET = -0.004
 """Shift [m] of the TCP along the hand's closing axis.
 
 CRAM aims a grasp at the handle body's *origin*, which is not where the rod it

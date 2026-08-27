@@ -113,7 +113,7 @@ def create_simulation_app():
         # Headless is opt-in via ISAAC_HEADLESS=1 (e.g. on a machine with no
         # usable X display); the interactive viewer is the default.
         "headless": os.environ.get("ISAAC_HEADLESS", "0") == "1",
-        "hide_ui": True,
+        # "hide_ui": True,
         "width": width,
         "height": height,
         "renderer": "RaytracedLighting",

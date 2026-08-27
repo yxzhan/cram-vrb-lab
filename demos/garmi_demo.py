@@ -2,17 +2,18 @@
 import math
 import os
 import sys
+import time
 from pathlib import Path
 
 REPO = Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-# os.environ["DISPLAY"] = ":0"
+os.environ["DISPLAY"] = ":0"
 # os.environ["ISAAC_RENDER"] = "0"
 
 # No local Isaac window; watch the viewport over WebRTC instead (port 49100).
-os.environ["ISAAC_HEADLESS"] = "1"
-os.environ["ISAAC_LIVESTREAM"] = "1"
+# os.environ["ISAAC_HEADLESS"] = "1"
+# os.environ["ISAAC_LIVESTREAM"] = "1"
 
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
@@ -20,6 +21,15 @@ os.environ["ISAAC_LIVESTREAM"] = "1"
 # os.environ["ISAAC_WINDOW"] = "768x432"
 os.environ["ISAAC_WINDOW"] = "640x360"
 # os.environ["ISAAC_WINDOW"] = "512x288"
+
+# Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet
+# worktop, on the free run right of the sink. They come from assets/kitchen-objects,
+# which was cut out of apartmentICRA.usda, and arrive as finished rigid bodies with
+# their own mass and colliders. Set to "0" to run this demo against the bare worktop
+# the other garmi demos use. Read by
+# cram_vrb_lab.scenes.garmi_apartment.constants.kitchen_props_enabled, which the sim
+# subprocess inherits this variable through.
+os.environ["ISAAC_KITCHEN_PROPS"] = "1"
 
 from launcher import (
     start_giskard_server,
@@ -36,11 +46,20 @@ SPAWN_POSITION = (0, 5.0, 0.0259)
 SPAWN_YAW = -math.pi / 2
 
 rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
-sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="none",
+# camera="both" publishes /head_camera/image_raw and /head_camera/depth/image_raw,
+# which is what demos/rviz/garmi.rviz's DepthCloud already expects. It costs control
+# rate -- the head camera is RTX raytraced every frame -- so drop to "rgb", or back
+# to "none", if the sim's reported Hz falls near giskard's 15 Hz floor.
+sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 stream_proc = start_streaming_client() if livestream_enabled() else None
 giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+
+# start_giskard_server blocks on the "giskard is ready" marker in its log, so it
+# returns at the moment the server is up. Stamp that, and the cell below reports how
+# much longer it took to fetch the world and bind the robot on top of it.
+GISKARD_READY_AT = time.monotonic()
 
 # %%
 import threading
@@ -57,8 +76,9 @@ from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlign
 from coraplex.datastructures.grasp import GraspDescription
 from coraplex.execution_environment import real_robot
 from coraplex.plans.factories import execute_single, sequential
-from coraplex.robot_plans.actions.core.navigation import NavigateAction
-from coraplex.robot_plans.actions.core.pick_up import GraspingAction
+from coraplex.robot_plans.actions.core.navigation import LookAtAction, NavigateAction
+from coraplex.robot_plans.actions.core.pick_up import GraspingAction, PickUpAction
+from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, SetGripperAction
 from coraplex.robot_plans.motions.container import ClosingMotion, OpeningMotion
 from coraplex.robot_plans.motions.gripper import MoveGripperMotion
@@ -99,7 +119,14 @@ context = Context(
     evaluate_conditions=False,
     alternative_motion_mappings=GARMI_MOTION_MAPPINGS,
 )
-print("connected:", type(robot).__name__, "|", len(world.bodies), "bodies")
+# Empty when the launch cell above was not run in this session -- re-connecting to a
+# server that is already up leaves no start to measure from.
+since_giskard = (
+    f" | {time.monotonic() - GISKARD_READY_AT:.1f}s since giskard was ready"
+    if "GISKARD_READY_AT" in globals()
+    else ""
+)
+print(f"connected: {type(robot).__name__} | {len(world.bodies)} bodies{since_giskard}")
 
 # %%
 robot.mobile_base.full_body_controlled = True
@@ -228,12 +255,12 @@ drive_to(f"{HOME}_handle", *STANDOFF[Door])
 reset_pos()
 
 # %%
-ROUNDS = 10
+ROUNDS = 0
 TASKS = [
     (Drawer, "drawer_1", Arms.LEFT),
     (Door, "cabinet_door_1", Arms.RIGHT),
-    (Drawer, "drawer_2", Arms.LEFT),
-    (Drawer, "drawer_3", Arms.RIGHT),
+    # (Drawer, "drawer_2", Arms.LEFT),
+    # (Drawer, "drawer_3", Arms.RIGHT),
     # (Drawer, "drawer_4", Arms.RIGHT),
 ]
 
@@ -254,3 +281,227 @@ for round_id in range(1, ROUNDS + 1):
     reset_pos()
 
 
+
+
+# %% ===================================================================
+# Perception on the worktop, then pick and place one of the objects.
+#
+# Needs ISAAC_KITCHEN_PROPS=1 (set at the top of this file) so there is something
+# standing there, and camera="both" so robokudo gets rgb + depth.
+#
+# EVERY NUMBER IN THIS BLOCK IS A ROUGH FIRST GUESS. They are all here, together,
+# so they can be tuned in one place.
+# ======================================================================
+
+# Where the base parks to work the worktop. Same convention as STANDOFF above:
+# station_facing() measures the standoff back from the cabinet front at y = 7.12,
+# so this parks at y = 7.12 - 1.15 = 5.97, facing +y. A little closer than the
+# Door standoff because the objects sit further back than the handles do.
+#
+# x = 0.40 is the middle of the four objects on the free run LEFT of the sink,
+# which is where KITCHEN_PROPS puts them.
+WORKTOP_X = 0.40
+WORKTOP_STANDOFF = 1.15
+WORKTOP_LATERAL = 0.0
+
+# What the head aims at: the middle of the four objects, at worktop height.
+LOOK_AT = (0.15, 7.42, 1.0)
+
+# Which object to go for -- the detection whose centre lands nearest this (x, y).
+# (0.45, 7.55) is where SM_MilkBox is released; see KITCHEN_PROPS.
+PICK_HINT = (0.55, 7.2)
+
+# Where to put it back down: same worktop, in the bare stretch left of the group.
+# The run only reaches to x = 0.10, so this is about as far left as a 0.06 m wide
+# box goes; it clears the cereal box by 0.05 m and the bowl by 0.04 m.
+PLACE_POSITION = (0.17, 7.42, 0.98)
+
+PICK_ARM = Arms.LEFT
+
+# %%
+# The twin has no camera link of its own (GARMI's URDF carries none), so give it one
+# at the same offset the sim publishes as static tf. Without this every detection is
+# stuck in the camera frame with no way into map.
+from cram_vrb_lab.perception.twin_objects import (
+    DETECTION_PREFIX,
+    add_detections,
+    ensure_camera_body,
+)
+from cram_vrb_lab.robots.garmi.joints import (
+    CAMERA_IN_HEAD,
+    CAMERA_OPTICAL_IN_HEAD_QUAT,
+    CAMERA_PARENT_LINK,
+)
+
+camera_body = ensure_camera_body(
+    world, CAMERA_PARENT_LINK, CAMERA_IN_HEAD, CAMERA_OPTICAL_IN_HEAD_QUAT
+)
+print("twin camera frame:", camera_body.name)
+
+
+run_plan(execute_single(
+    LookAtAction(Pose(Point3.from_iterable(LOOK_AT), reference_frame=world.root)),
+    context=context,
+))
+
+# %%
+# Build robokudo once. The descriptor spins up robokudo's own camera node and its
+# subscriptions; rk_node is the dedicated node the pipeline is ticked on -- never
+# this file's `node`, which would leave WorldSynchronizer and the giskard action
+# clients attached to nothing (see the warning on make_pipeline_node).
+from cram_vrb_lab.perception import pipeline as rk
+
+descriptor = rk.camera_descriptor()
+rk_node = rk.make_pipeline_node()
+
+# %%
+# Look once. The pipeline defaults (CAMERA_CROP / CLUSTER_TUNING) are the ones tuned
+# for exactly this view -- small objects on a counter a couple of metres off -- so no
+# scene-specific override is passed here, unlike the living-room floor cell in
+# stretch_garmi_apartment.ipynb.
+detections = rk.detect(rk_node, descriptor)
+print(f"{len(detections)} cluster(s) in {rk.CAMERA_FRAME_ID}:")
+for i, d in enumerate(detections):
+    print(f"  [{i}] pos {np.round(d.position, 3)}  extent {np.round(d.extents, 3)}")
+
+# %%
+# Throw away everything that is not standing where KITCHEN_PROPS put something. The
+# pipeline is geometric and unlabelled, so it will just as happily return the sink
+# rim, the tap, a strip of wall the crop did not reach, or the robot's own arm --
+# and PICK_HINT would then be choosing the nearest of those. Filtering here rather
+# than after add_detections keeps the rejects out of the twin, and so out of
+# giskard's collision world, instead of adding them and deleting them again.
+from cram_vrb_lab.scenes.garmi_apartment.constants import KITCHEN_PROPS
+from cram_vrb_lab.perception.twin_objects import detection_pose_in_map
+
+# Slack around the outermost release position, in x and y: settling shifts an object
+# a centimetre or two, and a cluster's centroid is not the object's centre. 0.15 m
+# widens the four release points out to roughly the free run itself, which is the
+# intent -- keep the worktop, drop everything off it.
+PROP_MARGIN = 0.15
+
+# KitchenProp.position carries the *surface* z, so a detection centre sits above it:
+# from 0.033 m (the bowl) to 0.15 m (half the cereal box). The band is generous
+# downwards too, because a cluster that caught some worktop sits low.
+PROP_Z_BELOW, PROP_Z_ABOVE = 0.05, 0.40
+
+prop_x = [prop.position[0] for prop in KITCHEN_PROPS]
+prop_y = [prop.position[1] for prop in KITCHEN_PROPS]
+surface_z = KITCHEN_PROPS[0].position[2]
+PROP_REGION = (
+    (min(prop_x) - PROP_MARGIN, max(prop_x) + PROP_MARGIN),
+    (min(prop_y) - PROP_MARGIN, max(prop_y) + PROP_MARGIN),
+    (surface_z - PROP_Z_BELOW, surface_z + PROP_Z_ABOVE),
+)
+
+
+def on_worktop(position, region=PROP_REGION):
+    """Is this map position inside the box the kitchen props occupy?"""
+    return all(low <= value <= high for value, (low, high) in zip(position, region))
+
+
+print("keeping detections inside "
+      f"{tuple(tuple(round(v, 2) for v in axis) for axis in PROP_REGION)}")
+worktop_detections = []
+for i, d in enumerate(detections):
+    position = detection_pose_in_map(world, d)[:3, 3]
+    keep = on_worktop(position)
+    print(f"  [{i}] map {np.round(position, 3)}  {'keep' if keep else 'DROP'}")
+    if keep:
+        worktop_detections.append(d)
+print(f"{len(worktop_detections)}/{len(detections)} detection(s) on the worktop")
+
+# %%
+# Put what survived into the twin, so giskard can plan around it and PickUpAction has
+# a Body to aim at. These are unlabelled boxes -- the pipeline is geometric.
+bodies = add_detections(world, worktop_detections)
+print(f"{len(bodies)} body(ies) added with the {DETECTION_PREFIX!r} prefix:")
+for body in bodies:
+    print(f"  {body.name.name:14s} map "
+          f"{np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 3)}")
+
+# %%
+# Pick the detection nearest PICK_HINT. Nearest-to-a-hint rather than "the first
+# one": the clusters come back in whatever order the pipeline found them, and
+# nothing here knows which box is the milk.
+if not bodies:
+    raise RuntimeError(
+        f"nothing left of {len(detections)} detection(s) -- check the camera is on "
+        "(camera='both'), the objects are spawned (ISAAC_KITCHEN_PROPS=1), that "
+        "LOOK_AT actually frames them, and, if clusters were found but all dropped, "
+        f"that they land inside PROP_REGION = {PROP_REGION}."
+    )
+
+target_body = min(
+    bodies,
+    key=lambda b: float(np.linalg.norm(
+        np.asarray(b.global_pose.to_np())[:3, 3].ravel()[:2] - np.asarray(PICK_HINT)
+    )),
+)
+print("picking", target_body.name.name, "at",
+      np.round(np.asarray(target_body.global_pose.to_np())[:3, 3].ravel(), 3))
+
+# %%
+# Grasp from above.
+#
+# There is no ApproachDirection.TOP -- ApproachDirection only names the four
+# directions in the x-y plane. What makes a grasp overhead is VerticalAlignment.TOP,
+# which Rotations.VERTICAL_ROTATIONS turns into a +90 deg rotation about y applied on
+# top of the side rotation: it swings the gripper's approach axis from horizontal to
+# pointing straight down, so the pre-pose ends up above the object and the reach comes
+# down onto it. ApproachDirection then only decides which way the wrist faces about z;
+# FRONT keeps it the same way round as the container handles above.
+PICK_APPROACH = ApproachDirection.FRONT
+
+# Raised from the 0.05 default, and not cosmetic. GraspDescription.pose_sequence sizes
+# the pre-pose off the bounding-box axis of the *approach direction* -- x, for FRONT --
+# even when the alignment is TOP and the clearance actually needed is the object's
+# height. For the milk box (0.06 x 0.095 x 0.20) the default gives 0.06/2 + 0.05 =
+# 0.08 m above the centre, which is 0.02 m *inside* a box whose half height is 0.10.
+# 0.12 puts the pre-pose 0.15 m up, clear of the top; it is also how far PickUpAction
+# lifts the object afterwards, and how far PlaceAction lowers it.
+PICK_CLEARANCE = 0.12
+
+# Rolls the gripper 90 deg about its own approach axis. Which way the fingers close
+# matters much more for a top grasp than for a side one: coming down on the milk box
+# they have to span 0.06 m, not the 0.095 m face, and the FR3 hand only opens ~0.08 m.
+# The detected box's axes come from robokudo's cluster fit, so which of the two this
+# lands on is not knowable from here -- if the gripper closes on the wide face, flip
+# this.
+ROTATE_GRIPPER = False
+
+pick_grasp = GraspDescription(
+    PICK_APPROACH,
+    VerticalAlignment.TOP,
+    ViewManager.get_end_effector_view(PICK_ARM, robot),
+    rotate_gripper=ROTATE_GRIPPER,
+    manipulation_offset=PICK_CLEARANCE,
+)
+
+place_pose = Pose(
+    Point3.from_iterable(PLACE_POSITION),
+    Quaternion.from_iterable([0.0, 0.0, 0.0, 1.0]),
+    reference_frame=world.root,
+)
+
+# One plan, not two execute_single calls, because PlaceAction recovers the grasp it
+# should place with by calling get_previous_node_by_designator_type(PickUpAction) --
+# which only searches its own *siblings*. Run separately, the place would not find the
+# pick and would fall back to GraspDescription(FRONT, NoAlignment), i.e. it would try
+# to set down sideways an object the gripper is holding from above.
+tuck_arm(other_arm(PICK_ARM))
+done = run_plan(sequential([
+    PickUpAction(
+        object_designator=target_body,
+        arm=PICK_ARM,
+        grasp_description=pick_grasp,
+    ),
+    PlaceAction(
+        object_designator=target_body,
+        target_location=place_pose,
+        arm=PICK_ARM,
+    ),
+], context=context))
+print("pick and place:", done)
+
+reset_pos()
