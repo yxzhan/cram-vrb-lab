@@ -28,25 +28,33 @@ The docker image is pre-built on the GPU-enabled
 [AIRCOR Virtual Research Building](https://vrb.ease-crc.org/) and ships this
 repository, Isaac Sim, the CRAM venv and the `ros2_ws` overlay already set up.
 
-### Run the pre-built image locally
+### Run the latest pre-built docker image locally
 
-> Note: Needs Ubuntu 22.04+, an NVIDIA RTX GPU with the drivers installed (`nvidia-smi`), ~16 GB RAM and ~50 GB
+> Note: Needs Ubuntu 20.04+, an NVIDIA RTX 3070 (or better) with the drivers installed (`nvidia-smi`), ~16 GB RAM and ~50 GB
 of free disk, plus [Docker](https://docs.docker.com/engine/install/) and the
 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
-1. Run in Terminal
+1. Run in Terminal:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/yxzhan/cram-vrb-lab/dev/install.sh | bash
-```
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/yxzhan/cram-vrb-lab/dev/install.sh | bash
+    ```
 
-1. Open WebUI: [http://localhost:8888/files/demos/web_ui/index.html](http://localhost:8888/files/demos/web_ui/index.html)
+    > The image is about 16 GB to download and ~50 GB unpacked, so the first
+    > run takes a while. Docker caches it afterwards, and later runs start
+    > straight away.
 
-1. Run Garmi Demo in Terminal
+1. Open web VSCODE: [http://localhost:8888/vscode](http://localhost:8888/vscode)
 
-```
-/home/jovyan/cram-vrb-lab/binder/cram_python_wrapper.sh /home/jovyan/cram-vrb-lab/demos/garmi_demo.py
-```
+1. Run Garmi Demo in VSCODE Terminal (not Terminal on host system):
+
+    ```
+    /home/jovyan/cram-vrb-lab/binder/cram_python_wrapper.sh /home/jovyan/cram-vrb-lab/demos/garmi_demo.py
+    ```
+
+    > The first Isaac Sim start compiles shaders and can take **10 minutes or
+    > more**. The compiled cache is written to `~/isaac_cache` on the host, so
+    > later runs start in a few tens of seconds.
 
 ## Architecture
 ```

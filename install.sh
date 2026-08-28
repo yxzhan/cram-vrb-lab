@@ -125,13 +125,21 @@ else
 fi
 
 if [ "$PULL" -eq 1 ]; then
-  log "Pulling the image (about 16 GB, this takes a while)..."
+  log "Pulling the image (about 50 GB, this takes a while)..."
   "${DOCKER[@]}" pull "$IMAGE"
 fi
 
 # --- run ---------------------------------------------------------------------
 
 log "Starting JupyterLab on http://localhost:${PORT}/vscode  (Ctrl-C to stop)"
+
+# demos/garmi_demo.py only defaults these to 1. With an X server there is a real
+# Isaac window to render into, so turn both off; without one, leave them alone
+# and let the demo fall back to headless + WebRTC.
+isaac_env=()
+if [ -n "${DISPLAY:-}" ]; then
+  isaac_env=(--env ISAAC_HEADLESS=0 --env ISAAC_LIVESTREAM=0)
+fi
 
 run_args=(
   run --rm --gpus all
@@ -142,6 +150,7 @@ run_args=(
   --env OMNI_KIT_ACCEPT_EULA=YES
   --env OMNI_KIT_ALLOW_ROOT=1
   --env "DISPLAY=${DISPLAY:-}"
+  "${isaac_env[@]}"
   -v /tmp/.X11-unix:/tmp/.X11-unix
   -v /usr/share/vulkan/icd.d/:/etc/vulkan/icd.d
   -v "${CACHE_DIR}:/isaac-sim/kit/cache"

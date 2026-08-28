@@ -13,8 +13,10 @@ sys.path.insert(0, str(REPO))
 # os.environ["ISAAC_RENDER"] = "0"
 
 # No local Isaac window; watch the viewport over WebRTC instead (port 49100).
-os.environ["ISAAC_HEADLESS"] = "1"
-os.environ["ISAAC_LIVESTREAM"] = "1"
+# Only the default: a caller that can show a local window (install.sh passes
+# both as 0) keeps whatever it already set.
+os.environ.setdefault("ISAAC_HEADLESS", "1")
+os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
