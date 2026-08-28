@@ -418,9 +418,9 @@ KITCHEN_PROPS = (
     # Every footprint below was checked against the free run and the sink cut-out
     # with the yaws applied; the tightest pair clears by 0.062 m, and the rightmost
     # edge (the cup's, at x = 0.556) keeps 0.094 m from where the worktop ends.
-    KitchenProp("SM_CerealBox", (-0.15, 7.2, KITCHEN_WORKTOP[2]), yaw=1.5707963267948966),
-    KitchenProp("SM_MilkBox", (0.5, 7.2, KITCHEN_WORKTOP[2]), yaw=-1.5707963267948966),
-    KitchenProp("SM_SmallBowl", (0.15, 7.25, KITCHEN_WORKTOP[2])),
+    KitchenProp("SM_CerealBox", (-0.1, 7.25, KITCHEN_WORKTOP[2]), yaw=1.5707963267948966),
+    KitchenProp("SM_MilkBox", (0.15, 7.35, KITCHEN_WORKTOP[2]), yaw=-1.5707963267948966),
+    KitchenProp("SM_SmallBowl", (0.55, 7.25, KITCHEN_WORKTOP[2])),
     # -pi/2 turns the handle, which the mesh puts on +x, to face -y -- i.e. towards
     # the robot, which works this run from the open side of the room.
     KitchenProp("SM_Cup", (0.3, 7.30, KITCHEN_WORKTOP[2]), yaw=-1.5707963267948966),
