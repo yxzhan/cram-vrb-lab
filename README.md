@@ -13,7 +13,9 @@ GARMI) across two apartment scenes; the code is organized so further robots and
 scenes plug in alongside them.
 
 
-https://github.com/user-attachments/assets/8afe6cfe-6ac2-40f3-9291-0972a309a844
+
+https://github.com/user-attachments/assets/1d8c8929-a982-46dd-93b9-01c76cb2d7e9
+
 
 
 ## Quick start
