@@ -5,15 +5,16 @@ import sys
 import time
 from pathlib import Path
 
-REPO = Path.cwd().resolve().parent
+# REPO = Path.cwd().resolve().parent
+REPO = Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
 # os.environ["DISPLAY"] = ":0"
 # os.environ["ISAAC_RENDER"] = "0"
 
 # No local Isaac window; watch the viewport over WebRTC instead (port 49100).
-os.environ["ISAAC_HEADLESS"] = "1"
-os.environ["ISAAC_LIVESTREAM"] = "1"
+# os.environ["ISAAC_HEADLESS"] = "1"
+# os.environ["ISAAC_LIVESTREAM"] = "1"
 
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
@@ -39,20 +40,13 @@ ROBOT, SCENE = "garmi", "garmi_apartment"
 SPAWN_POSITION = (0, 5.0, 0.0259)
 SPAWN_YAW = -math.pi / 2
 
-# rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
-# camera="both" publishes /head_camera/image_raw and /head_camera/depth/image_raw,
-# which is what demos/rviz/garmi.rviz's DepthCloud already expects. It costs control
-# rate -- the head camera is RTX raytraced every frame -- so drop to "rgb", or back
-# to "none", if the sim's reported Hz falls near giskard's 15 Hz floor.
-# sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
-#                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
-# stream_proc = start_streaming_client() if livestream_enabled() else None
-# giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
-#                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
+sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
+                           spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+stream_proc = start_streaming_client() if livestream_enabled() else None
+giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
+                                    spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
-# start_giskard_server blocks on the "giskard is ready" marker in its log, so it
-# returns at the moment the server is up. Stamp that, and the cell below reports how
-# much longer it took to fetch the world and bind the robot on top of it.
 GISKARD_READY_AT = time.monotonic()
 
 # %%
@@ -206,12 +200,21 @@ def drive_to(handle_name, standoff, lateral, attempts=10):
     return False
 
 
-def nudge_base(distance):
-    """Drive the base ``distance`` along its own +x, heading and height unchanged."""
+def nudge_base(forward=0.0, left=0.0, turn=0.0):
+    """Move the base in its own frame; height unchanged.
+
+    ``forward`` runs along base_link +x, ``left`` along +y, ``turn`` [rad] is about
+    +z (positive = counter-clockwise, i.e. towards ``left``). Negative is back,
+    right and clockwise. All three at once is fine -- the drive is an OmniDrive.
+
+    The translation is measured in the frame the base is in *now*, so a call with
+    both is "go there, then face that way" rather than an arc.
+    """
     base = np.asarray(robot.root.global_pose.to_np())
-    yaw = math.atan2(base[1, 0], base[0, 0])
+    yaw = math.atan2(base[1, 0], base[0, 0]) + turn
+    position = base[:3, 3] + forward * base[:3, 0] + left * base[:3, 1]
     target = Pose(
-        Point3.from_iterable(base[:3, 3] + distance * base[:3, 0]),
+        Point3.from_iterable(position),
         Quaternion.from_iterable([0.0, 0.0, math.sin(yaw / 2), math.cos(yaw / 2)]),
         reference_frame=world.root,
     )
@@ -271,19 +274,48 @@ def open_container(handle, arm, attempts=3, tuck=True):
     if tuck:
         tuck_arm(other_arm(arm))
     work_container(OpeningMotion, handle, arm, attempts)
+    retreat(arm)
+
+
+# RELEASE_TRAVEL = 0.008
+# """Per-finger travel [m] that just lets go of a handle rod, without opening the hand.
+
+# The rod is 12 mm across, so the fingers sit near 0.006 when gripping it and 0.008 is
+# loose. Why so little matters: the drawer fronts are ``convexDecomposition`` colliders
+# (they have to be, or the hull fills the drawer and nothing can go in it), and a
+# decomposed flat panel is not flat -- PhysX voxelises the mesh and the hull faces come
+# out stair-stepped. A fingertip resting on that face and sweeping the full 0.04 m to
+# GripperState.OPEN climbs a step and jams. 2 mm does not.
+# """
+
+
+# def release_handle(arm, travel=RELEASE_TRAVEL):
+#     """Let go of the handle without sweeping the fingers across the door panel."""
+#     names = [f"{ARM_PREFIX[arm]}_gripper_fr3_finger_joint{i}" for i in (1, 2)]
+#     return run_plan(
+#         execute_single(MoveJointsMotion(names, [travel, travel]), context=context),
+#         collision_avoidance=False,
+#     )
 
 
 def close_container(handle, arm, attempts=3, tuck=True):
     if tuck:
         tuck_arm(other_arm(arm))
     work_container(ClosingMotion, handle, arm, attempts)
-    # Only here: opening already ends with the hand clear of the handle.
+    # grasp_handle(handle, arm, attempts)
+    # run_plan(execute_single(ClosingMotion(handle, arm), context=context))
+    # Not work_container's plain open-then-leave: crack the fingers, back the hand
+    # out of the recess, and only then open properly. Opening first is what catches
+    # on the panel. Retreating first is not an option either -- the hand is still
+    # holding the rod, so it would pull the drawer back out.
+    # release_handle(arm)
     retreat(arm)
+    # run_plan(execute_single(MoveGripperMotion(GripperState.OPEN, arm), context=context))
 
 
 def reset_pos():
     run_plan(sequential([
-        # MoveTorsoAction(TorsoState.MID),
+        MoveTorsoAction(TorsoState.LOW),
         SetGripperAction(Arms.LEFT, GripperState.OPEN),
         SetGripperAction(Arms.RIGHT, GripperState.OPEN),
         ParkArmsAction(arm=Arms.BOTH),
@@ -294,15 +326,17 @@ def reset_pos():
 ROUNDS = 1
 TASKS = [
     # (Drawer, "drawer_1", Arms.LEFT),
-    (Door, "cabinet_door_1", Arms.RIGHT),
-    # (Drawer, "drawer_2", Arms.LEFT),
-    # (Drawer, "drawer_3", Arms.RIGHT),
+    # (Door, "cabinet_door_1", Arms.RIGHT),
+    (Drawer, "drawer_2", Arms.LEFT),
+    # (Drawer, "drawer_3", Arms.LEFT),
     # (Drawer, "drawer_4", Arms.RIGHT),
 ]
 
-STANDOFF = {Drawer: (1.1, 0.0), Door: (1.1, -0.6)}
-robot.mobile_base.full_body_controlled = True
-TUCK_ARM = robot.mobile_base.full_body_controlled
+STANDOFF = {Drawer: (1.1, 0.5), Door: (1.2, -0.6)}
+robot.mobile_base.full_body_controlled = False
+# TUCK_ARM = robot.mobile_base.full_body_controlled
+TUCK_ARM = False
+
 
 for round_id in range(1, ROUNDS + 1):
     print(f"===== round {round_id}/{ROUNDS} =====")
@@ -318,7 +352,7 @@ for round_id in range(1, ROUNDS + 1):
         print(f"  opened: {joint.position}")
         # robot.mobile_base.full_body_controlled = True
         # close_container(handle, arm, tuck=TUCK_ARM)
-        print(f"  closed: {joint.position}")
+        # print(f"  closed: {joint.position}")
     # run_plan(execute_single(MoveTorsoAction(TorsoState.MID), context=context))
     # reset_pos()
     # drive_to(f"{HOME}_handle", *STANDOFF[Door])
@@ -330,7 +364,7 @@ for round_id in range(1, ROUNDS + 1):
 # Rough numbers, all here so they can be tuned in one place.
 # ======================================================================
 
-LOOK_AT = (0.5, 7.32, 1.0)
+LOOK_AT = (0.3, 7.32, 1.0)
 PICK_HINT = (0.55, 7.2)
 PLACE_POSITION = (0.17, 7.42, 0.98)
 PICK_ARM = Arms.LEFT
@@ -455,17 +489,27 @@ print("picking", target_body.name.name, "at",
 
 # %%
 
-PICK_ARM = Arms.LEFT
+PICK_ARM = Arms.RIGHT
 PICK_APPROACH = ApproachDirection.FRONT
 PICK_ALIGNMENT = VerticalAlignment.TOP
 PICK_CLEARANCE = 0.02
 ROTATE_GRIPPER = True
 
 robot.mobile_base.full_body_controlled = False
-PLACE_POSITION = (0.85, 7.18, 0.17)
+
+# PLACE_POSITION = (0.85, 7.18, 0.17)
+
+# Drawer 2
+PLACE_POSITION = (-0.06, 6.85, 0.6)
+
 # PLACE_POSITION = (0.55, 7.25, 1.0)
 # target_body=bodies[3]
-nudge_base(0.1)
+
+# %%
+
+nudge_base(turn=math.pi / 9)
+# reset_pos()
+# tuck_arm(Arms.LEFT)
 
 # %%
 # Top-down grasp: VerticalAlignment.TOP is what makes it overhead (ApproachDirection
@@ -486,16 +530,11 @@ pick_xyz = np.asarray(pick_T.to_np())[:3, 3].ravel()
 
 
 CARRY_WAYPOINTS = [
-    (pick_xyz[0], pick_xyz[1], 1.1),
-    (pick_xyz[0], 6.9, 1.1),
-    (0.8, 6.9, 0.6),
-    (0.8, 6.9, 0.2),
+    (pick_xyz[0], pick_xyz[1], 1.05),
+    (pick_xyz[0], PLACE_POSITION[1], 1.05),
+    (PLACE_POSITION[0], PLACE_POSITION[1], 0.95),
+    # (0.8, 6.9, 0.2),
 ]
-
-# CARRY_WAYPOINTS = [
-#     (0.8, 6.9, 0.2),
-#     (0.8, 6.9, 0.55),
-# ]
 
 carry_quaternion = (
     pick_T.to_rotation_matrix() @ pick_grasp.grasp_orientation().to_rotation_matrix()
@@ -503,7 +542,6 @@ carry_quaternion = (
 
 place_pose = Pose(
     Point3.from_iterable(PLACE_POSITION),
-    # carry_quaternion,
     pick_T.to_quaternion(),
     reference_frame=world.root,
 )
@@ -515,29 +553,30 @@ carry = MoveTCPWaypointsMotion(
     ],
     arm=PICK_ARM,
 )
-# One plan, not two: PlaceAction recovers the grasp from a sibling PickUpAction, and
-# run separately it would fall back to a sideways place.
-# tuck_arm(other_arm(PICK_ARM))
-# pick_xyz, not target_body.global_pose: the body follows the tool frame once the
-# pick attaches it, and this plan is built before any of it runs.
+
 look_at_object = Pose(Point3.from_iterable(pick_xyz), reference_frame=world.root)
-# Aim above the place point, not at it: the neck cannot tilt far enough down to put
-# a shelf that low in view, so LookAtAction never reaches its goal.
-LOOK_ABOVE_PLACE = 0.50
 look_at_target = Pose(
     Point3.from_iterable(
-        (PLACE_POSITION[0], PLACE_POSITION[1], PLACE_POSITION[2] + LOOK_ABOVE_PLACE)
+        CARRY_WAYPOINTS[2]
     ),
+    reference_frame=world.root,
+)
+LIFT_AFTER_PLACE = 0.25
+lift_after_place = Pose(
+    Point3.from_iterable(
+        (PLACE_POSITION[0], PLACE_POSITION[1], PLACE_POSITION[2] + LIFT_AFTER_PLACE)
+    ),
+    carry_quaternion,
     reference_frame=world.root,
 )
 
 done = run_plan(sequential([
-    # LookAtAction(look_at_object),
-    # PickUpAction(
-    #     object_designator=target_body,
-    #     arm=PICK_ARM,
-    #     grasp_description=pick_grasp,
-    # ),
+    LookAtAction(look_at_object),
+    PickUpAction(
+        object_designator=target_body,
+        arm=PICK_ARM,
+        grasp_description=pick_grasp,
+    ),
     LookAtAction(look_at_target),
     carry,
     PlaceAction(
@@ -545,17 +584,55 @@ done = run_plan(sequential([
         target_location=place_pose,
         arm=PICK_ARM,
     ),
+    MoveToolCenterPointMotion(lift_after_place, PICK_ARM),
+    ParkArmsAction(PICK_ARM),
 ], context=context))
 print("pick and place:", done)
 
 # %%
 
-handle = annotate(Door, f"{HOME}_handle")
-robot.mobile_base.full_body_controlled = True
-close_container(handle, Arms.RIGHT)
-drive_to(f"{HOME}_handle", 1.1, -0.4)
+# handle = annotate(Door, f"{HOME}_handle")
+# nudge_base(turn=-math.pi / 6)
+robot.mobile_base.full_body_controlled = False
+close_container(handle, Arms.LEFT, tuck=False)
+nudge_base(-0.5)
 reset_pos()
 
 # %%
+
+ROUNDS = 1
+STANDOFF = {Drawer: (1.1, 0.5), Door: (1.2, -0.6)}
+TASKS = [
+    (Door, "cabinet_door_1", Arms.RIGHT),
+]
+robot.mobile_base.full_body_controlled = True
+TUCK_ARM=True
+
+for round_id in range(1, ROUNDS + 1):
+    print(f"===== round {round_id}/{ROUNDS} =====")
+    for view_type, name, arm in TASKS:
+        handle = annotate(view_type, name)
+        joint = world.get_connection_by_name(f"{name}_joint")
+        print(f"{name} with {arm.name} arm")
+        # drive_to(f"{HOME}_handle", *STANDOFF[Door])
+        drive_to(f"{name}_handle", *STANDOFF[view_type])
+        reset_pos()
+        run_plan(execute_single(LookAtAction(handle.global_pose), context=context))
+        open_container(handle, arm, tuck=TUCK_ARM)
+        print(f"  opened: {joint.position}")
+        close_container(handle, arm, tuck=TUCK_ARM)
+        print(f"  closed: {joint.position}")
+
+
+# %%
+
+nudge_base(-0.2)
 reset_pos()
+
+# %%
+from time import sleep
+sleep(10)
+
+stop()
+
 # %%

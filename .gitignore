@@ -10,6 +10,8 @@ iai_apartment/
 # copies the textures body.mtl/head.mtl reference into `materials/textures`
 # relative to the working directory, and records them relative too, so this
 # has to stay where it lands. Regenerated on every import.
-/materials/
+materials/
+demos/materials/
+
 .backup/
 NvStreamer-*

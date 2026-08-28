@@ -186,7 +186,7 @@ def tool_frame_link(side: str) -> str:
 TOOL_FRAME_REACH = 0.1034 - 0.01
 """Distance [m] along the hand's +z to the point between the fingertips."""
 
-TOOL_FRAME_LATERAL_OFFSET = -0.004
+TOOL_FRAME_LATERAL_OFFSET = 0.0
 """Shift [m] of the TCP along the hand's closing axis.
 
 CRAM aims a grasp at the handle body's *origin*, which is not where the rod it
