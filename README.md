@@ -12,6 +12,10 @@ high-level actions. Three robots (a Hello Robot Stretch, a Franka Panda and
 GARMI) across two apartment scenes; the code is organized so further robots and
 scenes plug in alongside them.
 
+
+https://github.com/user-attachments/assets/8afe6cfe-6ac2-40f3-9291-0972a309a844
+
+
 ## Quick start
 
 The docker image is pre-built on the GPU-enabled
