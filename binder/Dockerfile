@@ -121,6 +121,17 @@ RUN mkdir -p /home/jovyan/Desktop/ && \
     cp demos/desktop/*.desktop /home/jovyan/Desktop/ && \
     chmod +x /home/jovyan/Desktop/*.desktop
 
+# XDG autostart: run demos/garmi_demo.py automatically when the desktop session
+# (display) comes up. The X server here is started on demand by
+# jupyter-remote-desktop-proxy -- whose xstartup is `exec dbus-launch
+# xfce4-session` -- so this fires the first time the user opens the "Desktop"
+# tab, which is the earliest moment a display exists for rviz and the sim.
+# Remove this file to disable auto-start; the double-clickable
+# Desktop/GARMI_apartment.desktop above stays either way.
+RUN chmod +x ${REPO_DIR}/binder/autostart-garmi.sh && \
+    mkdir -p ${HOME}/.config/autostart
+COPY --chown=${NB_USER}:users binder/GARMI-Apartment-autostart.desktop ${HOME}/.config/autostart/
+
 # Set VSCODE default directory
 ENV CODE_WORKING_DIRECTORY=${REPO_DIR}
 

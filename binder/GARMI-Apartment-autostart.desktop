@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GARMI-Apartment-autostart
+Comment=Start the GARMI apartment demo automatically once the desktop session (display) is up
+Exec=/home/jovyan/cram-vrb-lab/binder/autostart-garmi.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true
+StartupNotify=false
