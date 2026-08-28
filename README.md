@@ -25,26 +25,12 @@ of free disk, plus [Docker](https://docs.docker.com/engine/install/) and the
 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
 1. Run in Terminal
+
 ```bash
-xhost +local:root && \
-mkdir -p ~/isaac_cache && \
-cd ~/isaac_cache && \
-sudo docker run --rm --gpus all -it \
-  --user root \
-  --env NVIDIA_DRIVER_CAPABILITIES=all \
-  --env ACCEPT_EULA="YES" \
-  --env PRIVACY_CONSENT="YES" \
-  --env OMNI_KIT_ACCEPT_EULA="YES" \
-  --env OMNI_KIT_ALLOW_ROOT=1 \
-  --env DISPLAY=${DISPLAY} \
-  -v /tmp/.X11-unix:/tmp/.X11-unix \
-  -v /usr/share/vulkan/icd.d/:/etc/vulkan/icd.d \
-  -v ${PWD}:/isaac-sim/kit/cache \
-  -p 8888:8888\
-  intel4coro/yxzhan-2dcram-2dvrb-2dlab-eb909a:13bb3119f80dec205939d0de64c04656946393ec \
-  jupyter lab --allow-root --NotebookApp.token='' --no-browser --ip=0.0.0.0
+curl -fsSL https://raw.githubusercontent.com/yxzhan/cram-vrb-lab/dev/install.sh | bash
 ```
-1. Open http://localhost:8888/vscode
+
+1. Open WebUI: [http://localhost:8888/files/demos/web_ui/index.html](http://localhost:8888/files/demos/web_ui/index.html)
 
 1. Run Garmi Demo in Terminal
 

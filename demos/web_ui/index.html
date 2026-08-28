@@ -123,8 +123,8 @@
 
     const targets = [
       { name: "Desktop", path: "desktop/", skipLocal: true },
-      { name: "NeemHub", path: "https://cramera.informatik.uni-bremen.de/?scene=garmi_pick_place" },
       { name: "VS Code", path: "vscode/" },
+      { name: "NeemHub", path: "https://cramera.informatik.uni-bremen.de/?scene=garmi_pick_place" },
       { name: "JupyterLab", path: "lab" }
     ].filter(t => !(isLocalhost && t.skipLocal))
      .map(t => ({ name: t.name, url: resolve(t.path) }));
