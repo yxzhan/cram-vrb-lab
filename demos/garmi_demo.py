@@ -1,3 +1,6 @@
+# %% [markdown]
+# ## Launch
+
 # %%
 import math
 import os
@@ -5,16 +8,9 @@ import sys
 import time
 from pathlib import Path
 
-# REPO = Path.cwd().resolve().parent
 REPO = Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-# os.environ["DISPLAY"] = ":0"
-# os.environ["ISAAC_RENDER"] = "0"
-
-# No local Isaac window; watch the viewport over WebRTC instead (port 49100).
-# Only the default: a caller that can show a local window (install.sh passes
-# both as 0) keeps whatever it already set.
 os.environ.setdefault("ISAAC_HEADLESS", "1")
 os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
@@ -28,6 +24,11 @@ os.environ["ISAAC_WINDOW"] = "640x360"
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
 os.environ["ISAAC_KITCHEN_PROPS"] = "1"
 
+RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
+ROBOT, SCENE = "garmi", "garmi_apartment"
+SPAWN_POSITION = (0, 5.0, 0.0259)
+SPAWN_YAW = -math.pi / 2
+
 from launcher import (
     start_giskard_server,
     start_isaac_sim,
@@ -37,11 +38,6 @@ from launcher import (
 )
 from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
-RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
-ROBOT, SCENE = "garmi", "garmi_apartment"
-SPAWN_POSITION = (0, 5.0, 0.0259)
-SPAWN_YAW = -math.pi / 2
-
 rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
 sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
@@ -49,18 +45,17 @@ stream_proc = start_streaming_client() if livestream_enabled() else None
 giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
-GISKARD_READY_AT = time.monotonic()
+# %% [markdown]
+# ## CRAM context
 
 # %%
-import threading
 import logging
+import threading
+
 import nest_asyncio
 import numpy as np
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
-
-nest_asyncio.apply()
-logging.disable(logging.CRITICAL)
 
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlignment
@@ -70,7 +65,11 @@ from coraplex.plans.factories import execute_single, sequential
 from coraplex.robot_plans.actions.core.navigation import LookAtAction, NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import GraspingAction, PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
-from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction, SetGripperAction, MoveTorsoAction
+from coraplex.robot_plans.actions.core.robot_body import (
+    MoveTorsoAction,
+    ParkArmsAction,
+    SetGripperAction,
+)
 from coraplex.robot_plans.motions.container import ClosingMotion, OpeningMotion
 from coraplex.robot_plans.motions.gripper import (
     MoveGripperMotion,
@@ -97,6 +96,9 @@ from semantic_digital_twin.spatial_types.spatial_types import (
 
 from cram_vrb_lab.robots.garmi.motions import GARMI_MOTION_MAPPINGS
 
+nest_asyncio.apply()
+logging.disable(logging.CRITICAL)
+
 if not rclpy.ok():
     rclpy.init()
 node = rclpy.create_node("cram_garmi_node")
@@ -117,29 +119,21 @@ context = Context(
     evaluate_conditions=False,
     alternative_motion_mappings=GARMI_MOTION_MAPPINGS,
 )
+print(f"connected: {type(robot).__name__} | {len(world.bodies)} bodies")
 
-since_giskard = (
-    f" | {time.monotonic() - GISKARD_READY_AT:.1f}s CRAM context ready in "
-    if "GISKARD_READY_AT" in globals()
-    else ""
-)
-print(f"connected: {type(robot).__name__} | {len(world.bodies)} bodies{since_giskard}")
+# %% [markdown]
+# ## Plan helpers
 
 # %%
-# robot.mobile_base.full_body_controlled = True
-
-# STANDOFF = {Drawer: (1.5, 0.0), Door: (1.2, -0.3)}
-STANDOFF = {Drawer: (1.3, 0.0), Door: (1.3, -0.4)}
 ARRIVED = 0.05
 GRASPED = 0.01
 RETREAT = 0.12
-
+STANDOFF = {Drawer: (1.1, 0.5), Door: (1.2, -0.6)}
 ARM_PREFIX = {Arms.LEFT: "arm_0", Arms.RIGHT: "arm_1"}
 TUCK_JOINTS = ["fr3_joint3", "fr3_joint4"]
 TUCK_POSITIONS = {Arms.LEFT: [-2, -1.5], Arms.RIGHT: [2, -1.5]}
-HOME = "cabinet_door_1"
 
-# %%
+
 def run_plan(plan, collision_avoidance=True):
     try:
         with real_robot(collision_avoidance=collision_avoidance):
@@ -154,15 +148,6 @@ def body_position(name):
     return np.asarray(world.get_body_by_name(name).global_pose.to_np())[:3, 3].ravel()
 
 
-def tool_position(arm):
-    tool = ViewManager.get_end_effector_view(arm, robot).tool_frame
-    return np.asarray(tool.global_pose.to_np())[:3, 3].ravel()
-
-
-def other_arm(arm):
-    return Arms.RIGHT if arm == Arms.LEFT else Arms.LEFT
-
-
 def annotate(view_type, name):
     body = world.get_body_by_name(name)
     handle = world.get_body_by_name(f"{name}_handle")
@@ -175,24 +160,19 @@ def annotate(view_type, name):
     return handle
 
 
-def base_height():
-    return float(np.asarray(robot.root.global_pose.to_np())[2, 3])
-
-
-def station_facing(handle_x, standoff, lateral):
-    return Pose(
-        Point3.from_iterable([handle_x + lateral, 7.12 - standoff, base_height()]),
+def drive_to(handle_name, standoff, lateral, attempts=10):
+    base_z = float(np.asarray(robot.root.global_pose.to_np())[2, 3])
+    target = Pose(
+        Point3.from_iterable(
+            [float(body_position(handle_name)[0]) + lateral, 7.12 - standoff, base_z]
+        ),
         Quaternion.from_iterable(
             [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
         ),
         reference_frame=world.root,
     )
-
-
-def drive_to(handle_name, standoff, lateral, attempts=10):
-    target = station_facing(float(body_position(handle_name)[0]), standoff, lateral)
     goal = np.asarray(target.to_np())[:2, 3].ravel()
-    for attempt in range(1, attempts + 1):
+    for _ in range(attempts):
         run_plan(execute_single(NavigateAction(target), context=context))
         error = float(np.linalg.norm(body_position("base_link")[:2] - goal))
         if error <= ARRIVED:
@@ -203,15 +183,6 @@ def drive_to(handle_name, standoff, lateral, attempts=10):
 
 
 def nudge_base(forward=0.0, left=0.0, turn=0.0):
-    """Move the base in its own frame; height unchanged.
-
-    ``forward`` runs along base_link +x, ``left`` along +y, ``turn`` [rad] is about
-    +z (positive = counter-clockwise, i.e. towards ``left``). Negative is back,
-    right and clockwise. All three at once is fine -- the drive is an OmniDrive.
-
-    The translation is measured in the frame the base is in *now*, so a call with
-    both is "go there, then face that way" rather than an arc.
-    """
     base = np.asarray(robot.root.global_pose.to_np())
     yaw = math.atan2(base[1, 0], base[0, 0]) + turn
     position = base[:3, 3] + forward * base[:3, 0] + left * base[:3, 1]
@@ -243,7 +214,10 @@ def grasp_handle(handle, arm, attempts=3):
     goal = goal_frame[:3, 3].ravel()
     for attempt in range(1, attempts + 1):
         run_plan(execute_single(GraspingAction(handle, arm, grasp), context=context))
-        error = float(np.linalg.norm(tool_position(arm) - goal))
+        tool = ViewManager.get_end_effector_view(arm, robot).tool_frame
+        error = float(np.linalg.norm(
+            np.asarray(tool.global_pose.to_np())[:3, 3].ravel() - goal
+        ))
         print(f"  grasp {attempt}: {error * 1000:.1f} mm")
         if error <= GRASPED:
             return True
@@ -266,53 +240,13 @@ def retreat(arm, distance=RETREAT):
     )
 
 
-def work_container(motion, handle, arm, attempts=3):
+def work_container(motion, handle, arm, attempts=3, tuck=True):
+    if tuck:
+        tuck_arm(Arms.RIGHT if arm == Arms.LEFT else Arms.LEFT)
     grasp_handle(handle, arm, attempts)
     run_plan(execute_single(motion(handle, arm), context=context))
     run_plan(execute_single(MoveGripperMotion(GripperState.OPEN, arm), context=context))
-
-
-def open_container(handle, arm, attempts=3, tuck=True):
-    if tuck:
-        tuck_arm(other_arm(arm))
-    work_container(OpeningMotion, handle, arm, attempts)
     retreat(arm)
-
-
-# RELEASE_TRAVEL = 0.008
-# """Per-finger travel [m] that just lets go of a handle rod, without opening the hand.
-
-# The rod is 12 mm across, so the fingers sit near 0.006 when gripping it and 0.008 is
-# loose. Why so little matters: the drawer fronts are ``convexDecomposition`` colliders
-# (they have to be, or the hull fills the drawer and nothing can go in it), and a
-# decomposed flat panel is not flat -- PhysX voxelises the mesh and the hull faces come
-# out stair-stepped. A fingertip resting on that face and sweeping the full 0.04 m to
-# GripperState.OPEN climbs a step and jams. 2 mm does not.
-# """
-
-
-# def release_handle(arm, travel=RELEASE_TRAVEL):
-#     """Let go of the handle without sweeping the fingers across the door panel."""
-#     names = [f"{ARM_PREFIX[arm]}_gripper_fr3_finger_joint{i}" for i in (1, 2)]
-#     return run_plan(
-#         execute_single(MoveJointsMotion(names, [travel, travel]), context=context),
-#         collision_avoidance=False,
-#     )
-
-
-def close_container(handle, arm, attempts=3, tuck=True):
-    if tuck:
-        tuck_arm(other_arm(arm))
-    work_container(ClosingMotion, handle, arm, attempts)
-    # grasp_handle(handle, arm, attempts)
-    # run_plan(execute_single(ClosingMotion(handle, arm), context=context))
-    # Not work_container's plain open-then-leave: crack the fingers, back the hand
-    # out of the recess, and only then open properly. Opening first is what catches
-    # on the panel. Retreating first is not an option either -- the hand is still
-    # holding the rod, so it would pull the drawer back out.
-    # release_handle(arm)
-    retreat(arm)
-    # run_plan(execute_single(MoveGripperMotion(GripperState.OPEN, arm), context=context))
 
 
 def reset_pos():
@@ -324,68 +258,31 @@ def reset_pos():
     ], context=context))
 
 
-# %%
-ROUNDS = 1
-TASKS = [
-    # (Drawer, "drawer_1", Arms.LEFT),
-    # (Door, "cabinet_door_1", Arms.RIGHT),
-    (Drawer, "drawer_2", Arms.LEFT),
-    # (Drawer, "drawer_3", Arms.LEFT),
-    # (Drawer, "drawer_4", Arms.RIGHT),
-]
+# %% [markdown]
+# ## Open the drawer
 
-STANDOFF = {Drawer: (1.1, 0.5), Door: (1.2, -0.6)}
+# %%
+DRAWER = "drawer_2"
+DRAWER_ARM = Arms.LEFT
+
 robot.mobile_base.full_body_controlled = False
-# TUCK_ARM = robot.mobile_base.full_body_controlled
-TUCK_ARM = False
 
+drawer_handle = annotate(Drawer, DRAWER)
+drawer_joint = world.get_connection_by_name(f"{DRAWER}_joint")
 
-for round_id in range(1, ROUNDS + 1):
-    print(f"===== round {round_id}/{ROUNDS} =====")
-    for view_type, name, arm in TASKS:
-        handle = annotate(view_type, name)
-        joint = world.get_connection_by_name(f"{name}_joint")
-        print(f"{name} with {arm.name} arm")
-        # drive_to(f"{HOME}_handle", *STANDOFF[Door])
-        drive_to(f"{name}_handle", *STANDOFF[view_type])
-        reset_pos()
-        run_plan(execute_single(LookAtAction(handle.global_pose), context=context))
-        open_container(handle, arm, tuck=TUCK_ARM)
-        print(f"  opened: {joint.position}")
-        # robot.mobile_base.full_body_controlled = True
-        # close_container(handle, arm, tuck=TUCK_ARM)
-        # print(f"  closed: {joint.position}")
-    # run_plan(execute_single(MoveTorsoAction(TorsoState.MID), context=context))
-    # reset_pos()
-    # drive_to(f"{HOME}_handle", *STANDOFF[Door])
+drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
+reset_pos()
+run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
+work_container(OpeningMotion, drawer_handle, DRAWER_ARM, tuck=False)
+print("opened:", drawer_joint.position)
 
-
-# %% ===================================================================
-# Perception on the worktop, then pick and place one of the objects.
-# Needs ISAAC_KITCHEN_PROPS=1 and camera="both", both set at the top of this file.
-# Rough numbers, all here so they can be tuned in one place.
-# ======================================================================
-
-LOOK_AT = (0.3, 7.32, 1.0)
-PICK_HINT = (0.55, 7.2)
-PLACE_POSITION = (0.17, 7.42, 0.98)
-PICK_ARM = Arms.LEFT
-
-# (x, y, z) bounds in map. Detections outside this are dropped.
-COUNTERTOP = ((-0.30, 0.65), (7.05, 7.45), (0.90, 1.35))
-
-PICK_APPROACH = ApproachDirection.FRONT
-PICK_ALIGNMENT = VerticalAlignment.TOP
-PICK_CLEARANCE = 0.12   # pre-pose height above the object, and the lift after it
-ROTATE_GRIPPER = False  # roll the gripper 90 deg about its approach axis
+# %% [markdown]
+# ## Perception
 
 # %%
-# GARMI's URDF has no camera link, so give the twin one at the offset the sim
-# publishes as static tf; without it detections cannot leave the camera frame.
+from cram_vrb_lab.perception import pipeline as rk
 from cram_vrb_lab.perception.twin_objects import (
-    DETECTION_PREFIX,
     add_detections,
-    clear_detections,
     detection_pose_in_map,
     ensure_camera_body,
 )
@@ -395,34 +292,14 @@ from cram_vrb_lab.robots.garmi.joints import (
     CAMERA_PARENT_LINK,
 )
 
-camera_body = ensure_camera_body(
-    world, CAMERA_PARENT_LINK, CAMERA_IN_HEAD, CAMERA_OPTICAL_IN_HEAD_QUAT
-)
-print("twin camera frame:", camera_body.name)
-
-# %%
-# Never hand rk.detect this file's `node` -- see the warning on make_pipeline_node.
-from cram_vrb_lab.perception import pipeline as rk
-
-descriptor = rk.camera_descriptor()
-
-# %%
-# drive_to(f"{HOME}_handle", 1.1, -0.2)
-# reset_pos()
-run_plan(execute_single(
-    LookAtAction(Pose(Point3.from_iterable(LOOK_AT), reference_frame=world.root)),
-    context=context,
-))
-
-# %%
-# Only add to the twin once all four are there: a short count means two objects
-# merged into one cluster, or one was missed.
+LOOK_AT = (0.3, 7.32, 1.0)
+COUNTERTOP = ((-0.30, 0.65), (7.05, 7.45), (0.90, 1.35))
 EXPECTED_OBJECTS = 4
 LOOK_ATTEMPTS = 10
+GRIP_BELOW_TOP = 0.00
 
 
 def look_countertop():
-    # A fresh pipeline node per detect, or py_trees_ros re-declares its parameters.
     node_for_pipeline = rk.make_pipeline_node()
     try:
         detections = rk.detect(node_for_pipeline, descriptor)
@@ -440,83 +317,59 @@ def look_countertop():
     return on_top
 
 
+def grasp_offset(detection):
+    return (detection.extents[0] / 2, 0.0, detection.extents[2] / 2 - GRIP_BELOW_TOP)
+
+
+ensure_camera_body(
+    world, CAMERA_PARENT_LINK, CAMERA_IN_HEAD, CAMERA_OPTICAL_IN_HEAD_QUAT
+)
+descriptor = rk.camera_descriptor()
+
+# %%
+run_plan(execute_single(
+    LookAtAction(Pose(Point3.from_iterable(LOOK_AT), reference_frame=world.root)),
+    context=context,
+))
+
 for attempt in range(1, LOOK_ATTEMPTS + 1):
     print(f"look {attempt}/{LOOK_ATTEMPTS}:")
     kept = look_countertop()
     print(f"  {len(kept)}/{EXPECTED_OBJECTS} on the countertop")
     if len(kept) == EXPECTED_OBJECTS:
         break
-    # rk.stop_camera(descriptor)
-
-# %%
-# Per detection, not one constant: the four objects are 0.067 to 0.300 m tall, so
-# a fixed z means something different for each. The fingers are 0.045 m long, so
-# grip a little below the top face instead of at the centre.
-GRIP_BELOW_TOP = 0.00
-
-def grasp_offset(detection):
-    """Offset from the detected box's centre, in that box's frame (z is world up)."""
-    return (detection.extents[0] / 2, 0.0, detection.extents[2] / 2 - GRIP_BELOW_TOP)
-
 
 bodies = add_detections(world, kept, origin_offset=grasp_offset)
-print(f"{len(bodies)} body(ies) added with the {DETECTION_PREFIX!r} prefix "
-      f"(pose = grip point, {GRIP_BELOW_TOP} m below each box's top):")
 for body, d in zip(bodies, kept):
-    print(f"  {body.name.name:14s} h {d.extents[2]:.3f}  "
-          f"offset {grasp_offset(d)[2]:+.3f}  map "
+    print(f"  {body.name.name:14s} h {d.extents[2]:.3f}  map "
           f"{np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 3)}")
 
-# %%
-# Drop every perceived body again -- they go out over /world_sync too, so giskard
-# stops colliding against them. add_detections already does this before each look;
-# this is for clearing up without looking again.
-# print(f"removed {clear_detections(world)} {DETECTION_PREFIX!r} body(ies), "
-#       f"{len([b for b in world.bodies if b.name.prefix == DETECTION_PREFIX])} left")
-
-# Done perceiving -- stops the per-frame tf warnings for the rest of the session.
-# Left off while you are still re-running the look cell: once this runs, looking again
-# needs a new descriptor.
-# rk.stop_camera(descriptor)
+# %% [markdown]
+# ## Pick and place
 
 # %%
+PICK_HINT = (0.55, 7.2)
+PICK_ARM = Arms.RIGHT
+PICK_APPROACH = ApproachDirection.FRONT
+PICK_ALIGNMENT = VerticalAlignment.TOP
+PICK_CLEARANCE = 0.02
+ROTATE_GRIPPER = True
+PLACE_POSITION = (-0.06, 6.85, 0.6)
+LIFT_AFTER_PLACE = 0.25
+
+robot.mobile_base.full_body_controlled = False
+
 target_body = min(
     bodies,
     key=lambda b: float(np.linalg.norm(
         np.asarray(b.global_pose.to_np())[:3, 3].ravel()[:2] - np.asarray(PICK_HINT)
     )),
 )
-print("picking", target_body.name.name, "at",
-      np.round(np.asarray(target_body.global_pose.to_np())[:3, 3].ravel(), 3))
-
-# %%
-
-PICK_ARM = Arms.RIGHT
-PICK_APPROACH = ApproachDirection.FRONT
-PICK_ALIGNMENT = VerticalAlignment.TOP
-PICK_CLEARANCE = 0.02
-ROTATE_GRIPPER = True
-
-robot.mobile_base.full_body_controlled = False
-
-# PLACE_POSITION = (0.85, 7.18, 0.17)
-
-# Drawer 2
-PLACE_POSITION = (-0.06, 6.85, 0.6)
-
-# PLACE_POSITION = (0.55, 7.25, 1.0)
-# target_body=bodies[3]
-
-# %%
+print("picking", target_body.name.name)
 
 nudge_base(turn=math.pi / 9)
-# reset_pos()
-# tuck_arm(Arms.LEFT)
 
 # %%
-# Top-down grasp: VerticalAlignment.TOP is what makes it overhead (ApproachDirection
-# has no TOP). PICK_CLEARANCE has to exceed the object's half height, because
-# GraspDescription sizes the pre-pose off the approach direction's bbox axis, not z.
 pick_grasp = GraspDescription(
     PICK_APPROACH,
     PICK_ALIGNMENT,
@@ -530,111 +383,97 @@ pick_T = HomogeneousTransformationMatrix(
 )
 pick_xyz = np.asarray(pick_T.to_np())[:3, 3].ravel()
 
-
-CARRY_WAYPOINTS = [
+carry_waypoints = [
     (pick_xyz[0], pick_xyz[1], 1.05),
     (pick_xyz[0], PLACE_POSITION[1], 1.05),
     (PLACE_POSITION[0], PLACE_POSITION[1], 0.95),
-    # (0.8, 6.9, 0.2),
 ]
-
 carry_quaternion = (
     pick_T.to_rotation_matrix() @ pick_grasp.grasp_orientation().to_rotation_matrix()
 ).to_quaternion()
 
-place_pose = Pose(
-    Point3.from_iterable(PLACE_POSITION),
-    pick_T.to_quaternion(),
-    reference_frame=world.root,
-)
-
-carry = MoveTCPWaypointsMotion(
-    waypoints=[
-        Pose(Point3.from_iterable(point), carry_quaternion, reference_frame=world.root)
-        for point in CARRY_WAYPOINTS
-    ],
-    arm=PICK_ARM,
-)
-
-look_at_object = Pose(Point3.from_iterable(pick_xyz), reference_frame=world.root)
-look_at_target = Pose(
-    Point3.from_iterable(
-        CARRY_WAYPOINTS[2]
-    ),
-    reference_frame=world.root,
-)
-LIFT_AFTER_PLACE = 0.25
-lift_after_place = Pose(
-    Point3.from_iterable(
-        (PLACE_POSITION[0], PLACE_POSITION[1], PLACE_POSITION[2] + LIFT_AFTER_PLACE)
-    ),
-    carry_quaternion,
-    reference_frame=world.root,
-)
-
 done = run_plan(sequential([
-    LookAtAction(look_at_object),
+    LookAtAction(Pose(Point3.from_iterable(pick_xyz), reference_frame=world.root)),
     PickUpAction(
         object_designator=target_body,
         arm=PICK_ARM,
         grasp_description=pick_grasp,
     ),
-    LookAtAction(look_at_target),
-    carry,
-    PlaceAction(
-        object_designator=target_body,
-        target_location=place_pose,
+    LookAtAction(
+        Pose(Point3.from_iterable(carry_waypoints[2]), reference_frame=world.root)
+    ),
+    MoveTCPWaypointsMotion(
+        waypoints=[
+            Pose(Point3.from_iterable(point), carry_quaternion,
+                 reference_frame=world.root)
+            for point in carry_waypoints
+        ],
         arm=PICK_ARM,
     ),
-    MoveToolCenterPointMotion(lift_after_place, PICK_ARM),
+    PlaceAction(
+        object_designator=target_body,
+        target_location=Pose(
+            Point3.from_iterable(PLACE_POSITION),
+            pick_T.to_quaternion(),
+            reference_frame=world.root,
+        ),
+        arm=PICK_ARM,
+    ),
+    MoveToolCenterPointMotion(
+        Pose(
+            Point3.from_iterable(
+                (PLACE_POSITION[0], PLACE_POSITION[1],
+                 PLACE_POSITION[2] + LIFT_AFTER_PLACE)
+            ),
+            carry_quaternion,
+            reference_frame=world.root,
+        ),
+        PICK_ARM,
+    ),
     ParkArmsAction(PICK_ARM),
 ], context=context))
 print("pick and place:", done)
 
-# %%
+# %% [markdown]
+# ## Close the drawer
 
-# handle = annotate(Door, f"{HOME}_handle")
-# nudge_base(turn=-math.pi / 6)
+# %%
 robot.mobile_base.full_body_controlled = False
-close_container(handle, Arms.LEFT, tuck=False)
+
+work_container(ClosingMotion, drawer_handle, DRAWER_ARM, tuck=False)
 nudge_base(-0.5)
 reset_pos()
+print("closed:", drawer_joint.position)
+
+# %% [markdown]
+# ## Cabinet door
 
 # %%
+DOOR = "cabinet_door_1"
+DOOR_ARM = Arms.RIGHT
 
-ROUNDS = 1
-STANDOFF = {Drawer: (1.1, 0.5), Door: (1.2, -0.6)}
-TASKS = [
-    (Door, "cabinet_door_1", Arms.RIGHT),
-]
 robot.mobile_base.full_body_controlled = True
-TUCK_ARM=True
 
-for round_id in range(1, ROUNDS + 1):
-    print(f"===== round {round_id}/{ROUNDS} =====")
-    for view_type, name, arm in TASKS:
-        handle = annotate(view_type, name)
-        joint = world.get_connection_by_name(f"{name}_joint")
-        print(f"{name} with {arm.name} arm")
-        # drive_to(f"{HOME}_handle", *STANDOFF[Door])
-        drive_to(f"{name}_handle", *STANDOFF[view_type])
-        reset_pos()
-        run_plan(execute_single(LookAtAction(handle.global_pose), context=context))
-        open_container(handle, arm, tuck=TUCK_ARM)
-        print(f"  opened: {joint.position}")
-        close_container(handle, arm, tuck=TUCK_ARM)
-        print(f"  closed: {joint.position}")
+door_handle = annotate(Door, DOOR)
+door_joint = world.get_connection_by_name(f"{DOOR}_joint")
 
+drive_to(f"{DOOR}_handle", *STANDOFF[Door])
+reset_pos()
+run_plan(execute_single(LookAtAction(door_handle.global_pose), context=context))
+
+work_container(OpeningMotion, door_handle, DOOR_ARM, tuck=True)
+print("opened:", door_joint.position)
+
+work_container(ClosingMotion, door_handle, DOOR_ARM, tuck=True)
+print("closed:", door_joint.position)
 
 # %%
-
 nudge_base(-0.2)
 reset_pos()
 
-# %%
-from time import sleep
-sleep(10)
+# %% [markdown]
+# ## Shutdown
 
+# %%
+time.sleep(10)
 stop()
-
-# %%
