@@ -1090,7 +1090,7 @@ def Scope "Root"
                             prepend apiSchemas = ["PhysxTriangleMeshSimplificationCollisionAPI", "PhysxConvexHullCollisionAPI", "PhysxConvexDecompositionCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysxTriangleMeshCollisionAPI"]
                         )
                         {
-                            uniform token physics:approximation = "convexHull"
+                            uniform token physics:approximation = "convexDecomposition"
                             int physxConvexDecompositionCollision:hullVertexLimit = 82
                         }
 
