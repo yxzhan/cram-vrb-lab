@@ -197,7 +197,21 @@ def spawn_kitchen_props(world, render, props=KITCHEN_PROPS):
 
     :return: ``{name: (settled_centre, size)}`` in ``map``, and prints the same --
     where an object came to rest is only knowable from the simulation.
+    :raises ValueError: if two props share a name, and so would share a prim path.
     """
+    # Checked before anything is created, because the failure it catches is not
+    # obvious from what Isaac reports: two props sharing a name share a prim path,
+    # and the second create_prim lands on the prim the first one made rather than
+    # adding an object. Give the copy its own name and an explicit ``asset``.
+    duplicates = sorted({p.name for p in props
+                         if [q.name for q in props].count(p.name) > 1})
+    if duplicates:
+        raise ValueError(
+            f"KitchenProp names must be unique -- {', '.join(duplicates)} used more "
+            f"than once, and would collide under {KITCHEN_PROPS_ROOT}. Name each "
+            "copy separately and pass asset= to say which USD it loads."
+        )
+
     stage = world.stage
     # Idempotent: spawn_ycb_props has usually applied this already, but this function
     # has to stand on its own -- without it every object falls through to the floor.

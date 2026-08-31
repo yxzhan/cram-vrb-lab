@@ -27,6 +27,8 @@ except ImportError:
     pass
     # print("Sidecar not available!")
 
+from cram_vrb_lab.control.rate import CONTROL_HZ_ENV
+from cram_vrb_lab.control.rate import control_hz as control_hz_default
 from cram_vrb_lab.paths import REPO_DIR as REPO
 from cram_vrb_lab.setups import DEFAULT_ROBOT, DEFAULT_SCENE
 from cram_vrb_lab.sim.isaac_app import READY_MARKER as SIM_READY_MARKER
@@ -60,13 +62,18 @@ def _tail(log_path, lines=10):
     return "\n".join(Path(log_path).read_text(errors="ignore").splitlines()[-lines:])
 
 
-def _launch(name, args, log_path, kill_stale=None, terminal=True):
+def _launch(name, args, log_path, kill_stale=None, terminal=True, extra_env=None):
     """Kill stale instances, then start ``args`` logging to ``log_path``.
 
     :param terminal: run in a visible gnome-terminal window instead of a detached
         background subprocess.
     :param kill_stale: pkill -f pattern for stale instances; note a basename
         pattern matches any process whose command line contains it.
+    :param extra_env: environment variables to add for the child. Exported into
+        the command in terminal mode rather than merged into this process's
+        environment, for the same reason ``_SOURCE`` exists: gnome-terminal hands
+        the command to a separate server process, so a variable set here would not
+        reach it.
     :return: the Popen handle (the gnome-terminal launcher when terminal=True).
     """
     if (
@@ -82,17 +89,31 @@ def _launch(name, args, log_path, kill_stale=None, terminal=True):
     Path(log_path).write_text("")  # so a stale log never satisfies the marker early
     print(f"starting {name}{' in a terminal' if terminal else ''}, logging to {log_path}")
     if terminal:
-        inner = f"{_SOURCE}{shlex.join(args)} 2>&1 | tee {shlex.quote(log_path)}; exec bash"
+        exports = "".join(
+            f"export {key}={shlex.quote(str(value))} && "
+            for key, value in (extra_env or {}).items()
+        )
+        inner = (
+            f"{_SOURCE}{exports}{shlex.join(args)} 2>&1 "
+            f"| tee {shlex.quote(log_path)}; exec bash"
+        )
         return subprocess.Popen(["gnome-terminal", "--", "bash", "-c", inner])
-    return subprocess.Popen(args, stdout=open(log_path, "w"), stderr=subprocess.STDOUT)
+    return subprocess.Popen(
+        args,
+        stdout=open(log_path, "w"),
+        stderr=subprocess.STDOUT,
+        env={**os.environ, **{k: str(v) for k, v in (extra_env or {}).items()}},
+    )
 
 
-def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True):
+def start(name, args, log_path, marker, timeout, kill_stale=None, terminal=True,
+          extra_env=None):
     """Start ``args`` and block until ``marker`` appears in ``log_path``.
 
     Parameters and return value as for :func:`_launch`.
     """
-    proc = _launch(name, args, log_path, kill_stale=kill_stale, terminal=terminal)
+    proc = _launch(name, args, log_path, kill_stale=kill_stale, terminal=terminal,
+                   extra_env=extra_env)
 
     start_time = time.time()
     while time.time() - start_time < timeout:
@@ -130,7 +151,7 @@ def _spawn_args(spawn_position=None, spawn_yaw=None):
 def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
                     spawn_position=None, spawn_yaw=None,
                     marker=SIM_READY_MARKER, terminal=False, timeout=900,
-                    camera=None, props=False):
+                    camera=None, props=False, control_hz=None):
     """Launch the Isaac Sim scene for ``robot`` in ``scene``; wait until ready.
 
     First startup can take a few minutes (shader compilation).
@@ -149,7 +170,13 @@ def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
     :param props: pass ``--props`` to spawn the pick-and-place cube. Off by
         default; only the pick-and-place demos use it, and the Panda setup
         spawns it either way.
+    :param control_hz: the rate giskard will close its loop at. The sim does not
+        run at this rate -- it runs as fast as the GPU lets it -- but it warns
+        when its cycle rate gets close to it, so pass the same value here as to
+        :func:`start_giskard_server` or the warning is about the wrong number.
+        None uses :func:`cram_vrb_lab.control.rate.control_hz`.
     """
+    rate = control_hz if control_hz is not None else control_hz_default()
     args = [
         f"{REPO}/binder/isaacsim_python_wrapper.sh",
         str(SIM_SCRIPT),
@@ -167,6 +194,7 @@ def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
         ISAAC_SIM_LOG,
         marker,
         timeout=timeout,
+        extra_env={CONTROL_HZ_ENV: f"{rate:g}"},
         # The full path, not the basename: one script now runs every setup, and
         # a stale sim of *any* combination has to go before a new one starts.
         kill_stale=str(SIM_SCRIPT),
@@ -176,7 +204,8 @@ def start_isaac_sim(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
 
 def start_giskard_server(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
                          spawn_position=None, spawn_yaw=None,
-                         marker="giskard is ready", terminal=False, timeout=300):
+                         marker="giskard is ready", terminal=False, timeout=300,
+                         control_hz=None):
     """Launch the giskard control server for ``robot`` in ``scene``; wait until
     it is ready.
 
@@ -184,10 +213,19 @@ def start_giskard_server(robot=DEFAULT_ROBOT, scene=DEFAULT_SCENE,
     robot fixed to ``map`` this is where giskard believes it stands, so a value
     that disagrees with the sim's makes giskard plan for an arm that is not the
     one being rendered.
+
+    :param control_hz: rate [Hz] the QP loop runs at; None uses
+        :func:`cram_vrb_lab.control.rate.control_hz` (the ``GISKARD_CONTROL_HZ``
+        environment variable, else the default). Lower it if the sim's ``[sim]``
+        line reports a cycle rate near it; the resolved value is passed on the
+        command line rather than left to the environment so it survives
+        ``terminal=True`` and shows up in the log.
     """
+    rate = control_hz if control_hz is not None else control_hz_default()
     return start(
         "giskard server",
         [sys.executable, str(SERVER_SCRIPT), "--robot", robot, "--scene", scene,
+         "--control-hz", f"{rate:g}",
          *_spawn_args(spawn_position, spawn_yaw)],
         GISKARD_SERVER_LOG,
         marker,

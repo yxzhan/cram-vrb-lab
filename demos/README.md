@@ -43,7 +43,7 @@ Isaac Sim (sim.py --robot stretch)                giskard server (giskard_server
   /odom (odom→base_link, GT)  ───────────────────►  sync_odometry_topic (DiffDrive)
   TF (odom→base_link→links)                         + loads apartment.urdf into its world
   /stretch/cmd_vel            ◄───────────────────  base Twist (closed loop)
-  /stretch/joint_velocity_cmd ◄───────────────────  joint velocities (Float64MultiArray, ~15 Hz)
+  /stretch/joint_velocity_cmd ◄───────────────────  joint velocities (Float64MultiArray, at --control-hz)
   /stretch/gripper_command    ◄───────────────────  gripper Float64 (native, bypasses giskard)
   /head_camera/image_raw            (rgb8)          head camera, per --camera (perception, not control)
   /head_camera/depth/image_raw      (32FC1, m)
@@ -104,18 +104,30 @@ clients:
   consumes giskard's streamed commands and publishes the joint states / odometry /
   TF it closes its loop on, all in one thread, so **one cycle of that loop is one
   control cycle**: nominally 25 Hz (`rendering_dt = 8/200`). Giskard's QP runs at
-  a fixed 15 Hz on the wall clock and never checks whether the feedback it reads
-  is new — its joint-state sync silently re-applies the last message — so a sim
-  loop that drops below 15 Hz feeds a real-time controller stale state, which it
-  answers with overshoot: the robot shakes, grasps land short, drawers do not
-  open. A native Isaac window on the VNC desktop is the worst case (every frame
-  is a CPU copy plus a re-encode), but livestreaming from an RTX 3080 already runs
-  the loop at ~15 Hz and a 2070 well below it.
-  Every 5 s the sim prints where the time goes, as a `WARNING` below RTF 0.8:
+  a fixed rate on the wall clock — **10 Hz by default**, see below — and never
+  checks whether the feedback it reads is new (its joint-state sync silently
+  re-applies the last message), so a sim loop that drops below that rate feeds a
+  real-time controller stale state, which it answers with overshoot: the robot
+  shakes, grasps land short, drawers do not open. A native Isaac window on the VNC
+  desktop is the worst case (every frame is a CPU copy plus a re-encode) and a
+  weak GPU compounds it.
+  Every 5 s the sim prints where the time goes, warning once the loop comes within
+  30% of giskard's rate (`cram_vrb_lab.sim.runner.FEEDBACK_MARGIN`):
   ```
   [sim] 24.8 Hz  RTF 0.99  (work 18 ms/cycle)
-  WARNING: [sim] 15.0 Hz  RTF 0.60  (work 65 ms/cycle)
+  WARNING: [sim] 11.2 Hz  RTF 0.45  (work 65 ms/cycle)  -- giskard closes its loop at 10 Hz on this feedback (lower it with $GISKARD_CONTROL_HZ); ...
   ```
+  **Setting the control rate.** It is one number, shared by both processes, in
+  `cram_vrb_lab/control/rate.py`. Override it per machine with the
+  `GISKARD_CONTROL_HZ` environment variable, with `giskard_server.py
+  --control-hz`, or with the `control_hz=` argument of `launcher.start_isaac_sim`
+  / `start_giskard_server` (pass the same value to both — the sim uses it only to
+  decide when to warn). Pick it *slightly below* the rate the `[sim]` line
+  reports: `target_frequency` sets the QP's `control_dt` **and** the MPC's own
+  time step, so a rate the sim cannot feed means commands that apply for longer
+  than the controller assumed, which is overshoot by construction. Note that
+  `prediction_horizon` is in steps, so lowering the rate lengthens the lookahead
+  (15 steps is 1.5 s at 10 Hz, 1.0 s at 15 Hz): smoother, and slower to commit.
   The loop also sleeps out the rest of each cycle, so sim time tracks the wall
   clock giskard plans in rather than running ahead on a fast machine.
   What that costs, measured on an RTX 3080 with the GARMI apartment (no giskard,
@@ -171,8 +183,8 @@ clients:
   to plan within what the sim can execute: lower the velocity limits giskard uses
   (see `REVOLUTE_VELOCITY_LIMIT` / `PRISMATIC_VELOCITY_LIMIT` in
   `cram_vrb_lab.scenes.garmi_apartment.giskard_world` for the container joints,
-  and the robot's own limits for the arm) and drop `target_frequency` in
-  `demos/giskard_server.py` below the sim's measured cycle rate.
+  and the robot's own limits for the arm) and drop the control rate
+  (`GISKARD_CONTROL_HZ` / `--control-hz`) below the sim's measured cycle rate.
 - **Grabbing things in the viewport** (shift + left-drag on a rigid body while
   the sim runs, as in the GUI app): that is `omni.physx.ui`, which the GUI's
   experience file loads through `omni.physx.bundle` but the one a `SimulationApp`

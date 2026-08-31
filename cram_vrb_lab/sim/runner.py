@@ -14,6 +14,7 @@ import time
 
 import rclpy
 
+from cram_vrb_lab.control.rate import CONTROL_HZ_ENV, control_hz
 from cram_vrb_lab.setups import get_setup, spawn_pose_from_args
 from cram_vrb_lab.sim.isaac_app import READY_MARKER
 
@@ -28,16 +29,25 @@ stale.
 RATE_REPORT_PERIOD = 5.0
 """Seconds between the loop-rate reports :func:`report_rate` prints."""
 
-SLOW_RTF = 0.8
-"""Below this real-time factor the report is raised to a warning.
+FEEDBACK_MARGIN = 1.3
+"""How far above giskard's rate this loop has to run before the report is quiet.
 
 Not a cosmetic threshold. The control cycle below feeds giskard, whose QP runs at
-a fixed 15 Hz on the wall clock and never checks whether the feedback it reads is
-new (its joint-state sync silently re-applies the last message). A cycle rate
-below giskard's is a real-time controller closing its loop on stale state, which
-it answers with overshoot -- visible as a robot that shakes instead of tracking.
-0.8 leaves the nominal 25 Hz cycle comfortably above giskard's 15 Hz while
-flagging anything that is starting to slip.
+a fixed rate on the wall clock (:func:`cram_vrb_lab.control.rate.control_hz`, the
+same number the server configures itself with) and never checks whether the
+feedback it reads is new -- its joint-state sync silently re-applies the last
+message. A cycle rate below giskard's is a real-time controller closing its loop
+on stale state, which it answers with overshoot: visible as a robot that shakes
+instead of tracking.
+
+Measured against **giskard's rate rather than the nominal 25 Hz**, which is what
+the threshold used to compare with. The nominal rate was never the reference that
+mattered -- a loop at 60% of nominal is fine if giskard is slower still, and a
+loop at 90% is not if giskard is faster -- and once the rate became configurable
+a fixed real-time factor stopped tracking it at all. 1.3 flags a loop that is
+starting to slip rather than one that already has: at the default 10 Hz it warns
+below 13 Hz, and at the 15 Hz this ran at before, below 19.5 Hz -- close to what
+the old ``SLOW_RTF = 0.8`` did against a 25 Hz nominal.
 """
 
 SMOOTHING = 0.2
@@ -101,7 +111,7 @@ def probe_costs(world, render, frames=3):
     )
 
 
-def report_rate(fps, nominal_fps, work_seconds, render=True):
+def report_rate(fps, nominal_fps, work_seconds, render=True, giskard_hz=None):
     """Print the control-cycle rate, the real-time factor, and the work per cycle.
 
     ``work_seconds`` is what ``world.step`` costs; the rest of the cycle is the
@@ -110,18 +120,26 @@ def report_rate(fps, nominal_fps, work_seconds, render=True):
     livestreaming, 45 ms with a native Isaac window on the VNC desktop -- which
     is the whole difference between a controller that tracks and one that shakes.
 
+    The RTF is printed for scale but no longer decides the warning; see
+    :data:`FEEDBACK_MARGIN`. ``giskard_hz`` is resolved once by :func:`run` rather
+    than read here per report, so a misspelt ``GISKARD_CONTROL_HZ`` stops the sim
+    at startup instead of five seconds into a run.
+
     ``flush=True`` for the same reason as the ready marker below: Isaac writes to
     fd 1 from C++ while this goes through Python's block buffer, which the loop
     never writes enough to fill.
     """
     rtf = fps / nominal_fps if nominal_fps else 0.0
-    slow = rtf < SLOW_RTF
+    giskard_hz = control_hz() if giskard_hz is None else giskard_hz
+    slow = fps < giskard_hz * FEEDBACK_MARGIN
     hint = (
-        "  -- giskard closes its loop at 15 Hz on this feedback; a native window"
-        " on a remote desktop is the usual cause"
+        f"  -- giskard closes its loop at {giskard_hz:g} Hz on this feedback"
+        " (lower it with ${}); a native window on a remote desktop is the usual"
+        " cause".format(CONTROL_HZ_ENV)
         if render
-        else "  -- giskard closes its loop at 15 Hz on this feedback; ISAAC_RENDER=0"
-        " hand-steps physics and is slower here than rendering, not faster"
+        else f"  -- giskard closes its loop at {giskard_hz:g} Hz on this feedback"
+        " (lower it with ${}); ISAAC_RENDER=0 hand-steps physics and is slower"
+        " here than rendering, not faster".format(CONTROL_HZ_ENV)
     )
     print(
         f"{'WARNING: ' if slow else ''}[sim] {fps:.1f} Hz  RTF {rtf:.2f}"
@@ -181,14 +199,22 @@ def run(simulation_app, world, render, args):
     # loop below never writes enough to fill. Without the flush the sim comes up
     # fully, publishes every topic, and the notebook's first cell still sits there
     # until it times out.
+    # Read before the ready marker so a bad GISKARD_CONTROL_HZ is a startup error
+    # in the log the launcher is already tailing, not a crash five seconds in.
+    giskard_hz = control_hz()
     probe_costs(world, render)
-    print(f"{setup.name} at {spawn_pose}: {READY_MARKER}", flush=True)
+    print(
+        f"{setup.name} at {spawn_pose} (giskard at {giskard_hz:g} Hz): "
+        f"{READY_MARKER}",
+        flush=True,
+    )
 
     # One thread does everything, so a cycle of this loop is three things at once:
     # a step of physics, the point at which giskard's streamed commands are
     # consumed, and the point at which the joint states / odometry / TF giskard
     # closes its loop on are published. Its rate is therefore the control rate,
-    # and it must stay above giskard's fixed 15 Hz (see SLOW_RTF).
+    # and it must stay above the rate giskard closes its loop at (see
+    # FEEDBACK_MARGIN and cram_vrb_lab.control.rate).
     #
     # `world.step(render=True)` is one `app.update()`: the frame AND the physics
     # (rendering_dt / physics_dt substeps of it) in one blocking call. So the
@@ -197,8 +223,10 @@ def run(simulation_app, world, render, args):
     # frame is a CPU copy and a re-encode -- is paid for in control rate. On an
     # RTX 3080 with the GARMI apartment that is 18 ms per cycle headless (or
     # livestreaming, which renders offscreen and encodes on the GPU) against
-    # 45 ms for the native window: 25 Hz against 17 Hz, either side of giskard's
-    # 15 Hz. Hence the report, and hence the advice in demos/README.md to watch
+    # 45 ms for the native window: 25 Hz against 17 Hz. Both clear the default
+    # 10 Hz controller, and the native window did NOT clear the 15 Hz this used to
+    # run at -- which is why the rate is configurable now rather than picked for
+    # one GPU. Hence the report, and hence the advice in demos/README.md to watch
     # the livestream on that desktop rather than a native window.
     #
     # Stepping physics separately (`world.step(render=False)` x substeps) to draw
@@ -256,7 +284,8 @@ def run(simulation_app, world, render, args):
             cycles += 1
             elapsed = time.time() - window_start
             if elapsed >= RATE_REPORT_PERIOD:
-                report_rate(cycles / elapsed, 1.0 / cycle_dt, work_seconds, render)
+                report_rate(cycles / elapsed, 1.0 / cycle_dt, work_seconds,
+                            render, giskard_hz)
                 cycles, window_start = 0, time.time()
     except KeyboardInterrupt:
         pass

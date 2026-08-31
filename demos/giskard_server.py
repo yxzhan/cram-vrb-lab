@@ -46,10 +46,33 @@ from giskardpy.middleware.ros2.behavior_tree_config import ClosedLoopBTConfig
 from giskardpy.middleware.ros2.giskard import Giskard
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 
+from cram_vrb_lab.control.rate import CONTROL_HZ_ENV, control_hz
+
+
+PREDICTION_HORIZON = 15
+"""Steps the QP looks ahead.
+
+Steps, not seconds: the lookahead is ``PREDICTION_HORIZON / control_hz``, so it
+stretches when the rate is lowered -- 1.5 s at the default 10 Hz. Left at 15
+across rates because the reason to lower the rate is a sim that cannot feed the
+controller, and a longer horizon smooths the commands that reach it; lower this
+alongside the rate to hold the lookahead in seconds constant instead.
+"""
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     add_setup_arguments(parser)
+    parser.add_argument(
+        "--control-hz",
+        type=float,
+        default=None,
+        help=(
+            "rate [Hz] the QP loop runs at. Defaults to ${} if set, else {:g}. "
+            "Pick it slightly below the rate the sim sustains -- the [sim] line "
+            "in the sim log reports that rate."
+        ).format(CONTROL_HZ_ENV, control_hz()),
+    )
     return parser.parse_args()
 
 
@@ -58,7 +81,12 @@ def main():
     setup = get_setup(args.robot, args.scene)
     spawn_pose = spawn_pose_from_args(args)
     environment = setup.scene.environment() if setup.scene.environment else None
-    print(f"{setup.name}, robot spawned at {spawn_pose}", flush=True)
+    rate = args.control_hz if args.control_hz is not None else control_hz()
+    print(
+        f"{setup.name}, robot spawned at {spawn_pose}, QP at {rate:g} Hz "
+        f"({PREDICTION_HORIZON} steps = {PREDICTION_HORIZON / rate:.1f} s lookahead)",
+        flush=True,
+    )
 
     rospy.init_node("giskard")
     # Needed by an interface config that syncs the map->odom tf frame; started
@@ -70,12 +98,14 @@ def main():
             world_config=setup.robot.giskard_world(environment, spawn_pose),
             robot_interface_config=setup.robot.giskard_interface(),
             behavior_tree_config=ClosedLoopBTConfig(),
-            # 15 Hz: the rate the QP loop actually sustains on this machine with
-            # the sim running alongside. A nominal rate the loop cannot keep
-            # makes the controller's internal dt wrong. (giskardpy warns below
-            # 20 Hz -- harmless here.)
+            # The rate the QP loop can actually sustain alongside the sim on
+            # THIS machine -- see cram_vrb_lab.control.rate, which holds the
+            # default and the reasoning, and which the sim reads too so its
+            # slow-loop warning is about the same number. A nominal rate the loop
+            # cannot keep makes the controller's internal dt wrong. (giskardpy
+            # warns below 20 Hz -- harmless here.)
             qp_controller_config=QPControllerConfig(
-                target_frequency=15, prediction_horizon=15
+                target_frequency=rate, prediction_horizon=PREDICTION_HORIZON
             ),
         )
         giskard.live()
