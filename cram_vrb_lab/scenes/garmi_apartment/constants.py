@@ -19,7 +19,7 @@ and giskard's collision world stay aligned by construction.
 
 import os
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
 from cram_vrb_lab.paths import ASSETS_DIR, ROS2_WS_DIR
 
@@ -380,8 +380,18 @@ class KitchenProp:
     """One kitchen object standing on a surface, in the giskard ``map`` frame."""
 
     name: str
-    """Asset directory name under :data:`KITCHEN_OBJECTS_DIR`, which is also the
-    prim name and the name the spawn report prints."""
+    """Prim name under :data:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.KITCHEN_PROPS_ROOT`,
+    and the name the spawn report prints.
+
+    **Unique across** :data:`KITCHEN_PROPS`, which is the whole reason it is a field
+    of its own rather than doubling as the asset name the way it used to. A prim path
+    identifies exactly one prim, so two objects called ``SM_Cup`` are not two cups --
+    the second ``create_prim`` lands on the path the first already took. Put a second
+    copy of an asset on the worktop by giving it its own name and naming the asset
+    explicitly, as :data:`KITCHEN_PROPS` does::
+
+        KitchenProp("cup_left", (...), asset="SM_Cup")
+    """
 
     position: Tuple[float, float, float]
     """(x, y, surface_z) -- the **surface** height, like :class:`YCBProp`, not the
@@ -394,42 +404,74 @@ class KitchenProp:
     bounding boxes measure 0.070 x 0.200 x **0.300** for the cereal box,
     0.133 x 0.133 x **0.067** for the bowl)."""
 
+    asset: Optional[str] = None
+    """Directory name under :data:`KITCHEN_OBJECTS_DIR`; defaults to :attr:`name`.
+
+    Only worth giving when one asset is placed more than once, or when the prim
+    should read as its role in the scene rather than as the file it came from.
+    """
+
+    @property
+    def asset_name(self) -> str:
+        """The directory this object's USD lives in -- :attr:`asset`, or :attr:`name`."""
+        return self.asset or self.name
+
     @property
     def usd_path(self) -> str:
         """The asset's entry-point layer, whose ``defaultPrim`` is the object."""
-        return str(KITCHEN_OBJECTS_DIR / self.name / f"{self.name}.usda")
+        return str(
+            KITCHEN_OBJECTS_DIR / self.asset_name / f"{self.asset_name}.usda"
+        )
 
 
 KITCHEN_PROPS = (
-    # All four go on the stretch of worktop LEFT of the sink, x in [0.10, 0.65] --
-    # see the warning on KITCHEN_WORKTOP; the 0.70..1.00 cut-out to their right is
-    # the sink itself. This is the run the mustard bottle and the soup can used to
-    # stand on, before YCB_PROPS moved them to the dining table. It is the better of
-    # the two runs to work: 0.55 m against 0.40 m, and no tap standing over it.
+    # All six go on the stretch of worktop LEFT of the sink -- see the warning on
+    # KITCHEN_WORKTOP; the 0.70..1.00 cut-out to their right is the sink itself. The
+    # run this uses is x in [-0.10, 0.56], y in [7.14, 7.70].
     #
-    # Two rows, because even 0.55 m of run does not hold four objects side by side
-    # with clustering gaps between them (their x footprints sum to 0.384 m). Tall at
-    # the back, low at the front, so nothing hides behind anything else from a camera
-    # looking in from -y:
+    # Two rows, tall at the back, low at the front, so nothing hides behind anything
+    # else from a camera looking in from -y:
     #
     #     back  (y = 7.55)   cereal box (0.30 m)   milk box (0.20 m)
-    #     front (y = 7.30)   bowl (0.067 m)        cup (0.087 m)
+    #     front (y = 7.28)   bowl  cup  bowl  cup
     #
-    # Every footprint below was checked against the free run and the sink cut-out
-    # with the yaws applied; the tightest pair clears by 0.062 m, and the rightmost
-    # edge (the cup's, at x = 0.556) keeps 0.094 m from where the worktop ends.
-    KitchenProp("SM_CerealBox", (-0.1, 7.25, KITCHEN_WORKTOP[2]), yaw=1.5707963267948966),
-    KitchenProp("SM_MilkBox", (0.15, 7.35, KITCHEN_WORKTOP[2]), yaw=-1.5707963267948966),
-    KitchenProp("SM_SmallBowl", (0.55, 7.25, KITCHEN_WORKTOP[2])),
+    # Footprints, with each yaw applied (half-extents, m):
+    #
+    #     cereal box, yaw +pi/2   x 0.100   y 0.035
+    #     milk box,   yaw -pi/2   x 0.0475  y 0.030
+    #     bowl                    x 0.0665  y 0.0665
+    #     cup,        yaw -pi/2   x 0.0461  y -0.064 .. +0.0571  (handle on -y)
+    #
+    # which puts the front row's edges at [-0.097, 0.037], [0.104, 0.196],
+    # [0.254, 0.387] and [0.454, 0.546]: the tightest pair clears by 0.057 m -- enough
+    # for the Euclidean clustering in cram_vrb_lab.perception.pipeline to call them
+    # separate objects -- and the rightmost edge keeps 0.154 m from the sink cut-out.
+    # The rows clear each other by 0.169 m.
+    #
+    # The names are roles, not asset names, because two of these assets are placed
+    # twice; see KitchenProp.name.
+    KitchenProp("cereal_box", (0.10, 7.55, KITCHEN_WORKTOP[2]),
+                yaw=1.5707963267948966, asset="SM_CerealBox"),
+    KitchenProp("milk_box", (0.38, 7.55, KITCHEN_WORKTOP[2]),
+                yaw=-1.5707963267948966, asset="SM_MilkBox"),
+    KitchenProp("bowl_left", (-0.03, 7.23, KITCHEN_WORKTOP[2]),
+                asset="SM_SmallBowl"),
     # -pi/2 turns the handle, which the mesh puts on +x, to face -y -- i.e. towards
     # the robot, which works this run from the open side of the room.
-    KitchenProp("SM_Cup", (0.3, 7.30, KITCHEN_WORKTOP[2]), yaw=-1.5707963267948966),
+    KitchenProp("cup_left", (0.15, 7.20, KITCHEN_WORKTOP[2]),
+                yaw=-1.5707963267948966, asset="SM_Cup"),
+    KitchenProp("bowl_right", (0.32, 7.24, KITCHEN_WORKTOP[2]),
+                asset="SM_SmallBowl"),
+    KitchenProp("cup_right", (0.50, 7.18, KITCHEN_WORKTOP[2]),
+                yaw=0, asset="SM_Cup"),
 )
-"""The four kitchen objects the Isaac side puts on the worktop when
+"""The six kitchen objects the Isaac side puts on the worktop when
 :func:`kitchen_props_enabled`.
 
-Cereal box, milk box, bowl and cup: the makings of one breakfast task, which is why
-these four were the ones cut out of the ICRA apartment.
+Cereal box, milk box and two bowl/cup place settings: the makings of one breakfast
+task, which is why these assets were the ones cut out of the ICRA apartment. Two
+cups and two bowls rather than one of each so a plan has to pick *which* cup, and
+so a perception run has to separate two instances of the same object.
 
 .. note::
    These carry their own physics, so the spawn must **not** re-apply a rigid body or

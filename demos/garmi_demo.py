@@ -8,12 +8,14 @@ import sys
 import time
 from pathlib import Path
 
+# REPO = Path.cwd().resolve().parent
 REPO = Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-os.environ.setdefault("ISAAC_HEADLESS", "1")
-os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+# os.environ.setdefault("ISAAC_HEADLESS", "1")
+# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
+# os.environ["ISAAC_WINDOW"] = "1920x1080"
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
 # os.environ["ISAAC_WINDOW"] = "854x480"
@@ -49,6 +51,8 @@ giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
 # ## CRAM context
 
 # %%
+GISKARD_READY_AT = time.monotonic()
+
 import logging
 import threading
 
@@ -60,7 +64,7 @@ from rclpy.executors import MultiThreadedExecutor
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlignment
 from coraplex.datastructures.grasp import GraspDescription
-from coraplex.execution_environment import real_robot
+from coraplex.execution_environment import real_robot, simulated_robot
 from coraplex.plans.factories import execute_single, sequential
 from coraplex.robot_plans.actions.core.navigation import LookAtAction, NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import GraspingAction, PickUpAction
@@ -119,6 +123,12 @@ context = Context(
     evaluate_conditions=False,
     alternative_motion_mappings=GARMI_MOTION_MAPPINGS,
 )
+
+since_giskard = (
+    f" | {time.monotonic() - GISKARD_READY_AT:.1f}s CRAM context ready in "
+    if "GISKARD_READY_AT" in globals()
+    else ""
+)
 print(f"connected: {type(robot).__name__} | {len(world.bodies)} bodies")
 
 # %% [markdown]
@@ -128,15 +138,16 @@ print(f"connected: {type(robot).__name__} | {len(world.bodies)} bodies")
 ARRIVED = 0.05
 GRASPED = 0.01
 RETREAT = 0.12
-STANDOFF = {Drawer: (1.1, 0.5), Door: (1.2, -0.6)}
+STANDOFF = {Drawer: (1.05, 0.6), Door: (1.2, -0.6)}
 ARM_PREFIX = {Arms.LEFT: "arm_0", Arms.RIGHT: "arm_1"}
 TUCK_JOINTS = ["fr3_joint3", "fr3_joint4"]
 TUCK_POSITIONS = {Arms.LEFT: [-2, -1.5], Arms.RIGHT: [2, -1.5]}
 
 
-def run_plan(plan, collision_avoidance=True):
+def run_plan(plan, collision_avoidance=True, real_mode=False):
+    robot_mode = simulated_robot if real_mode else real_robot
     try:
-        with real_robot(collision_avoidance=collision_avoidance):
+        with robot_mode(collision_avoidance=collision_avoidance):
             plan.perform()
     except GiskardException as failure:
         print(f"  giskard failed -- {type(failure).__name__}: {failure}")
@@ -348,14 +359,17 @@ for body, d in zip(bodies, kept):
 # ## Pick and place
 
 # %%
-PICK_HINT = (0.55, 7.2)
+# PICK_HINT = (0.5, 7.2)
+PICK_HINT = (0.3, 7.3)
+# PICK_HINT = (0.1, 7.3)
+
 PICK_ARM = Arms.RIGHT
 PICK_APPROACH = ApproachDirection.FRONT
 PICK_ALIGNMENT = VerticalAlignment.TOP
 PICK_CLEARANCE = 0.02
 ROTATE_GRIPPER = True
-PLACE_POSITION = (-0.06, 6.85, 0.6)
-LIFT_AFTER_PLACE = 0.25
+PLACE_BODY = world.get_body_by_name(DRAWER)
+LIFT_AFTER_PLACE = 0.15
 
 robot.mobile_base.full_body_controlled = False
 
@@ -367,7 +381,9 @@ target_body = min(
 )
 print("picking", target_body.name.name)
 
-nudge_base(turn=math.pi / 9)
+# %%
+nudge_base(turn=math.pi / 6)
+# nudge_base(turn=math.pi / 9)
 
 # %%
 pick_grasp = GraspDescription(
@@ -383,10 +399,16 @@ pick_T = HomogeneousTransformationMatrix(
 )
 pick_xyz = np.asarray(pick_T.to_np())[:3, 3].ravel()
 
+place_T = HomogeneousTransformationMatrix(
+    data=np.asarray(PLACE_BODY.global_pose.to_np())
+)
+place_xyz = np.asarray(place_T.to_np())[:3, 3].ravel()
+
 carry_waypoints = [
-    (pick_xyz[0], pick_xyz[1], 1.05),
-    (pick_xyz[0], PLACE_POSITION[1], 1.05),
-    (PLACE_POSITION[0], PLACE_POSITION[1], 0.95),
+    (pick_xyz[0], pick_xyz[1], pick_xyz[2] + PICK_CLEARANCE),
+    (pick_xyz[0], place_xyz[1], pick_xyz[2] + PICK_CLEARANCE),
+    (place_xyz[0], place_xyz[1], place_xyz[2] + LIFT_AFTER_PLACE),
+    # (place_xyz[0], place_xyz[1], place_xyz[2] + 0.2),
 ]
 carry_quaternion = (
     pick_T.to_rotation_matrix() @ pick_grasp.grasp_orientation().to_rotation_matrix()
@@ -413,7 +435,7 @@ done = run_plan(sequential([
     PlaceAction(
         object_designator=target_body,
         target_location=Pose(
-            Point3.from_iterable(PLACE_POSITION),
+            Point3.from_iterable(place_xyz),
             pick_T.to_quaternion(),
             reference_frame=world.root,
         ),
@@ -422,8 +444,8 @@ done = run_plan(sequential([
     MoveToolCenterPointMotion(
         Pose(
             Point3.from_iterable(
-                (PLACE_POSITION[0], PLACE_POSITION[1],
-                 PLACE_POSITION[2] + LIFT_AFTER_PLACE)
+                (place_xyz[0], place_xyz[1],
+                 place_xyz[2] + LIFT_AFTER_PLACE)
             ),
             carry_quaternion,
             reference_frame=world.root,
@@ -441,7 +463,7 @@ print("pick and place:", done)
 robot.mobile_base.full_body_controlled = False
 
 work_container(ClosingMotion, drawer_handle, DRAWER_ARM, tuck=False)
-nudge_base(-0.5)
+nudge_base(-0.3)
 reset_pos()
 print("closed:", drawer_joint.position)
 
