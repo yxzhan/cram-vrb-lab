@@ -112,8 +112,8 @@ SETUPS: Dict[Tuple[str, str], Setup] = {
             robot=STRETCH,
             scene=GARMI_APARTMENT,
             # No props: a layout for this flat has never been measured, and the
-            # perception demo this scene exists for uses the YCB objects the
-            # scene loader puts on the worktop instead.
+            # perception demo this scene exists for uses the kitchen objects the
+            # scene loader puts on the worktop instead (ISAAC_KITCHEN_PROPS=1).
         ),
         Setup(
             robot=PANDA,

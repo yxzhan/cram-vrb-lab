@@ -178,78 +178,22 @@ FLOOR_CLUSTER_TUNING = {
 :data:`cram_vrb_lab.perception.pipeline.CLUSTER_TUNING`."""
 
 
-# --- Tabletop objects -----------------------------------------------------------
+# --- Surfaces objects are placed on ---------------------------------------------
 #
 # This apartment ships without a single graspable object: every surface in it --
 # worktop, dining table, nightstand, bay-window platform -- is bare, and the only
 # small objects are books shelved *inside* a bookshelf, occluded from any standing
-# height (which is why LIVING_ROOM_FLOOR aims at the floor instead). The objects
-# below are added by the Isaac side at load time; neither ``world.usda`` nor
-# ``scene-bodies.xml`` is touched.
+# height (which is why LIVING_ROOM_FLOOR aims at the floor instead). Whatever
+# stands on these surfaces is put there by the Isaac side at load time; neither
+# ``world.usda`` nor ``scene-bodies.xml`` is touched.
 
-YCB_ASSET_DIR = "/Isaac/Props/YCB/Axis_Aligned"
-"""Directory of the YCB props, relative to the Isaac Sim assets root.
-
-Resolved against ``isaacsim.storage.native.get_assets_root_path()`` rather than
-:data:`ASSETS_DIR`, so these are the stock Isaac assets (currently served from
-NVIDIA's cloud bucket, and cached locally by omniclient after the first load)
-rather than another copy vendored into this repo.
-"""
-
-YCB_UPRIGHT_ROLL = -1.5707963267948966  # -pi/2
-"""Roll [rad] about X that stands a YCB ``Axis_Aligned`` asset up in this Z-up world.
-
-These assets are authored with their vertical axis along **Y**: the mustard bottle's
-axis-aligned bounding box is 0.096 x 0.191 x 0.058 m, i.e. its 19.1 cm height lies
-along the asset's Y. The sign is the part worth writing down -- the axis points
-*down*, so it is the asset's **-Y** that has to become world +Z, which is a roll of
-**-90 deg**, not +90. Both signs give an upright bounding box, so this cannot be
-checked by measuring extents; +90 stands every object on its head (rendered and
-looked at: the mustard label upside down, the soup can resting on its lid).
-
-Leaves the bottle and the soup can standing, the tuna can on its base and the banana
-lying flat -- how each of them would actually be found on a table.
-"""
-
-
-@dataclass(frozen=True)
-class YCBProp:
-    """One YCB object standing on a surface, in the giskard ``map`` frame."""
-
-    name: str
-    """Prim name under :data:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.YCB_PROPS_ROOT`,
-    and the name the spawn report prints."""
-
-    asset: str
-    """File name inside :data:`YCB_ASSET_DIR`."""
-
-    position: Tuple[float, float, float]
-    """(x, y, surface_z): where on the surface, and the height of the surface itself.
-
-    Deliberately the **surface** height rather than the object's centre: how far a
-    centre sits above the surface depends on the mesh, so
-    :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props` measures
-    each asset's bounding box after rotating it upright and releases it with its
-    underside :data:`YCB_DROP_HEIGHT` above ``surface_z``.
-    """
-
-    mass: float
-    """[kg]. The object's real mass, from the YCB object-and-model set.
-
-    Given rather than left to PhysX's density default so a grasp has to hold the
-    weight the real object has.
-    """
-
-    yaw: float = 0.0
-    """Rotation [rad] about world Z, applied after :data:`YCB_UPRIGHT_ROLL`."""
-
-
-YCB_DROP_HEIGHT = 0.005
+PROP_DROP_HEIGHT = 0.005
 """How far [m] above its surface an object is released.
 
 Small on purpose: the surfaces are measured (see :data:`KITCHEN_WORKTOP`) and each
-asset is grounded on its own bounding box, so the drop only has to cover the error in
-those two numbers. Releasing from a height instead of spawning exactly at rest is what
+asset is grounded on its own bounding box (see
+:func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene._release_above_surface`), so
+the drop only has to cover the error in those two numbers. Releasing from a height instead of spawning exactly at rest is what
 makes the settled pose evidence that the object is really standing on the surface
 rather than hovering a centimetre above it or sunk into it.
 """
@@ -297,63 +241,19 @@ comes to rest, and the render shows it resting on the table -- but it is the rea
 number measured off the geometry is the wrong one to place from.
 """
 
-YCB_PROPS = (
-    # All four on the dining table, spread along its long axis (y) so the gaps stay
-    # wide enough for the Euclidean clustering in cram_vrb_lab.perception.pipeline to
-    # call them four objects rather than one. The banana is 0.197 m long and lies
-    # along x, well inside the table's 0.85 m; the tightest pair here clears by
-    # 0.153 m. Bounds checked against the rendered table top,
-    # x in [1.433, 2.283], y in [4.101, 5.452].
-    #
-    # The worktop is left to KITCHEN_PROPS -- the mustard bottle and the soup can
-    # used to stand on it, and moved here when those four took the free run over.
-    YCBProp("banana", "011_banana.usd",
-            (DINING_TABLE_TOP[0], DINING_TABLE_TOP[1] - 0.13, DINING_TABLE_TOP[2]),
-            mass=0.066, yaw=-0.5),
-    YCBProp("tuna_fish_can", "007_tuna_fish_can.usd",
-            (DINING_TABLE_TOP[0] + 0.03, DINING_TABLE_TOP[1] + 0.13, DINING_TABLE_TOP[2]),
-            mass=0.171),
-    YCBProp("mustard_bottle", "006_mustard_bottle.usd",
-            (DINING_TABLE_TOP[0], DINING_TABLE_TOP[1] - 0.44, DINING_TABLE_TOP[2]),
-            mass=0.603, yaw=0.35),
-    YCBProp("tomato_soup_can", "005_tomato_soup_can.usd",
-            (DINING_TABLE_TOP[0], DINING_TABLE_TOP[1] + 0.40, DINING_TABLE_TOP[2]),
-            mass=0.349),
-)
-"""The four YCB objects the Isaac side adds to this apartment.
-
-Tall objects and low ones together, so a detection can be scored on height as well as
-position. The positions here are where each object is *released*; what it settles at
-is decided by physics and printed by
-:func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props`.
-
-.. note::
-   These are real rigid bodies, but neither the assets nor this apartment come that
-   way, so both halves of the contact are built at load time (see
-   :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props`): the YCB
-   ``Axis_Aligned`` assets are bare meshes with no rigid body and no collider, and of
-   the apartment's own prims only the 15 free bodies (dining table, chairs, floor
-   lamp, books) carry a collider -- the kitchen cabinet, walls and floor carry none,
-   which is why the robot drives on the invisible ground plane instead of the
-   apartment's floor mesh. The dining table therefore supports an object out of the
-   box; the worktop needs a collider adding first, or anything released above it
-   falls straight through to the floor.
-"""
-
-
 # --- Kitchen objects on the cabinet worktop ---------------------------------
 #
-# The four props extracted out of ``apartmentICRA.usda`` into
-# ``assets/kitchen-objects`` (see the README there). Unlike the YCB objects above
-# these are *not* bare meshes: each asset already carries its own rigid body,
-# mass, inertia tensor and collider, so the Isaac side only has to place it.
+# The props extracted out of ``apartmentICRA.usda`` into ``assets/kitchen-objects``
+# (see the README there). Each asset already carries its own rigid body, mass,
+# inertia tensor and collider, so the Isaac side only has to place it -- these are
+# the only graspable objects this scene has.
 
 KITCHEN_OBJECTS_DIR = ASSETS_DIR / "kitchen-objects"
 """Directory of the standalone kitchen assets, vendored into this repo.
 
-Local, unlike :data:`YCB_ASSET_DIR`, which resolves against the Isaac assets root:
-these four were cut out of the ICRA apartment rather than downloaded, so nothing
-here needs the Isaac asset bucket to be reachable.
+Local rather than resolved against the Isaac assets root: these were cut out of the
+ICRA apartment rather than downloaded, so nothing here needs the Isaac asset bucket
+to be reachable.
 """
 
 KITCHEN_PROPS_ENV = "ISAAC_KITCHEN_PROPS"
@@ -394,15 +294,15 @@ class KitchenProp:
     """
 
     position: Tuple[float, float, float]
-    """(x, y, surface_z) -- the **surface** height, like :class:`YCBProp`, not the
-    object's centre. The spawn measures each asset's bounding box and releases it
-    :data:`YCB_DROP_HEIGHT` above the surface."""
+    """(x, y, surface_z) -- the **surface** height, not the object's centre. The
+    spawn measures each asset's bounding box and releases it
+    :data:`PROP_DROP_HEIGHT` above the surface."""
 
     yaw: float = 0.0
-    """Rotation [rad] about world Z. No roll: unlike the YCB ``Axis_Aligned``
-    assets these are authored Z-up and stand the right way up unrotated (their
-    bounding boxes measure 0.070 x 0.200 x **0.300** for the cereal box,
-    0.133 x 0.133 x **0.067** for the bowl)."""
+    """Rotation [rad] about world Z. No roll: these assets are authored Z-up and
+    stand the right way up unrotated (their bounding boxes measure
+    0.070 x 0.200 x **0.300** for the cereal box, 0.133 x 0.133 x **0.067** for the
+    bowl)."""
 
     asset: Optional[str] = None
     """Directory name under :data:`KITCHEN_OBJECTS_DIR`; defaults to :attr:`name`.
@@ -475,9 +375,9 @@ so a perception run has to separate two instances of the same object.
 
 .. note::
    These carry their own physics, so the spawn must **not** re-apply a rigid body or
-   a collider the way :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_ycb_props`
-   does for the YCB meshes -- that would overwrite the authored masses and flatten the
-   cup's and bowl's convex decompositions back to a single hull, filling in the
-   handle and the bowl's cavity. The worktop still needs its collider adding, exactly
-   as for the YCB props.
+   a collider -- that would overwrite the authored masses and flatten the cup's and
+   bowl's convex decompositions back to a single hull, filling in the handle and the
+   bowl's cavity. The worktop is the half of the contact that *is* missing: it ships
+   without a collider, and gets one at load time (see
+   :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.load_garmi_apartment_scene`).
 """

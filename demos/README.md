@@ -169,9 +169,10 @@ clients:
   ```
   Frame-dominated is a display problem (livestream client instead of a native
   window, smaller `ISAAC_WINDOW`); physics-dominated is a scene problem (a bigger
-  `physics_dt` in `demos/sim.py`, fewer dynamic bodies — `spawn_ycb_props` drops
-  five into the GARMI apartment that the drawer demos never touch), and no display
-  change will help it. Hand-stepping inflates the physics number, so treat it as
+  `physics_dt` in `demos/sim.py`, fewer dynamic bodies — `spawn_kitchen_props` drops
+  six onto the GARMI apartment's worktop that the drawer demos never touch, and is
+  opt-in via `ISAAC_KITCHEN_PROPS` for exactly that reason), and no display change
+  will help it. Hand-stepping inflates the physics number, so treat it as
   an upper bound.
 - **When the machine simply cannot hold real time** (RTF stays well below 1 after
   all that), the arm stops tracking for a second reason: the sim's velocity
