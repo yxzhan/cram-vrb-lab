@@ -8,8 +8,10 @@ import sys
 import time
 from pathlib import Path
 
-# REPO = Path.cwd().resolve().parent
-REPO = Path.cwd().resolve()
+from IPython import get_ipython
+in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
+
+REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
 # os.environ.setdefault("ISAAC_HEADLESS", "1")
@@ -44,7 +46,7 @@ rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
 sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 stream_proc = start_streaming_client() if livestream_enabled() else None
-giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
+giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
 # %% [markdown]
@@ -124,8 +126,8 @@ context = Context(
     alternative_motion_mappings=GARMI_MOTION_MAPPINGS,
 )
 
-since_giskard = (
-    f" | {time.monotonic() - GISKARD_READY_AT:.1f}s CRAM context ready in "
+print(
+    f"{time.monotonic() - GISKARD_READY_AT:.1f}s, CRAM context ready!"
     if "GISKARD_READY_AT" in globals()
     else ""
 )
@@ -137,15 +139,14 @@ print(f"connected: {type(robot).__name__} | {len(world.bodies)} bodies")
 # %%
 ARRIVED = 0.05
 GRASPED = 0.01
-RETREAT = 0.12
-STANDOFF = {Drawer: (1.05, 0.6), Door: (1.2, -0.6)}
-ARM_PREFIX = {Arms.LEFT: "arm_0", Arms.RIGHT: "arm_1"}
+RETREAT = 0.08
+ARM_PREFIX = {Arms.LEFT: "left", Arms.RIGHT: "right"}
 TUCK_JOINTS = ["fr3_joint3", "fr3_joint4"]
 TUCK_POSITIONS = {Arms.LEFT: [-2, -1.5], Arms.RIGHT: [2, -1.5]}
 
 
-def run_plan(plan, collision_avoidance=True, real_mode=False):
-    robot_mode = simulated_robot if real_mode else real_robot
+def run_plan(plan, collision_avoidance=True, real_mode=True):
+    robot_mode = real_robot if real_mode else simulated_robot
     try:
         with robot_mode(collision_avoidance=collision_avoidance):
             plan.perform()
@@ -239,7 +240,10 @@ def retreat(arm, distance=RETREAT):
     tool = np.asarray(
         ViewManager.get_end_effector_view(arm, robot).tool_frame.global_pose.to_np()
     )
-    tool[:3, 3] -= distance * tool[:3, 0]
+    # Column 2 is the tool frame's +z, which points out between the fingers
+    # (see _TOOL_FRAME_RPY in cram_vrb_lab/robots/garmi/joints.py); backing off
+    # is -z. It used to be column 0 because the approach axis used to be x.
+    tool[:3, 3] -= distance * tool[:3, 2]
     target = Pose(
         Point3.from_iterable(tool[:3, 3]),
         HomogeneousTransformationMatrix(data=tool).to_quaternion(),
@@ -251,7 +255,7 @@ def retreat(arm, distance=RETREAT):
     )
 
 
-def work_container(motion, handle, arm, attempts=3, tuck=True):
+def work_container(motion, handle, arm, attempts=3, tuck=False):
     if tuck:
         tuck_arm(Arms.RIGHT if arm == Arms.LEFT else Arms.LEFT)
     grasp_handle(handle, arm, attempts)
@@ -275,16 +279,20 @@ def reset_pos():
 # %%
 DRAWER = "drawer_2"
 DRAWER_ARM = Arms.LEFT
+STANDOFF = {Drawer: (1.0, 0.8), Door: (1.2, 0)}
 
 robot.mobile_base.full_body_controlled = False
 
 drawer_handle = annotate(Drawer, DRAWER)
 drawer_joint = world.get_connection_by_name(f"{DRAWER}_joint")
 
-drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
 reset_pos()
+drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
+# nudge_base(turn=math.pi / 6)
+
 run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
-work_container(OpeningMotion, drawer_handle, DRAWER_ARM, tuck=False)
+work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
+# work_container(ClosingMotion, drawer_handle, DRAWER_ARM)
 print("opened:", drawer_joint.position)
 
 # %% [markdown]

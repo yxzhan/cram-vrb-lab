@@ -23,7 +23,7 @@ import os
 CONTROL_HZ_ENV = "GISKARD_CONTROL_HZ"
 """Environment variable overriding :data:`DEFAULT_CONTROL_HZ`."""
 
-DEFAULT_CONTROL_HZ = 10.0
+DEFAULT_CONTROL_HZ = 15.0
 """Hz the QP loop runs at unless told otherwise.
 
 Below the 25 Hz the sim loop manages headless, and below the ~17 Hz a native

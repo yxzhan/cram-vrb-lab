@@ -7,10 +7,11 @@ drives, the lift raises the torso and the head turns.
 The twin side does not model any of that locally --
 :mod:`semantic_digital_twin.robots.garmi` already ships a full GARMI model
 (``GarmiMobileBase(MobileBase[OmniDrive])``, ``GarmiTorso``, ``GarmiNeck``,
-``GarmiCamera``) plus a ``garmi.srdf`` self-collision matrix. That model was
-written against a differently-named export of this same robot, so
-:func:`load_patched_urdf` renames the arms, grippers and head joints to match it
-(:data:`UPSTREAM_RENAMES`) and everything downstream uses the upstream classes.
+``GarmiCamera``) plus a ``garmi.srdf`` self-collision matrix. That model is
+written against *this* description's own names -- ``left_fr3_*`` /
+``right_fr3_*`` for the arms and grippers, ``o1_motor_*`` for the head -- so
+:func:`load_patched_urdf` passes them through unchanged and everything
+downstream uses the upstream classes.
 
 The joint order of :data:`CONTROLLED_JOINTS` is the contract between giskard's
 joint-group velocity controller and the sim's velocity-command integrator: the
@@ -45,11 +46,12 @@ into a prim path nothing can predict.
 
 SIDES = ("left", "right")
 
-ARM_PREFIX = {"left": "arm_0", "right": "arm_1"}
+ARM_PREFIX = {"left": "left", "right": "right"}
 """How :mod:`semantic_digital_twin.robots.garmi` names the two arms.
 
-``GarmiLeftArm`` resolves its tip as ``arm_0_fr3_link8`` off
-``arm_mount_left_link``, so arm 0 is the left one.
+The same word the description uses: ``GarmiLeftArm`` resolves its tip as
+``left_fr3_link8`` off ``arm_mount_left_link``. Kept as a mapping rather than
+inlined because the demos index it by :class:`~coraplex.datastructures.enums.Arms`.
 """
 
 
@@ -58,7 +60,7 @@ def arm_joints(side: str) -> list[str]:
 
 
 def finger_joints(side: str) -> list[str]:
-    return [f"{ARM_PREFIX[side]}_gripper_fr3_finger_joint{i}" for i in (1, 2)]
+    return [f"{ARM_PREFIX[side]}_fr3_finger_joint{i}" for i in (1, 2)]
 
 
 ARM_JOINTS = [joint for side in SIDES for joint in arm_joints(side)]
@@ -72,9 +74,9 @@ The description makes the upper one *mimic* the lower; the mimic is dropped (see
 instead, which is what its low/mid/high states do.
 """
 
-HEAD_JOINTS = ["head_pan_joint", "head_tilt_joint"]
-"""``o1_motor_1`` / ``o1_motor_2`` after the rename -- pan then tilt, in the
-``neck_1 -> neck_2 -> head`` chain."""
+HEAD_JOINTS = ["o1_motor_1", "o1_motor_2"]
+"""The description's own names for the neck motors -- pan then tilt, in the
+``neck_1 -> neck_2 -> head`` chain. ``GarmiNeck`` looks them up by these names."""
 
 WHEEL_JOINTS = [
     "front_left_wheel_joint",
@@ -177,11 +179,11 @@ BASE_LINK = "chassis_link"
 
 
 def hand_link(side: str) -> str:
-    return f"{ARM_PREFIX[side]}_gripper_fr3_hand"
+    return f"{ARM_PREFIX[side]}_fr3_hand"
 
 
 def tool_frame_link(side: str) -> str:
-    return f"{ARM_PREFIX[side]}_gripper_fr3_hand_tcp"
+    return f"{ARM_PREFIX[side]}_fr3_hand_tcp"
 
 TOOL_FRAME_REACH = 0.1034 - 0.01
 """Distance [m] along the hand's +z to the point between the fingertips."""
@@ -224,22 +226,41 @@ The importer authors *acceleration* drives, so the force-drive gains in
 what they say -- see the Panda's ``FINGER_MASS`` for the full account.
 """
 
+# PARK_CONFIGURATION = [
+#     0.0,
+#     -1.6,
+#     -1.0,
+#     -2.356194490192345,
+#     0.0,
+#     1.5707963267948966,
+#     0.7853981633974483,
+# ]
+
 PARK_CONFIGURATION = [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
-"""GARMI's home pose, in :func:`arm_joints` order. The same for both arms.
 
-Duplicated from ``GarmiLeftArm.ARM_PARK_CONFIGURATION`` in
-:mod:`semantic_digital_twin.robots.garmi`, and it has to be: the sim's park runs
-under the Isaac python, which has no ``semantic_digital_twin`` to read it from.
+"""GARMI's park pose, in :func:`arm_joints` order. The same numbers on both arms.
+
+Duplicated from ``ARM_PARK_CONFIGURATION`` in ``GarmiLeftArm.setup_joint_states``
+(:mod:`semantic_digital_twin.robots.garmi`), and it has to be: the sim's park runs
+under the Isaac python, which has no ``semantic_digital_twin`` to read it from --
+and upstream keeps it in a local variable rather than a class attribute, so there
+is nothing importable to read even where the import would work.
 **Keep the two in sync** -- if they drift, the sim parks somewhere giskard does
-not think it is. The description states the same numbers twice more, in the
-URDF's ``ros2_control`` ``initial_value``s and in ``mujoco/garmi.xml``'s ``home``
-keyframe (whose ``qpos`` also opens with ``0 0 0.0259``, which is where
-:data:`~cram_vrb_lab.robots.garmi.isaac_node.BASE_LINK_HEIGHT` comes from).
+not think it is.
 
-It is Franka's own "ready" pose, applied to both arms unmirrored. On GARMI's
-tilted shoulders (``arm_mount_*_joint``) it holds the hands 0.79 m in front of
-``base_link`` at 0.84 m -- arms out, chest height.
+The description does *not* state these numbers. Its ``ros2_control``
+``initial_value``s and ``mujoco/garmi.xml``'s ``home`` keyframe both still carry
+Franka's own "ready" pose, ``0 -0.785 0 -2.356 0 1.571 0.785`` (the keyframe's
+``qpos`` also opens with ``0 0 0.0259``, which is where
+:data:`~cram_vrb_lab.robots.garmi.isaac_node.BASE_LINK_HEIGHT` comes from); this
+pose pulls the shoulders down and rolls the upper arms in, off that home pose.
+
+Applied unmirrored to two mirrored shoulders, so unlike the old "ready" pose --
+which sat symmetrically at ``x=0.85, y=+-0.23, z=0.90`` in ``base_link`` -- it
+does not hold the two hands symmetrically: the left lands at ``(0.54, 0.22,
+1.21)`` and the right at ``(0.69, -0.54, 0.64)``.
 """
+
 
 _MESH_PREFIX = "package://garmi_description/"
 
@@ -251,84 +272,88 @@ Regenerated on demand, so deleting it costs nothing.
 """
 
 
-def _upstream_renames() -> list[tuple[str, str]]:
-    """Link/joint renames taking this description to the names
-    :mod:`semantic_digital_twin.robots.garmi` looks bodies up by.
+UPSTREAM_RENAMES: list[tuple[str, str]] = []
+"""Link/joint renames taking this description to the names
+:mod:`semantic_digital_twin.robots.garmi` looks bodies up by -- none, now.
 
-    The upstream model was written against another export of the same robot: its
-    ``garmi.srdf`` names every non-arm link exactly as this URDF does
-    (``chassis_link``, ``axle_link``, ``lift_0_*``, ``front_rocker_link``,
-    ``lidar2d_*``, ``head``, ``neck_1``), and only the arm/gripper prefixes and
-    the two head joints differ.
+The upstream model used to be written against another export of the same robot,
+which prefixed the arms ``arm_0_`` / ``arm_1_``, put the grippers in their own
+``_gripper_`` namespace and called the neck motors ``head_pan_joint`` /
+``head_tilt_joint``; :func:`load_patched_urdf` rewrote all of it on the way past.
+It now looks bodies up by this description's own names (``left_fr3_link8``,
+``left_fr3_hand``, ``o1_motor_1``, ...), so there is nothing left to rename.
 
-    **Order matters.** Each substitution is a plain prefix replacement, and the
-    specific ones have to run before the catch-all ``left_fr3_`` -> ``arm_0_fr3_``
-    or the fingers and hand would be swept into the arm's namespace. Replacing
-    ``left_fr3_hand`` covers ``_hand_tcp``, ``_hand_joint`` and
-    ``_hand_tcp_joint`` in one go, for the same reason.
-    """
-    renames = []
-    for side in SIDES:
-        arm = ARM_PREFIX[side]
-        renames += [
-            (f"{side}_fr3_hand", f"{arm}_gripper_fr3_hand"),
-            (f"{side}_fr3_leftfinger", f"{arm}_gripper_fr3_leftfinger"),
-            (f"{side}_fr3_rightfinger", f"{arm}_gripper_fr3_rightfinger"),
-            (f"{side}_fr3_finger_joint", f"{arm}_gripper_fr3_finger_joint"),
-            (f"{side}_fr3_", f"{arm}_fr3_"),
-        ]
-    return renames + [("o1_motor_1", "head_pan_joint"), ("o1_motor_2", "head_tilt_joint")]
-
-
-UPSTREAM_RENAMES = _upstream_renames()
+Kept as an empty list rather than deleted: it is the seam where the two
+namespaces meet, and the next export that disagrees goes here.
+"""
 
 _TOOL_FRAME_RPY = {
-    "left": "0 -1.5707963267948966 0",
-    "right": "3.141592653589793 -1.5707963267948966 0",
+    "left": "0 0 0",
+    "right": "0 0 3.141592653589793",
 }
-"""Rotation put on each ``*_hand_tcp_joint``, replacing the description's ``0 0 0``.
+"""Rotation put on each ``*_hand_tcp_joint``.
 
-Reconciles two conventions that would otherwise disagree silently.
-:class:`~semantic_digital_twin.robots.robot_parts.EndEffector` derives its
-approach direction as the **x** column of ``front_facing_orientation``, and
-upstream's ``GarmiLeftGripper`` passes the identity quaternion -- so it expects a
-tool frame whose x-axis already points out between the fingers. A Franka Hand
-points its **z** out, and this description's TCP joint carries no rotation of its
-own, so without this the approach axis would come out sideways and every grasp
-would reach across the object instead of at it.
+The left value is the description's own, i.e. no rotation at all; the right one is a
+half turn about the approach axis. Both are chosen so that **the tool frame's +z
+points out between the fingers**, because that is the convention the pose CRAM
+actually commands is built in.
 
-A quarter turn about y maps z onto x and leaves y -- the closing axis -- alone,
-which is exactly the convention
-:mod:`cram_vrb_lab.robots.panda.semantic_model` states for the Panda.
+Which way is "front" is genuinely ambiguous upstream -- two pieces of coraplex read
+``EndEffector.front_facing_orientation`` (``Quaternion.from_rpy(0, pi/2, 0)`` for both
+of GARMI's grippers) in opposite senses:
 
-The sign is **negative**, and it is worth being sure about rather than reasoning
-about: a rotation of ``theta`` about y has ``(cos(theta), 0, -sin(theta))`` as
-its first column, so only ``-pi/2`` puts the tool's x on the hand's ``+z``.
-``+pi/2`` lands on ``-z``, which preserves the closing axis and looks entirely
-plausible while making every grasp approach the object from behind. Checked by
-comparing the tool frame's x against the hand's z in the parked pose.
+- :class:`~semantic_digital_twin.robots.robot_parts.EndEffector` takes the **x column**
+  of its rotation matrix, ``R @ x``, which for that quaternion is ``(0, 0, -1)`` -- the
+  tool's **-z**. This is ``front_facing_axis``.
+- ``GraspDescription.calculate_end_effector_axis`` takes ``R.inverse() @ x``, which is
+  ``(0, 0, +1)`` -- the tool's **+z**. ``grasp_orientation`` multiplies
+  ``front_facing_orientation`` on the right for the same reason, so the tool pose it
+  commands puts **+z** on the object.
 
-The right side carries an extra half turn about that same x, which is what makes
-the two arms usable with one grasp description. The hands are attached to their
-``link8`` identically, but ``arm_mount_right_joint`` mirrors
+The two differ by exactly the half turn this constant used to carry. Only the second
+one moves the robot: ``GraspDescription.grasp_pose_sequence`` is what
+``GraspingAction`` reaches to. Measured against the real drawer -- the commanded
+pre-grasp frame for ``drawer_2_handle``, tool at ``(-0.09, 6.997, 0.6)`` and the handle
+0.126 m away at ``(-0.09, 7.123, 0.6)`` -- the direction the fingers physically point,
+dotted with the direction from the tool to the handle, comes out as:
+
+======================================  ======  ==============================
+``*_hand_tcp_joint`` rpy                dot     what you see
+======================================  ======  ==============================
+``0 0 0`` / ``0 0 pi``  (these)         ``+1``  fingers reach the handle
+``pi 0 0`` / ``0 pi 0``  (until now)    ``-1``  **wrist** reaches the handle
+``0 -pi/2 0``  (before that)             ``0``  approach square across it
+======================================  ======  ==============================
+
+The commanded tool pose does not depend on this constant at all -- ``grasp_orientation``
+only ever sees ``front_facing_orientation`` -- so that table covers the whole family and
+is not specific to this handle or this arm.
+
+The cost of choosing this convention is that ``front_facing_axis`` now reads backwards,
+and one place uses it: ``ReachMotion._calculate_pose_sequence`` backs its pre-pose off by
+``-0.05`` along it (``coraplex/robot_plans/motions/gripper.py``), so that pre-pose lands
+5 cm past the target instead of 5 cm short of it. That is the lesser of the two errors by
+a wide margin, and ``GraspingAction`` does not go through ``ReachMotion`` anyway -- it
+issues ``MoveToolCenterPointMotion`` directly. Upstream fixing its own disagreement is
+what would remove the trade-off.
+
+The right side carries the same half turn about the *approach* axis that it always did,
+now expressed about z rather than about y because z is the approach axis again. It is
+what makes the two arms usable with one grasp description. The hands are attached to
+their ``link8`` identically, but ``arm_mount_right_joint`` mirrors
 ``arm_mount_left_joint`` (rpy ``1.0389 0.1675 0.6876`` against ``-1.0389 0.1675
--0.6876``), so at :data:`PARK_CONFIGURATION` -- the same numbers on both arms --
-the right hand hangs rolled half a turn from the left: in ``base_link`` the
-closing axis reads ``(-0.211, -0.483, 0.850)`` on the left and ``(0.211, -0.483,
--0.850)`` on the right, up against down.
+-0.6876``), so the right hand hangs rolled half a turn from the left.
 
-``GraspDescription.grasp_orientation`` knows nothing about which arm it is
-planning for -- for a ``FRONT``/``NoAlignment`` grasp it is the identity, and
-both grippers pass the identity ``front_facing_orientation`` -- so both arms get
-commanded the *same* tool roll. The left arm is already there; the right one has
-to twist its wrist half a turn out of its natural posture to reach it, which is
-the contorted reach at the drawers. Rolling its tool frame instead lets it hold
-the goal the way its shoulder wants to.
+``GraspDescription.grasp_orientation`` knows nothing about which arm it is planning for
+-- for a ``FRONT``/``NoAlignment`` grasp it is the identity, and both grippers pass the
+same ``front_facing_orientation`` -- so both arms get commanded the *same* tool roll. The
+left arm is already there; the right one would have to twist its wrist half a turn out of
+its natural posture to reach it, which is the contorted reach at the drawers. Rolling its
+tool frame instead lets it hold the goal the way its shoulder wants to.
 
 A parallel gripper is symmetric about its approach axis, so this changes nothing
-physical: the fingers still close on the same line, just labelled the other way
-round. What it does change is the sign of
-:data:`TOOL_FRAME_LATERAL_OFFSET`, which is why
+physical: the fingers still close on the same line, just labelled the other way round.
+What it does change is the sign of :data:`TOOL_FRAME_LATERAL_OFFSET`, which is why
 :func:`tool_frame_offset` mirrors it.
 """
 
@@ -396,7 +421,6 @@ def load_patched_urdf() -> str:
             joint.remove(mimic)
         name = joint.get("name", "")
         if name.endswith("_hand_tcp_joint"):
-            # still the description's own names here; the renames run further down
             side = next(s for s in SIDES if name.startswith(f"{s}_"))
             origin = joint.find("origin")
             origin.set("rpy", _TOOL_FRAME_RPY[side])

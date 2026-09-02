@@ -42,8 +42,8 @@ from cram_vrb_lab.setups import (
 )
 
 from giskardpy.middleware.ros2 import rospy
-from giskardpy.middleware.ros2.behavior_tree_config import ClosedLoopBTConfig
 from giskardpy.middleware.ros2.giskard import Giskard
+from giskardpy.middleware.ros2.server_config import ExecutionMode, GiskardServerConfig
 from giskardpy.qp.qp_controller_config import QPControllerConfig
 
 from cram_vrb_lab.control.rate import CONTROL_HZ_ENV, control_hz
@@ -97,7 +97,9 @@ def main():
         giskard = Giskard(
             world_config=setup.robot.giskard_world(environment, spawn_pose),
             robot_interface_config=setup.robot.giskard_interface(),
-            behavior_tree_config=ClosedLoopBTConfig(),
+            server_config=GiskardServerConfig(
+                execution_mode=ExecutionMode.CLOSED_LOOP
+            ),
             # The rate the QP loop can actually sustain alongside the sim on
             # THIS machine -- see cram_vrb_lab.control.rate, which holds the
             # default and the reasoning, and which the sim reads too so its

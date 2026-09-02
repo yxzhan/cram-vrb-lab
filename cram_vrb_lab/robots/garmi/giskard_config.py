@@ -18,12 +18,14 @@ from dataclasses import dataclass, field
 
 from giskardpy.middleware.ros2.robot_interface_config import RobotInterfaceConfig
 from giskardpy.model.world_config import WorldWithOmniDriveRobot
+from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.robots.garmi import Garmi
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.world_description.connections import (
     Connection6DoF,
     OmniDrive,
 )
+from semantic_digital_twin.world_description.world_entity import Body
 
 from .joints import (
     CMD_VEL_TOPIC,
@@ -47,6 +49,53 @@ class WorldWithGarmiConfig(WorldWithOmniDriveRobot):
     """
 
     urdf_view: AbstractRobot = field(kw_only=True, default=Garmi, init=False)
+
+    def setup_world(self):
+        """Upstream's own body, with the URDF parsed the way ``Garmi`` asks for.
+
+        Copied from :meth:`WorldWithOmniDriveRobot.setup_world` for one word:
+        ``use_visual_as_collision_backup``. GARMI's shell -- the two side covers,
+        the front and rear covers, the lights, the rockers and the 2D lidars --
+        is *drawn* by the description but never described for contact, and
+        upstream declares that gap on the robot itself
+        (``Garmi.uses_visual_as_collision_backup`` is ``True``) so its collision
+        rules may name the covers that bound the base's real width.
+
+        Upstream threads that flag into ``URDFParser`` from
+        ``RobotSpecification.spawn`` and from its own test fixtures, but
+        giskardpy's world configs still build the parser with its default
+        ``False``. Left alone, every collision rule naming a cover raises
+        ``BodyHasNoGeometryError`` at ``Executor.compile``, so *every* goal --
+        the first ``NavigateAction`` included -- is aborted before it plans.
+
+        Overridden here rather than fixed in giskardpy to keep the submodule
+        pristine; delete this the moment ``WorldWithOmniDriveRobot`` reads the
+        flag off its own ``urdf_view``.
+        """
+        map_body = Body(name=self.root_name)
+        odom = Body(name=self.odom_body_name)
+        self.localization = Connection6DoF.create_with_dofs(
+            parent=map_body, child=odom, world=self.world
+        )
+        self.world.add_connection(self.localization)
+
+        world_with_robot = URDFParser(
+            urdf=self.urdf,
+            prefix="",
+            use_visual_as_collision_backup=(
+                self.urdf_view.uses_visual_as_collision_backup
+            ),
+        ).parse()
+        self.robot = self.urdf_view.from_world(world_with_robot)
+
+        drive = OmniDrive.create_with_dofs(
+            parent=odom,
+            child=world_with_robot.root,
+            translation_velocity_limits=0.2,
+            rotation_velocity_limits=0.2,
+            world=self.world,
+        )
+        self.world.merge_world(world_with_robot, drive)
 
 
 class GarmiSimInterface(RobotInterfaceConfig):

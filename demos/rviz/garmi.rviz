@@ -41,57 +41,57 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        arm_0_fr3_link0:
+        left_fr3_link0:
           Value: true
-        arm_0_fr3_link1:
+        left_fr3_link1:
           Value: true
-        arm_0_fr3_link2:
+        left_fr3_link2:
           Value: true
-        arm_0_fr3_link3:
+        left_fr3_link3:
           Value: true
-        arm_0_fr3_link4:
+        left_fr3_link4:
           Value: true
-        arm_0_fr3_link5:
+        left_fr3_link5:
           Value: true
-        arm_0_fr3_link6:
+        left_fr3_link6:
           Value: true
-        arm_0_fr3_link7:
+        left_fr3_link7:
           Value: true
-        arm_0_fr3_link8:
+        left_fr3_link8:
           Value: true
-        arm_0_gripper_fr3_hand:
+        left_fr3_hand:
           Value: true
-        arm_0_gripper_fr3_hand_tcp:
+        left_fr3_hand_tcp:
           Value: true
-        arm_0_gripper_fr3_leftfinger:
+        left_fr3_leftfinger:
           Value: true
-        arm_0_gripper_fr3_rightfinger:
+        left_fr3_rightfinger:
           Value: true
-        arm_1_fr3_link0:
+        right_fr3_link0:
           Value: true
-        arm_1_fr3_link1:
+        right_fr3_link1:
           Value: true
-        arm_1_fr3_link2:
+        right_fr3_link2:
           Value: true
-        arm_1_fr3_link3:
+        right_fr3_link3:
           Value: true
-        arm_1_fr3_link4:
+        right_fr3_link4:
           Value: true
-        arm_1_fr3_link5:
+        right_fr3_link5:
           Value: true
-        arm_1_fr3_link6:
+        right_fr3_link6:
           Value: true
-        arm_1_fr3_link7:
+        right_fr3_link7:
           Value: true
-        arm_1_fr3_link8:
+        right_fr3_link8:
           Value: true
-        arm_1_gripper_fr3_hand:
+        right_fr3_hand:
           Value: true
-        arm_1_gripper_fr3_hand_tcp:
+        right_fr3_hand_tcp:
           Value: true
-        arm_1_gripper_fr3_leftfinger:
+        right_fr3_leftfinger:
           Value: true
-        arm_1_gripper_fr3_rightfinger:
+        right_fr3_rightfinger:
           Value: true
         arm_mount_left_link:
           Value: true
@@ -340,57 +340,57 @@ Visualization Manager:
         map:
           odom:
             base_link:
-              arm_0_fr3_link0:
+              left_fr3_link0:
                 {}
-              arm_0_fr3_link1:
+              left_fr3_link1:
                 {}
-              arm_0_fr3_link2:
+              left_fr3_link2:
                 {}
-              arm_0_fr3_link3:
+              left_fr3_link3:
                 {}
-              arm_0_fr3_link4:
+              left_fr3_link4:
                 {}
-              arm_0_fr3_link5:
+              left_fr3_link5:
                 {}
-              arm_0_fr3_link6:
+              left_fr3_link6:
                 {}
-              arm_0_fr3_link7:
+              left_fr3_link7:
                 {}
-              arm_0_fr3_link8:
+              left_fr3_link8:
                 {}
-              arm_0_gripper_fr3_hand:
+              left_fr3_hand:
                 {}
-              arm_0_gripper_fr3_hand_tcp:
+              left_fr3_hand_tcp:
                 {}
-              arm_0_gripper_fr3_leftfinger:
+              left_fr3_leftfinger:
                 {}
-              arm_0_gripper_fr3_rightfinger:
+              left_fr3_rightfinger:
                 {}
-              arm_1_fr3_link0:
+              right_fr3_link0:
                 {}
-              arm_1_fr3_link1:
+              right_fr3_link1:
                 {}
-              arm_1_fr3_link2:
+              right_fr3_link2:
                 {}
-              arm_1_fr3_link3:
+              right_fr3_link3:
                 {}
-              arm_1_fr3_link4:
+              right_fr3_link4:
                 {}
-              arm_1_fr3_link5:
+              right_fr3_link5:
                 {}
-              arm_1_fr3_link6:
+              right_fr3_link6:
                 {}
-              arm_1_fr3_link7:
+              right_fr3_link7:
                 {}
-              arm_1_fr3_link8:
+              right_fr3_link8:
                 {}
-              arm_1_gripper_fr3_hand:
+              right_fr3_hand:
                 {}
-              arm_1_gripper_fr3_hand_tcp:
+              right_fr3_hand_tcp:
                 {}
-              arm_1_gripper_fr3_leftfinger:
+              right_fr3_leftfinger:
                 {}
-              arm_1_gripper_fr3_rightfinger:
+              right_fr3_rightfinger:
                 {}
               arm_mount_left_link:
                 {}
@@ -653,28 +653,28 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        arm_0_fr3_link0: true
-        arm_0_fr3_link1: true
-        arm_0_fr3_link2: true
-        arm_0_fr3_link3: true
-        arm_0_fr3_link4: true
-        arm_0_fr3_link5: true
-        arm_0_fr3_link6: true
-        arm_0_fr3_link7: true
-        arm_0_gripper_fr3_hand: true
-        arm_0_gripper_fr3_leftfinger: true
-        arm_0_gripper_fr3_rightfinger: true
-        arm_1_fr3_link0: true
-        arm_1_fr3_link1: true
-        arm_1_fr3_link2: true
-        arm_1_fr3_link3: true
-        arm_1_fr3_link4: true
-        arm_1_fr3_link5: true
-        arm_1_fr3_link6: true
-        arm_1_fr3_link7: true
-        arm_1_gripper_fr3_hand: true
-        arm_1_gripper_fr3_leftfinger: true
-        arm_1_gripper_fr3_rightfinger: true
+        left_fr3_link0: true
+        left_fr3_link1: true
+        left_fr3_link2: true
+        left_fr3_link3: true
+        left_fr3_link4: true
+        left_fr3_link5: true
+        left_fr3_link6: true
+        left_fr3_link7: true
+        left_fr3_hand: true
+        left_fr3_leftfinger: true
+        left_fr3_rightfinger: true
+        right_fr3_link0: true
+        right_fr3_link1: true
+        right_fr3_link2: true
+        right_fr3_link3: true
+        right_fr3_link4: true
+        right_fr3_link5: true
+        right_fr3_link6: true
+        right_fr3_link7: true
+        right_fr3_hand: true
+        right_fr3_leftfinger: true
+        right_fr3_rightfinger: true
         axle_link: true
         basin_0: true
         bay_window_platform_0: true
