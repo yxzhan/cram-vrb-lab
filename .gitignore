@@ -3,7 +3,7 @@ __pycache__/
 .venv/
 # Generated ROS2 workspace: third-party clones + colcon build output, rebuilt by
 # cognitive_robot_abstract_machine/.github/docker/setup_ros_workspace.sh (see README)
-ros2_ws/
+ros2_ws*/
 .ipynb_checkpoints/
 iai_apartment/
 # Dropped by Isaac's URDF importer when it imports the GARMI description: it
@@ -15,3 +15,9 @@ demos/materials/
 
 .backup/
 NvStreamer-*
+*.mp4
+*.svg
+*.png
+*.ass
+*_video.**
+vrb_lab_page.md

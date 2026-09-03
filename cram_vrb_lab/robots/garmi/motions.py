@@ -30,7 +30,14 @@ Each of the motions below has a goal that can legitimately never converge:
   commanded finger positions and never reaches them;
 - opening and closing a container, because the goal is satisfied only when the
   container's own joint reaches its limit -- and that joint is moved by physics
-  in the sim, not by a controller, so it can stall anywhere.
+  in the sim, not by a controller, so it can stall anywhere;
+- driving the base, because the QP can settle on commanding nothing while the
+  goal still reads unreached -- measured stopping 0.35 m short and holding there.
+  See :class:`GarmiMoveMotion`, which also records why the *goal* was not at
+  fault.
+
+A Cartesian reach of the arm can stall the same way and does not have a deadline
+yet; it is the next candidate if a plan wedges somewhere other than these.
 """
 
 from __future__ import annotations
@@ -53,6 +60,7 @@ from coraplex.datastructures.enums import ExecutionType
 from coraplex.robot_plans import MoveGripperMotion
 from coraplex.robot_plans.motions.base import AlternativeMotion
 from coraplex.robot_plans.motions.container import ClosingMotion, OpeningMotion
+from coraplex.robot_plans.motions.navigation import MoveMotion
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
 from semantic_digital_twin.spatial_types.spatial_types import Pose
@@ -64,6 +72,21 @@ CLOSE_TIMEOUT = 3.0
 
 Comfortably longer than the 0.8 s an unobstructed close takes, so it only ever
 decides the *obstructed* case.
+"""
+
+MOVE_TIMEOUT = 15.0
+"""Seconds to keep driving at a navigation goal before calling the motion done.
+
+**Coupled to how far the base is asked to go and how fast it may go.** The drive
+is limited to 0.2 m/s and 0.2 rad/s
+(:class:`~cram_vrb_lab.robots.garmi.giskard_config.WorldWithGarmiConfig`), and the
+sim runs at RTF ~0.65, so a 1.5 m reposition across this flat costs about 12 s of
+wall clock. 30 s leaves room for that plus the turn, and still cuts in well before
+a person would give up on a base that has visibly stopped.
+
+Sized to only ever decide the *stalled* case, like :data:`CLOSE_TIMEOUT`. A
+navigation that is still converging is still moving, and the ones measured here
+finish in 3-13 s.
 """
 
 CONTAINER_TIMEOUT = 20.0
@@ -234,7 +257,62 @@ class GarmiClosingMotion(_GarmiContainerMotion, ClosingMotion):
     """Closing a container, with a deadline. See :class:`_GarmiContainerMotion`."""
 
 
-GARMI_MOTION_MAPPINGS = [GarmiMoveGripper, GarmiOpeningMotion, GarmiClosingMotion]
+@dataclass
+class GarmiMoveMotion(MoveMotion, AlternativeMotion[Garmi]):
+    """Driving the base, against a :data:`MOVE_TIMEOUT` clock.
+
+    The goal is untouched -- ``super()._motion_chart`` is upstream's, a
+    ``CartesianPose`` from ``map`` to the robot's root. What changes is that it is
+    no longer the only way for the motion to end.
+
+    Why the base needs one at all, when the module docstring above lists the three
+    motions that were *known* to stall: a base drive can stall too, and it does.
+    Measured on this scene -- ``demos/garmi_demo.py``'s ``drive_to`` sending the
+    robot to the drawer standoff at ``(0.51, 6.12)``::
+
+        drove (0.00, 5.00) -> (0.32, 6.41), then stopped 0.349 m short
+        cmd_vel held at ~7e-07 m/s for 126 s, and counting
+
+    The QP had settled on commanding nothing while the end monitor still read
+    false, and giskard's control loop has no deadline of its own
+    (``giskardpy/middleware/ros2/control_loop.py``: ``while True: ...; if
+    is_end_motion(): return``), so the goal never returned and the calling process
+    was wedged behind it.
+
+    The goal itself was fine. Re-issued from the very pose it gave up in, the same
+    ``NavigateAction`` converged to within 5 mm in 3.3 s -- with collision
+    avoidance on *and* off, so avoidance was not what held it. It is the one goal
+    that wedges, not the target.
+
+    Which is what makes a deadline the right answer rather than a workaround:
+    ``drive_to`` already retries up to ten times and checks the distance itself,
+    and ``run_plan`` already turns a ``GiskardException`` into ``False``. That
+    retry loop was simply never reached, because a motion that hangs never fails.
+    Ending the motion hands control back to a caller that knows what to do with it.
+    """
+
+    execution_type = ExecutionType.SIMULATED, ExecutionType.REAL
+
+    def perform(self):
+        return
+
+    @property
+    def _motion_chart(self):
+        return Parallel(
+            [
+                super()._motion_chart,
+                CountSeconds(seconds=MOVE_TIMEOUT, name="MoveBaseTimeout"),
+            ],
+            minimum_success=1,
+        )
+
+
+GARMI_MOTION_MAPPINGS = [
+    GarmiMoveGripper,
+    GarmiOpeningMotion,
+    GarmiClosingMotion,
+    GarmiMoveMotion,
+]
 """Pass as ``Context(alternative_motion_mappings=...)``.
 
 ``AlternativeMotion.check_for_alternative`` picks an entry by

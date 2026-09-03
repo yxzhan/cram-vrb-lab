@@ -20,11 +20,20 @@ synchronized instead of building its own.
 Running it
 ==========
 
-Needs the Isaac scene and the giskard server already up::
+Needs the Isaac scene and the giskard server already up, and the scene started with
+``ISAAC_TRANSPORT_PROPS=1`` so the two objects the plan carries are actually there::
 
-    binder/isaacsim_python_wrapper.sh demos/sim.py --robot garmi --scene garmi_apartment --spawn-position 0.0 5.0 0.0259 --spawn-yaw -1.5707963267948966
+    ISAAC_TRANSPORT_PROPS=1 binder/isaacsim_python_wrapper.sh demos/sim.py --robot garmi --scene garmi_apartment --spawn-position 0.0 5.0 0.0259 --spawn-yaw -1.5707963267948966
     binder/cram_python_wrapper.sh demos/giskard_server.py --robot garmi --scene garmi_apartment --control-hz 15 --spawn-position 0.0 5.0 0.0259 --spawn-yaw -1.5707963267948966
     binder/cram_python_wrapper.sh demos/garmi_transport_demo.py
+
+Without that variable Isaac renders the flat with nothing in it, the twin still gets
+its bowl and spoon from ``populate_scene``, and the run closes the hand on air --
+which is exactly the phantom-object run
+:data:`~cram_vrb_lab.scenes.garmi_apartment.constants.TRANSPORT_PROPS` exists to
+prevent. Both sides read that one table, so the twin's belief and the physics agree
+by construction; :meth:`GarmiApartmentOnIsaac.align_with_isaac` is what applies it to
+the twin.
 
 ``--simulated`` runs upstream's own kinematic path unchanged and needs neither
 process, which is the reference to compare a real run against.
@@ -44,10 +53,17 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+import numpy as np
+
 from coraplex.datastructures.dataclasses import Context
 from coraplex.datastructures.enums import ExecutionType
 from coraplex.plans.plan_node import PlanNode
 from semantic_digital_twin.robots.garmi import Garmi
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+)
+
+from cram_vrb_lab.scenes.garmi_apartment.constants import TRANSPORT_PROPS
 
 # Imported for its side effect. Upstream's build_context passes
 # AlternativeMotion.discover_all(), which returns every AlternativeMotion subclass that
@@ -118,18 +134,12 @@ class GarmiApartmentOnIsaac(upstream.GarmiApartmentDemonstration):
     def patch_before_plan(self, context: Context) -> None:
         """Adjust the world for a physics run, immediately before the plan is built.
 
-        Deliberately empty. Upstream's demonstration goes in unmodified until a real
-        run shows what it cannot do, and each thing it cannot do earns one narrow,
-        commented patch here rather than a fork of the plan.
+        Upstream's demonstration goes in unmodified until a real run shows what it
+        cannot do, and each thing it cannot do earns one narrow, commented patch here
+        rather than a fork of the plan. So far there is one: :meth:`align_with_isaac`.
 
-        What a real run is already known to hit, none of it patched yet:
+        What a real run is already known to hit, still unpatched:
 
-        - **The objects exist only in the twin.** ``populate_scene`` spawns
-          ``bowl.stl`` and ``spoon.stl`` at fixed poses; Isaac has a real bowl on the
-          worktop (``KITCHEN_PROPS``' ``bowl_left``, with its own mass and collider,
-          when the scene is started with ``ISAAC_KITCHEN_PROPS=1``) and no spoon at
-          all. A kinematic ``PickUpAction`` attaches the body to the gripper whatever
-          the fingers did, so this only matters once something has to hold it up.
         - **The bowl is wider than the hand opens.** Upstream's mesh measures
           0.1397 x 0.1390 x 0.0671 m and its body origin sits at the centre;
           ``PickUpAction`` aims the tool centre point at that origin and closes, and a
@@ -153,6 +163,68 @@ class GarmiApartmentOnIsaac(upstream.GarmiApartmentDemonstration):
         :param context: The context the plan is about to be built against; its
             ``world`` is the one the controller is serving on a real run.
         """
+        if self.execution_type is not ExecutionType.SIMULATED:
+            self.align_with_isaac(context)
+
+    @staticmethod
+    def align_with_isaac(context: Context) -> None:
+        """Move the twin's bowl and spoon to where Isaac actually simulates them.
+
+        ``populate_scene`` puts them at upstream's poses, which were written against a
+        world that is stepped kinematically and contains nothing else. Two of those
+        numbers do not survive contact with this scene:
+
+        - ``BOWL_POSE``'s z of 1.0 is not this worktop. It raycasts at 0.945, and the
+          bowl mesh carries its origin at its bounding-box centre, so the twin
+          believes the bowl floats 2 cm above a surface Isaac has it resting on. A
+          reach aimed at the belief closes the hand above the rim.
+        - ``BOWL_POSE``'s x/y stand where nothing is. Isaac puts the bowl where
+          :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.TRANSPORT_PROPS` says,
+          in the free band of worktop between the kitchen props' two rows.
+
+        The spoon moves too, and by less: upstream's drawer-relative pose resolves to
+        within 16 mm of where
+        :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.TRANSPORT_PROPS` puts
+        it. Applied anyway rather than skipped -- "close enough" is a claim that
+        should be re-derived every run, not assumed.
+
+        The connection is left alone, so the spoon keeps hanging off ``drawer_1`` and
+        still travels with it when the plan pulls it open; only the pose it hangs at
+        changes. ``Connection6DoF.origin`` takes a transform in any frame and converts
+        into the parent's, which is what lets one ``map`` constant drive both.
+
+        Only for a run that is driving Isaac. ``--simulated`` builds its own world
+        with no physics behind it, and there upstream's poses are the correct ones --
+        nothing is standing anywhere for them to disagree with.
+        """
+        world = context.world
+        for prop in TRANSPORT_PROPS:
+            body = world.get_body_by_name(prop.name)
+            box = body.collision.as_bounding_box_collection_in_frame(
+                body
+            ).bounding_box()
+
+            # position[2] is the *surface*; the body's origin is its box centre, so
+            # it sits half a box above it -- the same grounding the Isaac side does by
+            # measuring, in closed form here because the twin has no physics to settle
+            # it. In map for both, ``inside`` included: see TransportProp.position for
+            # the 208 mm this cost when it was stated in the drawer's frame.
+            target = HomogeneousTransformationMatrix.from_xyz_rpy(
+                prop.position[0],
+                prop.position[1],
+                prop.position[2] + box.dimensions[2] / 2,
+                yaw=prop.yaw,
+                reference_frame=world.root,
+            )
+
+            before = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
+            body.parent_connection.origin = target
+            after = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
+            print(
+                f"  {prop.name}: {np.round(before, 4)} -> {np.round(after, 4)}"
+                f"  (moved {np.linalg.norm(after - before) * 1000:.1f} mm)",
+                flush=True,
+            )
 
 
 def main(execution_type: ExecutionType = ExecutionType.REAL) -> None:

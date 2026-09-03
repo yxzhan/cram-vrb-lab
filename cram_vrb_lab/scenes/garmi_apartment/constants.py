@@ -21,7 +21,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
-from cram_vrb_lab.paths import ASSETS_DIR, ROS2_WS_DIR
+from cram_vrb_lab.paths import ASSETS_DIR, CRAM_SUBMODULE_DIR, ROS2_WS_DIR
 
 GRID_USD_PATH = str(ASSETS_DIR / "Grid" / "default_environment.usd")
 """Ground/grid environment referenced under the apartment.
@@ -350,10 +350,10 @@ KITCHEN_PROPS = (
     #
     # The names are roles, not asset names, because two of these assets are placed
     # twice; see KitchenProp.name.
-    KitchenProp("cereal_box", (0.10, 7.55, KITCHEN_WORKTOP[2]),
-                yaw=1.5707963267948966, asset="SM_CerealBox"),
-    KitchenProp("milk_box", (0.38, 7.55, KITCHEN_WORKTOP[2]),
-                yaw=-1.5707963267948966, asset="SM_MilkBox"),
+    # KitchenProp("cereal_box", (0.10, 7.55, KITCHEN_WORKTOP[2]),
+    #             yaw=1.5707963267948966, asset="SM_CerealBox"),
+    # KitchenProp("milk_box", (0.38, 7.55, KITCHEN_WORKTOP[2]),
+    #             yaw=-1.5707963267948966, asset="SM_MilkBox"),
     KitchenProp("bowl_left", (-0.03, 7.23, KITCHEN_WORKTOP[2]),
                 asset="SM_SmallBowl"),
     # -pi/2 turns the handle, which the mesh puts on +x, to face -y -- i.e. towards
@@ -380,4 +380,215 @@ so a perception run has to separate two instances of the same object.
    bowl's cavity. The worktop is the half of the contact that *is* missing: it ships
    without a collider, and gets one at load time (see
    :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.load_garmi_apartment_scene`).
+"""
+
+
+# --- Upstream's transport objects -------------------------------------------
+#
+# The bowl and the spoon that coraplex's own GARMI demonstration
+# (``coraplex/demos/coraplex_garmi_demo/demo.py``) carries across this apartment.
+# That demonstration spawns them into the *twin* only, as meshes at fixed poses, so
+# a run against physics closes the hand on nothing: Isaac has no bowl and no spoon
+# standing where the plan reaches. These constants put the same two meshes into the
+# render, and both sides read them from here -- the pattern
+# :mod:`cram_vrb_lab.scenes.props.constants` states outright, so the rendered rigid
+# body and its twin counterpart agree by construction rather than by two people
+# typing the same numbers.
+
+TRANSPORT_OBJECTS_DIR = (
+    CRAM_SUBMODULE_DIR / "coraplex" / "resources" / "objects"
+)
+"""Where upstream keeps the meshes, read in place rather than copied.
+
+Deliberately *not* vendored into :data:`ASSETS_DIR` the way
+:data:`KITCHEN_OBJECTS_DIR` is. Those four were cut out of an apartment this repo
+owns; these two belong to coraplex, which is a submodule pinned at a commit. One
+file on disk, read by the twin (``BodySpecification.mesh``) and by the Isaac side
+(:func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.spawn_transport_props`), is
+the only arrangement in which the two cannot drift apart.
+
+The cost is that a USD conversion happens at every scene load instead of once. It is
+a few thousand triangles; if that ever shows up in a startup profile, convert them
+once into ``assets/`` and accept the copy.
+"""
+
+TRANSPORT_PROPS_ENV = "ISAAC_TRANSPORT_PROPS"
+"""Environment variable that opts these objects in; see
+:func:`transport_props_enabled`."""
+
+
+def transport_props_enabled() -> bool:
+    """Whether to put upstream's bowl and spoon into the scene. Off unless asked.
+
+    An environment variable for the same reason :func:`kitchen_props_enabled` is one:
+    it is how the notebooks already steer the Isaac process, and
+    ``launcher.start_isaac_sim`` inherits it into the sim subprocess.
+
+    Separate from :data:`KITCHEN_PROPS_ENV` because the two sets are for different
+    demos and, on the worktop, for different runs -- see the warning on
+    :data:`TRANSPORT_PROPS`.
+    """
+    return os.environ.get(TRANSPORT_PROPS_ENV, "0") == "1"
+
+
+SDF_RESOLUTION = 256
+"""Voxels along the longest axis of an ``sdf`` collider's signed distance field.
+
+PhysX's own default is 256. It decides how faithfully a thin feature survives -- the
+spoon's bowl is under 2 mm of shell in places, and at a coarse resolution the field
+closes it into a solid lump. Cooking cost and memory both scale with the cube of
+this, so raise it only against a measured contact problem.
+"""
+
+MAX_CONVEX_HULLS = 32
+"""Hull budget for a ``convexDecomposition`` collider.
+
+PhysX's default, and the same number ``assets/kitchen-objects`` settled on for the
+cup and the bowl there; see that README for why shape *count* rather than triangle
+count is what costs.
+"""
+
+
+@dataclass(frozen=True)
+class TransportProp:
+    """One of upstream's mesh objects, placed in this scene."""
+
+    name: str
+    """Prim name under
+    :data:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.TRANSPORT_PROPS_ROOT`, and
+    the name the spawn report prints. Matches upstream's ``BOWL_NAME`` / ``SPOON_NAME``
+    so the twin body and the rendered prim are called the same thing."""
+
+    asset: str
+    """File name inside :data:`TRANSPORT_OBJECTS_DIR`."""
+
+    mass: float
+    """[kg]. Authored rather than left to PhysX, and it has to be.
+
+    Neither mesh is watertight (``trimesh`` reports ``is_watertight=False`` for both,
+    and the spoon's ``volume`` comes out at exactly 0), so there is no enclosed volume
+    for a density to act on and nothing to derive a mass from.
+    """
+
+    approximation: str
+    """``physics:approximation`` for the collider. See :data:`TRANSPORT_PROPS`."""
+
+    position: Tuple[float, float, float]
+    """``(x, y, surface_z)`` in ``map``, exactly as in :class:`KitchenProp`.
+
+    Always ``map``, and always the height of the *surface* the object rests on rather
+    than of the object itself -- both spawns ground the mesh on its own measured
+    bounding box. That holds for something in a drawer too; the surface is then the
+    drawer's base plate.
+
+    Stating it in ``map`` is not a style choice. It was drawer-relative at first,
+    reusing upstream's own ``(-0.09, 0, -0.069)`` on the theory that both sides could
+    resolve it against the drawer. They cannot: ``drawer_1``'s frame is rotated -90
+    degrees about z relative to ``map`` (its ``map_T_drawer`` rotation is
+    ``[[0,-1,0],[1,0,0],[0,0,1]]``), and the Isaac side has no equivalent frame to
+    resolve against -- its drawer Xform sits near the world origin while the geometry
+    is under the worktop, so the only thing it can measure is a world-*axis*-aligned
+    bounding box, which silently applies the offset along the wrong axis. Measured on
+    a real run: the spoon landed 208 mm from where the twin had it. ``map`` has no
+    such ambiguity.
+    """
+
+    yaw: float = 0.0
+    """Rotation [rad] about world Z. Both meshes are authored Z-up, so no roll."""
+
+    inside: Optional[str] = None
+    """Name of the body this object is *in*, e.g. ``"drawer_1"``.
+
+    Only the twin acts on it, and only to choose a parent: a body hanging off the
+    drawer travels with it when the plan pulls it open, which is what a kinematic
+    world needs to be told. Isaac needs no equivalent -- the object is a rigid body
+    resting in a real cavity, and contact carries it.
+
+    Not used for placement on either side; see :attr:`position`.
+    """
+
+    @property
+    def stl_path(self) -> str:
+        """The mesh, as an absolute path."""
+        return str(TRANSPORT_OBJECTS_DIR / self.asset)
+
+
+TRANSPORT_PROPS = (
+    TransportProp(
+        "bowl",
+        "bowl.stl",
+        mass=0.058,
+        approximation="sdf",
+        position=(0.0, 7.2, KITCHEN_WORKTOP[2]),
+    ),
+    TransportProp(
+        "spoon",
+        "spoon.stl",
+        mass=0.05,
+        approximation="sdf",
+        position=(-0.09, 7.313, 0.705),
+        inside="drawer_1",
+    ),
+)
+"""Upstream's two transported objects, placed against *this* scene's measurements.
+
+Upstream states ``BOWL_POSE = (0, 7.2, 1.0)`` and hangs the spoon off ``drawer_1`` at
+``(-0.09, 0, -0.069)``. Neither number is reused:
+
+- ``1.0`` is not this worktop. It raycasts at :data:`KITCHEN_WORKTOP`'s 0.945, and the
+  bowl mesh carries its origin at its bounding-box centre, so spawning at 1.0 leaves
+  it hovering ~2 cm and dropping. The z here is the *surface*, and the spawn grounds
+  the mesh on its own measured box -- see :func:`KitchenProp.position`.
+- The spoon's ``(-0.09, 7.313, 0.705)`` is upstream's ``(-0.09, 0, -0.069)``
+  *resolved*, not replaced. x and y are that offset put through the drawer's actual
+  frame -- ``map_T_drawer`` is a -90 degree turn about z at ``(-0.09, 7.403, 0.8)``,
+  so upstream's -0.09 along the drawer's x comes out as -0.09 along ``map``'s y. The z
+  is the drawer's base plate measured off its own mesh (its vertices cluster at
+  0.705 with the outer shell at 0.701), rather than upstream's -0.069, which sits
+  16 mm above the plate -- harmless in a kinematic world, but in a physical one the
+  spoon would drop those 16 mm and the two sides would disagree about where it is.
+
+.. warning::
+   The bowl stands on the same worktop as :data:`KITCHEN_PROPS`. It is placed in the
+   free band between that set's two rows (front row at y in [7.18, 7.24], back row at
+   y = 7.55), and 0.18 m clear of the sink cut-out that starts at x = 0.70 -- so the
+   two sets *can* be enabled together. They are still two answers to the same
+   question, and a plan that reaches for "the bowl" with both on has three bowls to
+   choose from.
+
+.. note::
+   The spoon lands in a real cavity. ``drawer_1``'s collider is a
+   ``convexDecomposition`` with ``shrinkWrap``, and the description says why in its
+   own comment: "this drawer is an open box, and a single hull fills the cavity so
+   nothing can be put inside it". So the spoon rests on the drawer's floor and is
+   carried along by contact when the drawer opens -- it does not need parenting to
+   the drawer the way the twin's does.
+
+Both colliders are ``sdf``
+==========================
+
+The spoon has no real alternative. It measures 0.2167 x 0.0463 x **0.0189** m --
+thin, concave and not watertight, which is the worst case for everything else:
+``convexHull`` swallows it into a wedge, ``convexDecomposition`` on an open shell
+yields near-degenerate hulls that jitter and tunnel, and the exact triangle mesh
+(``"none"``) is not allowed on a dynamic rigid body at all. A signed distance field
+is what PhysX 5 offers for exactly this shape.
+
+The bowl is the interesting one, and it is here on purpose rather than by default.
+``convexDecomposition`` would also work -- it is what ``assets/kitchen-objects``
+settled on for ``SM_SmallBowl``, and both hold a cavity open where a single hull
+would fill it in. What an SDF adds is that the *rim* stays a rim: a decomposition
+approximates the 6 mm wall with hulls that bulge slightly inward and outward, and
+the rim is exactly where the plan grasps this bowl (see
+``demo_ori.py``'s ``GRASP_ORIGIN_IN_BOWL`` -- the fingers have to find 6 mm of wall,
+because a Franka Hand opens to 0.08 m and the bowl is 0.1397 m across).
+
+What it costs: SDF colliders cook at load and hold a voxel grid per shape
+(:data:`SDF_RESOLUTION` cubed), and contact generation against one is dearer than
+against a handful of hulls. This scene has two of them, which is nothing; a worktop
+full would not be.
+
+To go back, set ``approximation="convexDecomposition"`` on the bowl -- the spawn
+reads it straight off this table and
+:data:`MAX_CONVEX_HULLS` still applies.
 """

@@ -6,18 +6,23 @@
 """
 
 import numpy as np
+import trimesh
 from isaacsim.core.utils import viewports
 from isaacsim.core.utils.prims import create_prim, define_prim
 from isaacsim.core.utils.rotations import euler_angles_to_quat
-from pxr import Gf, Usd, UsdGeom, UsdPhysics
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 
 from .constants import (
     GARMI_APARTMENT_USD_PATH,
     GRID_USD_PATH,
     KITCHEN_PROPS,
+    MAX_CONVEX_HULLS,
     PROP_DROP_HEIGHT,
+    SDF_RESOLUTION,
+    TRANSPORT_PROPS,
     USD_PRIM_POSITION_IN_MAP,
     kitchen_props_enabled,
+    transport_props_enabled,
 )
 
 APARTMENT_PRIM = "/World/GarmiApartment"
@@ -31,6 +36,14 @@ without it anything released above the worktop falls straight through the cabine
 onto the floor. The drawer fronts and cabinet doors are separate prims under the same
 asset and are left alone -- nothing is standing on those.
 """
+
+CABINET_PRIM = f"{APARTMENT_PRIM}/Meshes/Assets/cabinet/Actor_0000"
+"""The kitchen run's articulated asset: the static carcase plus every door and drawer.
+
+:data:`WORKTOP_MESH_PRIM` is its ``Static`` part; the doors and drawers are siblings
+of it, one rigid body each with the geometry on a ``geom`` child.
+"""
+
 
 KITCHEN_PROPS_ROOT = "/World/KitchenProps"
 """Prim the kitchen objects are spawned under, i.e. outside /World/GarmiApartment.
@@ -76,6 +89,17 @@ def _release_above_surface(stage, prim, surface_z, drop_height):
     return tuple(round(float(hi - lo), 4) for lo, hi in zip(minimum, maximum))
 
 
+TRANSPORT_PROPS_ROOT = "/World/TransportProps"
+"""Prim upstream's bowl and spoon are spawned under.
+
+Its own root rather than :data:`KITCHEN_PROPS_ROOT` for the reason that one is
+separate from the apartment: the two prop sets are switched independently
+(:func:`~cram_vrb_lab.scenes.garmi_apartment.constants.transport_props_enabled` against
+``kitchen_props_enabled``), and telling them apart in the stage tree is what makes a
+scene with both loaded readable.
+"""
+
+
 def _add_static_collider(prim):
     """Give ``prim``'s mesh a static collider: the full triangle mesh, no rigid body.
 
@@ -85,6 +109,164 @@ def _add_static_collider(prim):
     """
     UsdPhysics.CollisionAPI.Apply(prim)
     UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr("none")
+
+
+def _stl_mesh_prim(stage, prim_path, stl_path, position, yaw):
+    """Author a ``UsdGeom.Mesh`` at ``prim_path`` from an STL file; return the prim.
+
+    Read with trimesh and written out as points and face indices, rather than run
+    through ``omni.kit.asset_converter`` into a USD file kept alongside. That keeps
+    **one** copy of each mesh on disk -- upstream's -- which the twin loads too
+    (``BodySpecification.mesh``), so the twin body and the rendered body cannot come
+    to disagree about the shape they are both describing. A converted copy in
+    ``assets/`` is the thing that would drift.
+
+    ``force="mesh"`` because an STL with several solids loads as a ``Scene``; these
+    two are single solids, but concatenating is what a caller means either way.
+
+    The stage is authored in metres (``metersPerUnit = 1``, see ``world.usda``) and
+    STL is unitless-but-conventionally-metres -- and both meshes measure a sane 0.14
+    and 0.22 m -- so the vertices go in unscaled.
+
+    :param position: ``(x, y, z)`` in ``map``; z is corrected by the caller.
+    :param yaw: rotation [rad] about world Z.
+    """
+    mesh = trimesh.load(stl_path, force="mesh")
+
+    prim = UsdGeom.Mesh.Define(stage, prim_path)
+    prim.CreatePointsAttr(
+        [Gf.Vec3f(*(float(value) for value in point)) for point in mesh.vertices]
+    )
+    prim.CreateFaceVertexIndicesAttr(
+        [int(index) for index in np.asarray(mesh.faces).ravel()]
+    )
+    prim.CreateFaceVertexCountsAttr([3] * len(mesh.faces))
+    # STL carries no normals worth keeping and no UVs at all; letting USD compute
+    # them from the topology is both smaller and what the importer would do.
+    prim.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
+
+    # A translate op in double precision, because _release_above_surface reads this
+    # very attribute back and writes a Gf.Vec3d into it.
+    prim.AddTranslateOp().Set(Gf.Vec3d(*(float(value) for value in position)))
+    prim.AddRotateZOp().Set(float(np.degrees(yaw)))
+    return prim.GetPrim()
+
+
+def _apply_api_schema(prim, schema_name):
+    """Add ``schema_name`` to ``prim``'s applied API schemas.
+
+    Written straight into the ``apiSchemas`` metadata rather than through
+    ``Usd.Prim.AddAppliedSchema``, which validates the name against the schema
+    registry and **silently does nothing** when the plugin defining it is not loaded.
+    PhysX's schemas live in the ``omni.usd.schema.physx`` extension, so that call is
+    a no-op wherever the extension is not up -- and it reports nothing, so a collider
+    would quietly come out untuned.
+
+    The result is byte-for-byte what a registered ``Apply`` would author, and what
+    ``assets/garmi-apartment/world.usda`` already contains for its own drawers
+    (``prepend apiSchemas = [...]``).
+    """
+    existing = prim.GetMetadata("apiSchemas")
+    # An explicit list op, which is what UsdPhysics' own ``Apply`` calls leave behind.
+    # The two forms are exclusive -- writing ``prependedItems`` onto an explicit op
+    # *clears* the explicit ones -- so read both and re-author one explicit list.
+    applied = (
+        list(existing.explicitItems) + list(existing.prependedItems)
+        if existing
+        else []
+    )
+    if schema_name in applied:
+        return
+    prim.SetMetadata(
+        "apiSchemas", Sdf.TokenListOp.CreateExplicit(applied + [schema_name])
+    )
+
+
+def _make_mesh_rigid_body(prim, mass, approximation):
+    """Turn a bare mesh prim into a dynamic rigid body with a mesh collider.
+
+    The prim *is* the mesh here, so the collider goes on it directly. A referenced
+    asset would need the rigid body on the reference root and a collider on each mesh
+    underneath it; nothing in this scene is built that way any more.
+
+    ``mass`` is authored rather than derived: neither of these meshes is watertight,
+    so PhysX has no enclosed volume to apply a density to (see
+    :attr:`~cram_vrb_lab.scenes.garmi_apartment.constants.TransportProp.mass`).
+
+    The PhysX-specific tuning is applied by schema *name* (:func:`_apply_api_schema`)
+    rather than through ``PhysxSchema``. That module lives in the
+    ``omni.usd.schema.physx`` extension, and naming it here would make this module's
+    import depend on that extension being loaded; the attributes below are exactly
+    what the schema would author, and the apartment's own USD sets them the same way.
+    """
+    UsdPhysics.RigidBodyAPI.Apply(prim)
+    UsdPhysics.MassAPI.Apply(prim).CreateMassAttr(mass)
+    UsdPhysics.CollisionAPI.Apply(prim)
+    UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr(approximation)
+
+    if approximation == "sdf":
+        _apply_api_schema(prim, "PhysxSDFMeshCollisionAPI")
+        prim.CreateAttribute(
+            "physxSDFMeshCollision:sdfResolution", Sdf.ValueTypeNames.Int
+        ).Set(SDF_RESOLUTION)
+    elif approximation == "convexDecomposition":
+        _apply_api_schema(prim, "PhysxConvexDecompositionCollisionAPI")
+        prim.CreateAttribute(
+            "physxConvexDecompositionCollision:maxConvexHulls", Sdf.ValueTypeNames.Int
+        ).Set(MAX_CONVEX_HULLS)
+
+
+def spawn_transport_props(world, render, props=TRANSPORT_PROPS):
+    """Put upstream's bowl and spoon into the scene and settle them.
+
+    The Isaac half of what ``coraplex/demos/coraplex_garmi_demo/demo.py`` spawns into
+    the twin: the same two STL files, at the poses
+    :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.TRANSPORT_PROPS` states, so a
+    plan that reaches for the twin's bowl closes its hand on a rigid body that is
+    really there.
+
+    Unlike :func:`spawn_kitchen_props`, whose assets arrive as complete physics
+    bodies, these are bare geometry -- so both halves are built here: the mesh
+    (:func:`_stl_mesh_prim`), and the rigid body and collider on top of it
+    (:func:`_make_mesh_rigid_body`).
+
+    :return: ``{name: (settled_centre, size)}`` in ``map``, and prints the same --
+        where an object came to rest is only knowable from the simulation, and for the
+        spoon it is the only statement that it landed *in* the drawer rather than
+        through it.
+    """
+    stage = world.stage
+    define_prim(TRANSPORT_PROPS_ROOT, "Xform")
+
+    sizes = {}
+    for prop in props:
+        prim = _stl_mesh_prim(
+            stage,
+            f"{TRANSPORT_PROPS_ROOT}/{prop.name}",
+            prop.stl_path,
+            prop.position,  # x, y used as given; z corrected below
+            prop.yaw,
+        )
+        _make_mesh_rigid_body(prim, prop.mass, prop.approximation)
+        sizes[prop.name] = _release_above_surface(
+            stage, prim, prop.position[2], PROP_DROP_HEIGHT
+        )
+
+    world.reset()
+    for _ in range(120):
+        world.step(render=render)
+
+    placed = {}
+    for prop in props:
+        minimum, maximum = _world_aabb(stage, stage.GetPrimAtPath(
+            f"{TRANSPORT_PROPS_ROOT}/{prop.name}"))
+        centre = tuple(round(float((lo + hi) / 2), 4)
+                       for lo, hi in zip(minimum, maximum))
+        placed[prop.name] = (centre, sizes[prop.name])
+        where = f" (in {prop.inside})" if prop.inside else ""
+        print(f"Transport prop {prop.name}: released at {prop.position}{where}, "
+              f"settled centre {centre}, size {sizes[prop.name]}", flush=True)
+    return placed
 
 
 def spawn_kitchen_props(world, render, props=KITCHEN_PROPS):
@@ -191,14 +373,21 @@ def load_garmi_apartment_scene(world, render, camera_eye=None, camera_target=Non
     if kitchen_props_enabled():
         spawn_kitchen_props(world, render)
 
+    # Upstream's own bowl and spoon, for the demonstration this repo subclasses --
+    # the bowl on the worktop, the spoon in drawer_1. Opt-in and separate from the
+    # kitchen props: the two sets answer the same question for different demos.
+    # demos/garmi_transport_demo.py wants ISAAC_TRANSPORT_PROPS=1.
+    if transport_props_enabled():
+        spawn_transport_props(world, render)
+
     # Defaults lifted from world.usda's saved Perspective camera, i.e. the view
     # the scene was authored from: over the robot's shoulder into the living room.
     viewports.set_camera_view(
         eye=np.array(
-            camera_eye if camera_eye is not None else [-1.0, 2.0, 1.5]
+            camera_eye if camera_eye is not None else [-2.8, 6.8, 1.6]
         ),
         target=np.array(
-            camera_target if camera_target is not None else [1, 6.0, 0.8]
+            camera_target if camera_target is not None else [0, 6.4, 1.0]
         ),
     )
 

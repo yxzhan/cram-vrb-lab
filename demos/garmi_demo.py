@@ -6,7 +6,9 @@ import math
 import os
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Tuple
 
 from IPython import get_ipython
 in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
@@ -26,12 +28,14 @@ os.environ["ISAAC_WINDOW"] = "640x360"
 # os.environ["ISAAC_WINDOW"] = "512x288"
 
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
+# os.environ["ISAAC_KITCHEN_PROPS"] = "1"
 os.environ["ISAAC_KITCHEN_PROPS"] = "1"
+os.environ["ISAAC_TRANSPORT_PROPS"] = "0"
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
 SPAWN_POSITION = (0, 5.0, 0.0259)
-SPAWN_YAW = -math.pi / 2
+SPAWN_YAW = math.pi / 2
 
 from launcher import (
     start_giskard_server,
@@ -42,12 +46,12 @@ from launcher import (
 )
 from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
-rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
-sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
-                           spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
-stream_proc = start_streaming_client() if livestream_enabled() else None
-giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
-                                    spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+# rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
+# sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
+#                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+# stream_proc = start_streaming_client() if livestream_enabled() else None
+# giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
+#                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
 # %% [markdown]
 # ## CRAM context
@@ -90,6 +94,7 @@ from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchroni
 from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
 from semantic_digital_twin.robots.garmi import Garmi
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
+    Bowl,
     Door,
     Drawer,
     Handle,
@@ -279,7 +284,7 @@ def reset_pos():
 # %%
 DRAWER = "drawer_2"
 DRAWER_ARM = Arms.LEFT
-STANDOFF = {Drawer: (1.0, 0.8), Door: (1.2, 0)}
+STANDOFF = {Drawer: (1.0, 0.6), Door: (1.2, 0)}
 
 robot.mobile_base.full_body_controlled = False
 
@@ -290,8 +295,8 @@ reset_pos()
 drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
 # nudge_base(turn=math.pi / 6)
 
-run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
-work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
+# run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
+# work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
 # work_container(ClosingMotion, drawer_handle, DRAWER_ARM)
 print("opened:", drawer_joint.position)
 
@@ -300,8 +305,11 @@ print("opened:", drawer_joint.position)
 
 # %%
 from cram_vrb_lab.perception import pipeline as rk
+from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+
 from cram_vrb_lab.perception.twin_objects import (
-    add_detections,
+    DETECTION_PREFIX,
+    add_boxes,
     detection_pose_in_map,
     ensure_camera_body,
 )
@@ -316,6 +324,127 @@ COUNTERTOP = ((-0.30, 0.65), (7.05, 7.45), (0.90, 1.35))
 EXPECTED_OBJECTS = 4
 LOOK_ATTEMPTS = 10
 GRIP_BELOW_TOP = 0.00
+
+REAL_PERCEPTION = False
+"""Whether to run robokudo, or replay :data:`CANNED_BODIES`.
+
+``True`` ticks the real pipeline: it needs the camera topics live, costs a
+subscription thread plus a tf lookup per RGB-D pair, and retries up to
+:data:`LOOK_ATTEMPTS` times until it finds :data:`EXPECTED_OBJECTS` on the worktop.
+``False`` replays a recorded result, so the plan below can be worked on without any
+of that.
+
+Flip it to ``True`` and run the perception cell to **re-record**: it prints what it
+saw, already in ``map``, as :func:`as_canned_source` source -- ready to paste back
+over :data:`CANNED_BODIES`.
+"""
+
+@dataclass(frozen=True)
+class CannedBody:
+    """One perceived box, **in ``map``** -- what the canned path spawns.
+
+    Deliberately not a :class:`~cram_vrb_lab.perception.pipeline.Detection`, which is
+    in ``camera_color_optical_frame``. A camera-frame stand-in is only correct while
+    the robot stands exactly where the recording was made, because
+    ``detection_pose_in_map`` reads ``map_T_camera`` out of the twin's *current*
+    forward kinematics -- park somewhere else and the boxes follow the camera off the
+    worktop. Freezing the result of that transform instead makes the canned path
+    independent of where the robot is standing, which is the whole point of it.
+    """
+
+    position: Tuple[float, float, float]
+    """Centre of the box in ``map`` [m]."""
+
+    orientation: Tuple[float, float, float, float]
+    """``(x, y, z, w)``, the box's rotation in ``map``."""
+
+    extents: Tuple[float, float, float]
+    """Side lengths [m], in the box's own frame."""
+
+
+def canned_pose(canned):
+    """``map_T_box`` as a 4x4 numpy array, which is what :func:`add_boxes` takes."""
+    return np.asarray(
+        HomogeneousTransformationMatrix.from_xyz_quaternion(
+            *canned.position, *canned.orientation
+        ).to_np()
+    )
+
+
+CANNED_BODIES = [
+    CannedBody((-0.03, 7.23, 0.9752), (0.0, 0.0, 0.0, 1.0), (0.132, 0.131, 0.0603)),
+    CannedBody((0.15, 7.20, 0.9849), (0.0, 0.0, 0.0, 1.0), (0.1051, 0.0897, 0.0799)),
+    CannedBody((0.32, 7.24, 0.9745), (0.0, 0.0, 0.0, 1.0), (0.132, 0.132, 0.0590)),
+    CannedBody((0.50, 7.18, 0.9856), (0.0, 0.0, 0.0, 1.0), (0.1063, 0.0895, 0.0811)),
+]
+"""Four boxes on the worktop, standing in for a perception run.
+
+**A seed, not a recording.** Every number is measured or derived, but no camera ever
+reported this exact set -- it is somewhere sane to start, not ground truth:
+
+- x and y are :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.KITCHEN_PROPS`'
+  front row -- ``bowl_left``, ``cup_left``, ``bowl_right``, ``cup_right``, left to
+  right. The same constants Isaac spawns the props from, so the twin and the render
+  agree by construction rather than through a transform that can drift.
+- z is the worktop (``KITCHEN_WORKTOP[2]`` = 0.945) plus half the box height, i.e. an
+  object *standing on* the surface rather than hovering. Checked against the one
+  settled centre the sim has actually reported: ``demo_ori.py``'s
+  ``BOWL_CENTRE_IN_MAP`` is 0.9783 for a 0.0665 m bowl, and 0.945 + 0.0665/2 =
+  0.97825.
+- ``extents`` are what robokudo really measured on this worktop -- two bowls and two
+  cups, in this order.
+- ``orientation`` is **assumed** identity. ``ClusterPoseBBAnnotator`` only ever fits a
+  rotation about z, and these four are near enough axis-symmetric that a yaw hardly
+  moves the grasp -- but this is the one field a real recording is worth having.
+
+Run once with :data:`REAL_PERCEPTION` ``= True`` and paste what it prints over this.
+"""
+
+
+def to_canned(detections):
+    """Camera-frame ``detections`` -> :class:`CannedBody` in ``map``.
+
+    Where the camera frame is left behind, and the only place the robot's current
+    pose is allowed to matter: from here on the boxes are pinned to the world.
+    """
+    canned = []
+    for detection in detections:
+        map_T_box = HomogeneousTransformationMatrix(
+            data=detection_pose_in_map(world, detection)
+        )
+        canned.append(
+            CannedBody(
+                position=tuple(
+                    float(v) for v in np.asarray(map_T_box.to_np())[:3, 3].ravel()
+                ),
+                orientation=tuple(
+                    float(v)
+                    for v in np.asarray(map_T_box.to_quaternion().to_np()).ravel()
+                ),
+                extents=tuple(float(v) for v in detection.extents),
+            )
+        )
+    return canned
+
+
+def as_canned_source(canned_bodies, name="CANNED_BODIES"):
+    """``canned_bodies`` as pastable source for :data:`CANNED_BODIES`.
+
+    Full ``repr`` precision, not the rounded numbers the ``keep``/``DROP`` lines
+    print: those are for reading, and pasting them back would quantise the poses the
+    grasp is computed from.
+    """
+    def tup(values):
+        return "(" + ", ".join(repr(float(v)) for v in values) + ")"
+
+    lines = [f"{name} = ["]
+    for canned in canned_bodies:
+        lines.append(
+            f"    CannedBody({tup(canned.position)}, {tup(canned.orientation)}, "
+            f"{tup(canned.extents)}),"
+        )
+    lines.append("]")
+    return "\n".join(lines)
 
 
 def look_countertop():
@@ -336,32 +465,175 @@ def look_countertop():
     return on_top
 
 
-def grasp_offset(detection):
-    return (detection.extents[0] / 2, 0.0, detection.extents[2] / 2 - GRIP_BELOW_TOP)
+def grasp_offset(canned):
+    """Where the body's origin sits inside its box: the +x face, level with the top.
+
+    Takes a :class:`CannedBody` rather than a ``Detection`` because both paths are in
+    ``map`` by the time this is called. Only ``extents`` is read either way, and those
+    mean the same thing in both.
+    """
+    return (canned.extents[0] / 2, 0.0, canned.extents[2] / 2 - GRIP_BELOW_TOP)
+    # return (0.0, 0.0, 0.0)
+# 
+
+def annotate_bowls(bodies):
+    """Annotate every perceived body as a :class:`Bowl`; return the annotations.
+
+    ``add_detections`` creates plain :class:`Body` objects, deliberately: the pipeline
+    is geometric and says nothing about *what* it saw. ``TransportAction`` takes an
+    ``object_designator: HasRootBody`` and reads ``.root`` off it, which a bare body
+    does not have -- so something has to put a class on the box before it can be
+    transported.
+
+    Everything gets ``Bowl`` here, which is a lie about the two cups and does not
+    matter yet: nothing in this plan branches on the class, and ``Bowl`` carries no
+    geometry of its own -- the grasp still comes from the detected box and
+    :func:`grasp_offset`. Replace this with a real classifier, or hand-pick the
+    indices, the moment a plan starts caring which is which.
+    """
+    # Named after the body rather than left to default: every Bowl would otherwise be
+    # called "Bowl", and four annotations sharing a name make get_semantic_annotation_by_name
+    # a coin toss and the RViz/log output unreadable. They are not *dropped* -- Bowl is
+    # eq=False, so the world dedupes by identity -- just indistinguishable.
+    bowls = [
+        Bowl(
+            root=body,
+            name=PrefixedName(body.name.name, prefix=DETECTION_PREFIX),
+            class_label="bowl",
+        )
+        for body in bodies
+    ]
+    with world.modify_world():
+        for bowl in bowls:
+            world.add_semantic_annotation(bowl)
+    return bowls
 
 
+def bowl_of(body):
+    """The :class:`Bowl` annotation whose root is ``body``.
+
+    ``PickUpAction.object_designator`` is a ``HasRootBody``, so a bare body out of
+    ``add_detections`` fails it with ``AttributeError: 'Body' object has no attribute
+    'root'``. Looked up from the world rather than read off :func:`annotate_bowls`'
+    return value, so a cell that only picks can be re-run without re-detecting.
+
+    .. warning::
+       ``PlaceAction`` wants the **opposite**: its ``object_designator`` is typed
+       ``Body`` (``coraplex/robot_plans/actions/core/placing.py``), and it uses it as
+       one -- ``DetachNode(body=...)`` and
+       ``pose_sequence(..., self.object_designator)``, which reads ``.collision`` off
+       it. Hand it the annotation and it fails the mirror-image way, ``AttributeError:
+       'Bowl' object has no attribute 'collision'``.
+
+       Not a guess about the API: ``TransportAction`` itself passes the annotation to
+       ``PickUpAction`` and ``self.object_designator.root`` to ``PlaceAction``, two
+       lines apart (``composite/transporting.py``). So the two calls below are
+       deliberately asymmetric.
+    """
+    return next(
+        bowl
+        for bowl in world.get_semantic_annotations_by_type(Bowl)
+        if bowl.root is body
+    )
+
+
+# Still needed with the detections canned: GARMI's URDF has no camera link, and
+# detection_pose_in_map cannot get out of the camera frame without one.
 ensure_camera_body(
     world, CAMERA_PARENT_LINK, CAMERA_IN_HEAD, CAMERA_OPTICAL_IN_HEAD_QUAT
 )
-descriptor = rk.camera_descriptor()
+# Only look_countertop() needs this, and it costs a subscription thread plus a tf
+# lookup per RGB-D pair -- so it is not paid for on the canned path.
+descriptor = rk.camera_descriptor() if REAL_PERCEPTION else None
 
 # %%
+# Performed even though the detections are canned -- CANNED_DETECTIONS are in the
+# camera frame, so this is what puts the head where they were recorded from.
 run_plan(execute_single(
     LookAtAction(Pose(Point3.from_iterable(LOOK_AT), reference_frame=world.root)),
     context=context,
 ))
 
-for attempt in range(1, LOOK_ATTEMPTS + 1):
-    print(f"look {attempt}/{LOOK_ATTEMPTS}:")
-    kept = look_countertop()
-    print(f"  {len(kept)}/{EXPECTED_OBJECTS} on the countertop")
-    if len(kept) == EXPECTED_OBJECTS:
-        break
+if REAL_PERCEPTION:
+    for attempt in range(1, LOOK_ATTEMPTS + 1):
+        print(f"look {attempt}/{LOOK_ATTEMPTS}:")
+        kept = look_countertop()
+        print(f"  {len(kept)}/{EXPECTED_OBJECTS} on the countertop")
+        if len(kept) == EXPECTED_OBJECTS:
+            break
+    canned = to_canned(kept)
+    # Re-recording is the main reason to come down this branch, so always offer the
+    # paste rather than making it a separate call to remember.
+    print(f"\n{as_canned_source(canned)}\n")
+else:
+    canned = list(CANNED_BODIES)
+    print(f"canned: replaying {len(canned)} bodies (REAL_PERCEPTION=False)")
 
-bodies = add_detections(world, kept, origin_offset=grasp_offset)
-for body, d in zip(bodies, kept):
-    print(f"  {body.name.name:14s} h {d.extents[2]:.3f}  map "
+# Both paths meet here, already in map: add_boxes is add_detections with the camera
+# frame left behind, so nothing below depends on where the robot is standing.
+bodies = add_boxes(
+    world,
+    [(canned_pose(c), c.extents) for c in canned],
+    origin_offsets=[grasp_offset(c) for c in canned],
+)
+bowls = annotate_bowls(bodies)
+for body, c in zip(bodies, canned):
+    print(f"  {body.name.name:14s} h {c.extents[2]:.3f}  map "
           f"{np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 3)}")
+
+
+# %%
+from cram_vrb_lab.scenes.garmi_apartment.constants import TRANSPORT_PROPS
+
+for prop in TRANSPORT_PROPS:
+    body = world.get_body_by_name(prop.name)
+    box = body.collision.as_bounding_box_collection_in_frame(
+        body
+    ).bounding_box()
+
+    target = HomogeneousTransformationMatrix.from_xyz_rpy(
+        prop.position[0],
+        prop.position[1],
+        prop.position[2] + box.dimensions[2] / 2,
+        yaw=prop.yaw,
+        reference_frame=world.root,
+    )
+
+    before = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
+    body.parent_connection.origin = target
+    after = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
+    print(
+        f"  {prop.name}: {np.round(before, 4)} -> {np.round(after, 4)}"
+        f"  (moved {np.linalg.norm(after - before) * 1000:.1f} mm)",
+        flush=True,
+    )
+# %%
+# The annotation, not the body: TransportAction reads .root off its object_designator.
+from coraplex.robot_plans.actions.composite.transporting import TransportAction
+
+end_effector = context.robot.get_right_arm_if_specified().end_effector
+
+# %%
+
+bowl = world.get_semantic_annotations_by_type(Bowl)[3]
+BOWL_TARGET_POINT = Point3.from_iterable([1.6, 5.2, 0.85])
+
+done = run_plan(sequential([
+    TransportAction(
+        object_designator=bowl,
+        arm=Arms.RIGHT,
+        grasp_description=GraspDescription(
+            ApproachDirection.RIGHT,
+            VerticalAlignment.TOP,
+            end_effector,
+            rotate_gripper=False,
+        ),
+        target_location=Pose(
+            position=BOWL_TARGET_POINT, reference_frame=world.root
+        ),
+    ),
+], context=context))
+
 
 # %% [markdown]
 # ## Pick and place
@@ -387,6 +659,9 @@ target_body = min(
         np.asarray(b.global_pose.to_np())[:3, 3].ravel()[:2] - np.asarray(PICK_HINT)
     )),
 )
+# The body carries the pose the waypoints below are built from; the annotation is what
+# the actions take. Same object either way -- target_bowl.root is target_body.
+target_bowl = bowl_of(target_body)
 print("picking", target_body.name.name)
 
 # %%
@@ -394,6 +669,7 @@ nudge_base(turn=math.pi / 6)
 # nudge_base(turn=math.pi / 9)
 
 # %%
+
 pick_grasp = GraspDescription(
     PICK_APPROACH,
     PICK_ALIGNMENT,
@@ -425,7 +701,7 @@ carry_quaternion = (
 done = run_plan(sequential([
     LookAtAction(Pose(Point3.from_iterable(pick_xyz), reference_frame=world.root)),
     PickUpAction(
-        object_designator=target_body,
+        object_designator=target_bowl,
         arm=PICK_ARM,
         grasp_description=pick_grasp,
     ),
@@ -440,6 +716,7 @@ done = run_plan(sequential([
         ],
         arm=PICK_ARM,
     ),
+    # Body, not the annotation -- PlaceAction is the odd one out; see bowl_of.
     PlaceAction(
         object_designator=target_body,
         target_location=Pose(

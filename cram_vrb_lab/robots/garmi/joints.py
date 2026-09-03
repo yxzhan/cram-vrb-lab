@@ -74,6 +74,32 @@ The description makes the upper one *mimic* the lower; the mimic is dropped (see
 instead, which is what its low/mid/high states do.
 """
 
+LIFT_LIMIT_MARGIN = 0.01
+"""Headroom [m] added to each lift segment's upper limit by
+:func:`load_patched_urdf`.
+
+A **modelling** margin, not a claim about the hardware: the description's
+``upper="0.4"`` is the physical stop and stays the number the lift is ever
+commanded to.
+
+It exists because ``GarmiTorso.setup_joint_states`` defines ``torso_high`` as
+``[0.4, 0.4]`` -- *exactly* the limit. Giskard's QP has to hold the position
+limits across its whole prediction horizon while arriving at the goal, and a goal
+sitting on the boundary leaves it no interior to solve in: it aborts with
+``InfeasibleException: QP is infeasible`` about 2.4 s in, every time. ``MID``'s
+0.2 is unaffected, which is why only ``TorsoState.HIGH`` fails this way.
+
+Given to the *modelled* limit rather than by lowering ``torso_high``, because
+that constant lives upstream in ``semantic_digital_twin.robots.garmi`` and
+``TransportAction`` issues ``MoveTorsoAction(TorsoState.HIGH)`` itself -- there is
+no seam to override it from a plan. Both the sim and giskard read this same
+patched URDF (:func:`load_patched_urdf`), so the two agree on the wider limit and
+neither is being told something the other is not.
+
+Delete this the moment upstream moves ``torso_high`` just inside the stop, which
+is the better fix and not one this repo can make.
+"""
+
 HEAD_JOINTS = ["o1_motor_1", "o1_motor_2"]
 """The description's own names for the neck motors -- pan then tilt, in the
 ``neck_1 -> neck_2 -> head`` chain. ``GarmiNeck`` looks them up by these names."""
@@ -420,6 +446,9 @@ def load_patched_urdf() -> str:
         for mimic in joint.findall("mimic"):
             joint.remove(mimic)
         name = joint.get("name", "")
+        if name in LIFT_JOINTS:
+            limit = joint.find("limit")
+            limit.set("upper", str(float(limit.get("upper")) + LIFT_LIMIT_MARGIN))
         if name.endswith("_hand_tcp_joint"):
             side = next(s for s in SIDES if name.startswith(f"{s}_"))
             origin = joint.find("origin")

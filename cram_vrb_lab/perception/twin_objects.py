@@ -158,23 +158,54 @@ def add_detections(world, detections, clear_previous=True, origin_offset=(0.0, 0
         its ``target_location``, so that target becomes where the grip point should
         end up, not where the box's centre should.
     """
-    if clear_previous:
-        clear_detections(world)
-
     resolve_offset = (
         origin_offset if callable(origin_offset) else lambda detection: origin_offset
     )
+    return add_boxes(
+        world,
+        [
+            (detection_pose_in_map(world, detection), detection.extents)
+            for detection in detections
+        ],
+        clear_previous=clear_previous,
+        origin_offsets=[resolve_offset(detection) for detection in detections],
+    )
+
+
+def add_boxes(world, boxes, clear_previous=True, origin_offsets=None):
+    """Add one perceived body per ``(map_T_box, extents)`` pair; return the bodies.
+
+    The half of :func:`add_detections` that touches the world, with the camera frame
+    already left behind. Call this directly when the poses are known in ``map`` and
+    there is no camera in the loop -- a canned stand-in for a perception run, or
+    ground truth read out of the simulator. Going through :func:`add_detections`
+    instead would put the result back at the mercy of where the robot is standing
+    *now*, since that is the only thing ``map_T_camera`` can be read from.
+
+    :param boxes: iterable of ``(map_T_box, extents)`` -- a 4x4 pose of the box's
+        centre in ``map``, and its three side lengths [m].
+    :param origin_offsets: one already-resolved ``(x, y, z)`` per box, or ``None``
+        for no offset. See :func:`add_detections` for what the offset is *for*; it is
+        a plain list here because the callable form is resolved against whatever the
+        caller has (a ``Detection``, a prop), which this function knows nothing about.
+    """
+    boxes = list(boxes)
+    if origin_offsets is None:
+        origin_offsets = [(0.0, 0.0, 0.0)] * len(boxes)
+
+    if clear_previous:
+        clear_detections(world)
 
     bodies = []
     with world.modify_world():
-        for index, detection in enumerate(detections):
-            offset = np.asarray(resolve_offset(detection), dtype=float)
+        for index, ((map_T_box, extents), offset) in enumerate(
+            zip(boxes, origin_offsets)
+        ):
+            offset = np.asarray(offset, dtype=float)
             box_T_origin = np.eye(4)
             box_T_origin[:3, 3] = offset
 
-            body = _detection_body(
-                f"{DETECTION_PREFIX}_{index}", detection.extents, offset
-            )
+            body = _detection_body(f"{DETECTION_PREFIX}_{index}", extents, offset)
             world.add_kinematic_structure_entity(body)
             world.add_connection(
                 FixedConnection(
@@ -182,7 +213,7 @@ def add_detections(world, detections, clear_previous=True, origin_offset=(0.0, 0
                     child=body,
                     parent_T_connection_expression=(
                         HomogeneousTransformationMatrix(
-                            data=detection_pose_in_map(world, detection) @ box_T_origin
+                            data=np.asarray(map_T_box) @ box_T_origin
                         )
                     ),
                 )

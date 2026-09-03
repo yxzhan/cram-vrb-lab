@@ -111,6 +111,45 @@ the lift sinks under the torso it carries and the head tips forward, which is
 what freezing these joints used to hide.
 """
 
+COLUMN_MAX_EFFORT = 5.0 * COLUMN_DRIVE_STIFFNESS * MAX_LEAD
+"""Force budget handed to the lift and head drives, so ``maxForce`` never binds.
+
+The same trap as :data:`FINGER_MAX_EFFORT`, and it bit harder: the importer takes
+the limit from the URDF's ``effort="2000"`` on both lift joints, and the drive
+wants to spend ``COLUMN_DRIVE_STIFFNESS * MAX_LEAD`` -- which is **also exactly
+2000**. Pinned at its own ceiling, ``lift_0_lower_joint`` could not move at all.
+
+That the *lower* segment is the one that dies is the giveaway. It carries 60.7 kg
+to the upper's 50.7, but far more importantly it also has to react whatever the
+upper drive is pushing with: the upper pushes its own link up and the lower link
+down by the same amount. With one budget shared between them the lower can never
+win, so it sits on its bottom stop while the upper extends happily above it --
+which is exactly what a real run showed (``TorsoState.MID`` leaving the lower at
+0.0000 and the upper at 0.2005).
+
+Measured on the imported robot, driving the lower joint alone with the target
+held :data:`~cram_vrb_lab.sim.velocity_integrator.MAX_LEAD` ahead:
+
+======================  ==================================================
+``max_effort``          where ``lift_0_lower_joint`` got to in 240 steps
+======================  ==================================================
+2000 (the URDF's)       ``+0.0000`` -- frozen
+``1e4`` (this, 5x)      ``+0.0461``
+``1e5``                 ``+0.0461``
+``1e7``                 ``+0.0461``
+======================  ==================================================
+
+So 5x is already past the knee: everything above it lands on the same number,
+because what limits the joint from there on is the lead clamp and the URDF's
+``velocity="0.088"``, not the force budget. The factor is written as a multiple
+of what the drive asks for rather than as a bare 1e4 so it tracks the gain and
+the clamp if either is retuned.
+
+Unlike the fingers' budget this one is **not** divided by a mass: these gains are
+handed to ``set_gains`` as the acceleration-drive numbers they already are, so
+the limit belongs in the same units.
+"""
+
 FINGER_DRIVE_STIFFNESS = 5000.0
 FINGER_DRIVE_DAMPING = 142.0
 """Finger drive gains as a **force** drive would take them, [N/m] and [N/(m/s)].
@@ -304,6 +343,11 @@ def move_to_park(garmi, world, render):
     # FINGER_MAX_EFFORT for why the importer's limit cannot be trusted here.
     garmi.set_max_efforts(
         np.full((1, len(finger_dof)), FINGER_MAX_EFFORT), joint_indices=finger_dof
+    )
+    # Same trap on the lift, where it froze the lower segment outright; see
+    # COLUMN_MAX_EFFORT.
+    garmi.set_max_efforts(
+        np.full((1, len(column_dof)), COLUMN_MAX_EFFORT), joint_indices=column_dof
     )
     undrive_wheels(garmi)
 
