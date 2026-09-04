@@ -183,6 +183,22 @@ def build(world, render, setup, spawn_pose, args):
         from cram_vrb_lab.scenes.props.isaac_props import PropsROS
 
         nodes.append(PropsROS(props))
+
+    # Every setup gets it: repeating a task means repeating its initial conditions,
+    # and without this the only way back to them is a restart. Costs one idle
+    # service until something calls it. The integrator comes from the robot's own
+    # bridge -- it holds the targets the drives chase, so a reset that skipped it
+    # would be undone on the next step; see SceneResetROS.
+    from cram_vrb_lab.sim.scene_reset_bridge import SceneResetROS
+
+    nodes.append(
+        SceneResetROS(
+            world,
+            robot=robot,
+            integrator=getattr(nodes[0], "integrator", None),
+            robot_bridge=nodes[0],
+        )
+    )
     return nodes
 
 

@@ -526,6 +526,32 @@ class GarmiROS(SimBridge):
         self.integrate_base(dt)
         self.integrator.step(dt)
 
+    def resync_base(self):
+        """Re-seed the dead-reckoned base pose from where the robot actually is.
+
+        :meth:`integrate_base` *teleports* the base to a pose this node advances
+        itself, so that pose -- not the articulation's -- is what the base really
+        follows. Anything that moves the robot behind this node's back is therefore
+        undone on the very next step unless it says so here.
+
+        Which is exactly what a scene reset does. Measured before this existed: the
+        reset put the base back and the next step returned it to where the last plan
+        had driven it, 781 mm away, while the joints (whose targets *were* cleared)
+        stayed correct -- a reset that looked half-applied because it was.
+
+        The latched ``cmd_vel`` goes too. A velocity command outlives the plan that
+        sent it by :data:`CMD_VEL_TIMEOUT`, and a reset that kept it would drive away
+        from the pose it just restored.
+        """
+        position, quaternion = self.robot.get_world_poses()
+        self._bx, self._by, self._bz = (float(v) for v in position[0])
+        w, x, y, z = quaternion[0]
+        self._byaw = math.atan2(
+            2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)
+        )
+        self._cmd_x = self._cmd_y = self._cmd_yaw = 0.0
+        self._cmd_time = None
+
     def integrate_base(self, dt):
         """Dead-reckon the latched twist into the base pose and teleport there.
 

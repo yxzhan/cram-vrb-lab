@@ -85,6 +85,24 @@ class StreamedVelocityIntegrator:
         self._last_tick = None
         self._stale = False
 
+    def forget_targets(self) -> None:
+        """Drop the held position targets and the latched command.
+
+        For when something moved the robot behind the integrator's back -- a scene
+        reset, a teleport. The targets are what the drives chase, so leaving them
+        alone means the robot is put somewhere and then immediately pulled back
+        towards wherever the last command left it, which reads as a reset that did
+        not take.
+
+        Clearing them makes :meth:`step` re-seed from the measured position on its
+        next tick, exactly as it does on the first one.
+        """
+        self._command = None
+        self._command_time = None
+        self._targets = None
+        self._was_zero = None
+        self._last_tick = None
+
     def accept(self, velocities) -> bool:
         """Latch a velocity command; return whether it had the expected length."""
         if len(velocities) != len(self.dof_indices):
