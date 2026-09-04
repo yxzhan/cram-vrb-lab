@@ -101,17 +101,44 @@ def detection_pose_in_map(world, detection):
 
 
 def clear_detections(world):
-    """Remove every previously perceived body; returns how many went.
+    """Remove every previously perceived body, and any annotation of one; returns how
+    many bodies went.
 
     Makes the notebook's detect cell re-runnable: looking twice should replace what
     was seen, not pile up a second set of boxes.
+
+    The annotations have to go with the bodies, and forgetting them is not a tidiness
+    problem but a crash. A caller that classifies detections -- ``Bowl(root=body)``
+    and friends -- leaves annotations behind that still reference bodies this
+    function deleted, and a deleted body has ``_world = None``. They stay reachable:
+    ``get_semantic_annotations_by_type(Bowl)`` returns the dead ones alongside the
+    live, in no promised order, so picking one by index is a coin toss. The first
+    thing to touch a dead one's pose dies with ``AttributeError: 'NoneType' object
+    has no attribute 'compute_forward_kinematics'``, thrown from inside whatever
+    plan happened to draw it -- ``TransportAction.inside_container``, in the run
+    that found this.
+
+    Bites hardest where it is least expected: the world a demo works in belongs to
+    the *giskard server*, which outlives the demo process, so the stale annotations
+    are the previous run's and a fresh interpreter does not clear them.
     """
     stale = [
         body for body in world.bodies if body.name.prefix == DETECTION_PREFIX
     ]
-    if not stale:
+    # Matched by name rather than by identity against ``stale``, so that annotations
+    # orphaned by an *earlier* clear -- whose bodies are already gone from
+    # ``world.bodies`` and so cannot be matched against anything -- are caught too.
+    orphans = [
+        annotation
+        for annotation in world.semantic_annotations
+        if getattr(getattr(annotation, "root", None), "name", None) is not None
+        and annotation.root.name.prefix == DETECTION_PREFIX
+    ]
+    if not stale and not orphans:
         return 0
     with world.modify_world():
+        for annotation in orphans:
+            world.remove_semantic_annotation(annotation)
         for body in stale:
             if body.parent_connection is not None:
                 world.remove_connection(body.parent_connection)

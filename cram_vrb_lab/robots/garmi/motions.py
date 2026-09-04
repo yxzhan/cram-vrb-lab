@@ -63,7 +63,10 @@ from coraplex.robot_plans.motions.container import ClosingMotion, OpeningMotion
 from coraplex.robot_plans.motions.navigation import MoveMotion
 from coraplex.view_manager import ViewManager
 from semantic_digital_twin.datastructures.definitions import GripperState
-from semantic_digital_twin.spatial_types.spatial_types import Pose
+from semantic_digital_twin.spatial_types.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Pose,
+)
 
 from semantic_digital_twin.robots.garmi import Garmi
 
@@ -79,14 +82,15 @@ MOVE_TIMEOUT = 15.0
 
 **Coupled to how far the base is asked to go and how fast it may go.** The drive
 is limited to 0.2 m/s and 0.2 rad/s
-(:class:`~cram_vrb_lab.robots.garmi.giskard_config.WorldWithGarmiConfig`), and the
-sim runs at RTF ~0.65, so a 1.5 m reposition across this flat costs about 12 s of
-wall clock. 30 s leaves room for that plus the turn, and still cuts in well before
+(:class:`~cram_vrb_lab.robots.garmi.giskard_config.WorldWithGarmiConfig`), so a
+1.5 m reposition across this flat costs about 8 s of wall clock at the RTF this
+sim holds. 15 s leaves room for that plus the turn, and still cuts in well before
 a person would give up on a base that has visibly stopped.
 
-Sized to only ever decide the *stalled* case, like :data:`CLOSE_TIMEOUT`. A
-navigation that is still converging is still moving, and the ones measured here
-finish in 3-13 s.
+Sized to only ever decide the *stalled* case, like :data:`CLOSE_TIMEOUT`. Every
+navigation measured here after :meth:`GarmiMoveMotion.planar_target` went in
+finishes in 3.6-4.5 s, so a goal reaching this deadline is a goal that is not
+converging rather than one that is merely slow.
 """
 
 CONTAINER_TIMEOUT = 20.0
@@ -259,11 +263,39 @@ class GarmiClosingMotion(_GarmiContainerMotion, ClosingMotion):
 
 @dataclass
 class GarmiMoveMotion(MoveMotion, AlternativeMotion[Garmi]):
-    """Driving the base, against a :data:`MOVE_TIMEOUT` clock.
+    """Driving the base: onto the plane it can actually reach, and with a deadline.
 
-    The goal is untouched -- ``super()._motion_chart`` is upstream's, a
-    ``CartesianPose`` from ``map`` to the robot's root. What changes is that it is
-    no longer the only way for the motion to end.
+    Two repairs, both about the same mismatch. Upstream drives the base with
+    ``CartesianPose(root_link=map, tip_link=robot.root)`` -- a **six** degree of
+    freedom goal -- while an ``OmniDrive`` has three: x, y and yaw. Every other
+    component of that goal is an error the base is structurally unable to work off.
+
+    **1. The goal is projected onto the plane the base lives on.**
+    ``reachability_location`` -- what ``TransportAction`` resolves its navigation
+    goal through -- hands out poses at ``z = 0``, while GARMI's ``base_link`` sits
+    at :data:`~cram_vrb_lab.robots.garmi.joints.BASE_LINK_HEIGHT` in ``map``
+    (``odom`` carries the height; see ``GarmiROS.publish_odom``). Measured, with the
+    torso raised so the costmap yields anything at all::
+
+        base_link z in map = 0.025900
+        pose[0..4]  z = 0.000000   ->  25.9 mm of z error, every one
+
+    ``CartesianPose.translation_threshold`` is 0.01 m. So the position half of that
+    goal is 2.6x over tolerance before the robot moves, and stays there however well
+    it drives: the motion can never end. That is not a tuning problem, it is asking
+    a planar mechanism for a pose off its plane, so the fix is to ask for the
+    nearest pose on it -- same x, y and yaw, the robot's own z, no roll or pitch.
+
+    Not fixed by loosening the threshold: 26 mm of *real* error would then be
+    declared arrived, and the plan would grasp from a base it only thinks it placed.
+
+    **2. What is left can still stall, so it also gets a deadline.**
+    ``orientation_threshold`` is 0.01 rad -- 0.57 deg -- and upstream's own note on
+    it warns that a physically tracked mechanism settles with a residual error a
+    tolerance that tight may never reach. Measured on a goal whose z was already
+    correct: a 180 deg turn ran the whole timeout with the base sitting at 0.0000 m
+    of translation error, while the same goal needing no turn converged in 4.4 s.
+    So the base arrives and is not believed, which no amount of projection fixes.
 
     Why the base needs one at all, when the module docstring above lists the three
     motions that were *known* to stall: a base drive can stall too, and it does.
@@ -279,16 +311,21 @@ class GarmiMoveMotion(MoveMotion, AlternativeMotion[Garmi]):
     is_end_motion(): return``), so the goal never returned and the calling process
     was wedged behind it.
 
-    The goal itself was fine. Re-issued from the very pose it gave up in, the same
-    ``NavigateAction`` converged to within 5 mm in 3.3 s -- with collision
-    avoidance on *and* off, so avoidance was not what held it. It is the one goal
-    that wedges, not the target.
+    Re-issued from the very pose it gave up in, that same ``NavigateAction``
+    converged to within 5 mm in 3.3 s -- with collision avoidance on *and* off, so
+    avoidance was never what held it.
 
-    Which is what makes a deadline the right answer rather than a workaround:
-    ``drive_to`` already retries up to ten times and checks the distance itself,
-    and ``run_plan`` already turns a ``GiskardException`` into ``False``. That
-    retry loop was simply never reached, because a motion that hangs never fails.
-    Ending the motion hands control back to a caller that knows what to do with it.
+    A deadline is the right answer to what remains rather than a workaround:
+    ``drive_to`` already retries up to ten times and checks the distance itself, and
+    ``run_plan`` already turns a ``GiskardException`` into ``False``. That retry loop
+    was simply never reached, because a motion that hangs never fails. Ending the
+    motion hands control back to a caller that knows what to do with it.
+
+    .. warning::
+       The deadline **masks** repair 1 rather than substituting for it. A timeout
+       counts as success under ``minimum_success=1``, so a base that never arrived
+       reports done and the plan grasps from wherever it stopped. Both repairs are
+       needed; neither is sufficient.
     """
 
     execution_type = ExecutionType.SIMULATED, ExecutionType.REAL
@@ -296,8 +333,36 @@ class GarmiMoveMotion(MoveMotion, AlternativeMotion[Garmi]):
     def perform(self):
         return
 
+    def planar_target(self) -> Pose:
+        """:attr:`target`, moved onto the plane the drive can reach.
+
+        Keeps x, y and yaw -- the three the drive owns -- and replaces the three it
+        does not with the only values it can hold: the base's current z, and no roll
+        or pitch. The base's z is read from the robot rather than from
+        :data:`~cram_vrb_lab.robots.garmi.joints.BASE_LINK_HEIGHT` so that a scene
+        which stands the robot somewhere else is described by what is true, not by
+        what was true at spawn.
+        """
+        target = self.target.to_homogeneous_matrix()
+        position = target.to_position()
+        _, _, yaw = target.to_rotation_matrix().to_rpy()
+        base_z = self.world.compute_forward_kinematics(
+            self.world.root, self.robot.root
+        ).to_position()
+
+        return HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=position.x,
+            y=position.y,
+            z=base_z.z,
+            yaw=yaw,
+            reference_frame=self.world.root,
+        ).to_pose()
+
     @property
     def _motion_chart(self):
+        # Rewritten before super() reads it: MoveMotion builds its CartesianPose
+        # straight from self.target, and this motion object exists for one goal.
+        self.target = self.planar_target()
         return Parallel(
             [
                 super()._motion_chart,

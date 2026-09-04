@@ -583,31 +583,6 @@ for body, c in zip(bodies, canned):
 
 
 # %%
-from cram_vrb_lab.scenes.garmi_apartment.constants import TRANSPORT_PROPS
-
-for prop in TRANSPORT_PROPS:
-    body = world.get_body_by_name(prop.name)
-    box = body.collision.as_bounding_box_collection_in_frame(
-        body
-    ).bounding_box()
-
-    target = HomogeneousTransformationMatrix.from_xyz_rpy(
-        prop.position[0],
-        prop.position[1],
-        prop.position[2] + box.dimensions[2] / 2,
-        yaw=prop.yaw,
-        reference_frame=world.root,
-    )
-
-    before = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
-    body.parent_connection.origin = target
-    after = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
-    print(
-        f"  {prop.name}: {np.round(before, 4)} -> {np.round(after, 4)}"
-        f"  (moved {np.linalg.norm(after - before) * 1000:.1f} mm)",
-        flush=True,
-    )
-# %%
 # The annotation, not the body: TransportAction reads .root off its object_designator.
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 
