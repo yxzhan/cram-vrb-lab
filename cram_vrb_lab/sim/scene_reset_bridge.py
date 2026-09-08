@@ -42,7 +42,9 @@ class SceneResetROS(SimBridge):
 
     receives_commands = True  # the service has to be spun
 
-    def __init__(self, world, robot=None, integrator=None, robot_bridge=None):
+    def __init__(
+        self, world, robot=None, integrator=None, robot_bridge=None, sync_bridge=None
+    ):
         """
         :param robot: the robot ``Articulation``, restored through its own API
             rather than by teleporting links -- an articulation's links are bound by
@@ -57,12 +59,17 @@ class SceneResetROS(SimBridge):
             *teleports itself* to a pose the bridge dead-reckons, so without this
             the base is the one thing a reset cannot move. See
             :meth:`~cram_vrb_lab.robots.garmi.isaac_node.GarmiROS.resync_base`.
+        :param sync_bridge: the scene-sync bridge, if there is one. Objects a plan
+            spawned through it postdate the snapshot, so restoring that snapshot
+            says nothing about them -- they would survive a reset as leftovers of a
+            run that is supposed to be over. Cleared, not restored.
         """
         super().__init__("scene_reset_ros")
         self.world = world
         self.robot = robot
         self.integrator = integrator
         self.robot_bridge = robot_bridge
+        self.sync_bridge = sync_bridge
 
         self._snapshot: Optional[dict] = None
         self.create_service(Trigger, RESET_SERVICE, self._on_request)
@@ -91,14 +98,35 @@ class SceneResetROS(SimBridge):
             paths.append(path)
         return paths
 
+    @staticmethod
+    def _is_kinematic(prim) -> bool:
+        """Whether PhysX drives this body by pose rather than by force.
+
+        A kinematic body has no velocity to speak of -- it does not respond to
+        forces, and PhysX refuses ``setLinearVelocity`` on one outright. Most of
+        this apartment is kinematic (walls, cabinets, the furniture that must not
+        fall over), so clearing velocities blindly is 255 rejected calls per reset
+        and a thousand log lines of ``Body must be non-kinematic!`` -- harmless in
+        effect, but enough noise to bury a real error.
+        """
+        attribute = UsdPhysics.RigidBodyAPI(prim).GetKinematicEnabledAttr()
+        return bool(attribute and attribute.Get())
+
     def _take_snapshot(self) -> None:
         paths = self._rigid_body_paths()
         bodies = RigidPrim(paths) if paths else None
         positions, orientations = (
             bodies.get_world_poses() if bodies is not None else (None, None)
         )
+        stage = self.world.stage
+        dynamic = [
+            index
+            for index, path in enumerate(paths)
+            if not self._is_kinematic(stage.GetPrimAtPath(path))
+        ]
         self._snapshot = {
             "paths": paths,
+            "dynamic": np.array(dynamic, dtype=int),
             "positions": None if positions is None else np.array(positions),
             "orientations": None if orientations is None else np.array(orientations),
             "joints": (
@@ -111,7 +139,8 @@ class SceneResetROS(SimBridge):
             ),
         }
         print(
-            f"[reset] snapshot: {len(paths)} rigid bodies"
+            f"[reset] snapshot: {len(paths)} rigid bodies "
+            f"({len(dynamic)} dynamic)"
             + ("" if self.robot is None else " + the robot"),
             flush=True,
         )
@@ -148,8 +177,11 @@ class SceneResetROS(SimBridge):
             # was moved, so restoring the pose alone hands PhysX a scene that is back
             # where it started and still travelling -- props drift off the worktop in
             # the first few steps after a reset that looked correct in the viewport.
-            zeros = np.zeros((len(snapshot["paths"]), 3))
-            bodies.set_velocities(np.concatenate([zeros, zeros], axis=1))
+            #
+            # Only the dynamic ones: see _is_kinematic for what asking the rest costs.
+            dynamic = snapshot["dynamic"]
+            if len(dynamic):
+                bodies.set_velocities(np.zeros((len(dynamic), 6)), indices=dynamic)
             restored = len(snapshot["paths"])
 
         if self.robot is not None:
@@ -172,6 +204,13 @@ class SceneResetROS(SimBridge):
         if callable(resync):
             resync()
 
-        return f"restored {restored} bodies" + (
-            "" if self.robot is None else " and the robot"
+        forgotten = []
+        forget = getattr(self.sync_bridge, "forget_all", None)
+        if callable(forget):
+            forgotten = forget()
+
+        return (
+            f"restored {restored} bodies"
+            + ("" if self.robot is None else " and the robot")
+            + (f", dropped {len(forgotten)} synced-in" if forgotten else "")
         )

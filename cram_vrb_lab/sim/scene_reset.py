@@ -81,7 +81,7 @@ class SceneResetClient:
         return response.message
 
 
-def reset_context(world, detach_to_root: bool = True) -> dict:
+def reset_context(world, detach_to_root: bool = True, close_containers: bool = True) -> dict:
     """Clear what a finished plan left in the twin; returns what went.
 
     The twin half of a reset, and the half that is easy to forget because nothing
@@ -90,7 +90,7 @@ def reset_context(world, detach_to_root: bool = True) -> dict:
     restarting the notebook -- a second run starts on top of the first one's
     leftovers.
 
-    Two kinds of leftover:
+    Three kinds of leftover:
 
     - **Perceived bodies and their annotations**, from
       :func:`~cram_vrb_lab.perception.twin_objects.add_detections`. Handled by
@@ -100,21 +100,67 @@ def reset_context(world, detach_to_root: bool = True) -> dict:
       grasps onto the tool frame and only ``PlaceAction`` puts it back, so a plan
       that failed between the two leaves the object riding the hand for every run
       that follows.
+    - **Drawers and doors the twin still believes are open.** This is the one that
+      a sim reset cannot help with, because the two sides are not connected here:
+      ``GarmiROS.publish_joint_states`` sends the *robot articulation's* degrees of
+      freedom and nothing else, so the apartment's containers have no path from
+      Isaac back to the twin at all. Reset the scene and the drawer shuts in the
+      render while giskard goes on planning around one that is 0.466 m out.
 
     :param detach_to_root: whether to re-parent anything hanging off a robot link
         back to the world root. Off if a caller wants to inspect what was carried.
+    :param close_containers: whether to drive every non-robot articulated joint
+        back to 0. Sound for this apartment rather than assumed: all eleven of its
+        containers put 0 at an *end* of their range -- drawers ``[0, 0.466]``,
+        cabinet doors ``[0, 90]``, ``door_0_leaf`` ``[-90, 0]`` -- so zero is
+        unambiguously "shut" for each. A scene whose joints do not is why this can
+        be turned off.
     """
+    from semantic_digital_twin.robots.robot_parts import AbstractRobot
+
     from cram_vrb_lab.perception.twin_objects import clear_detections
 
-    report = {"detections": clear_detections(world), "detached": []}
+    report = {"detections": clear_detections(world), "detached": [], "closed": []}
+    # Robots specifically, not "everything with bodies". ``Drawer`` and ``Handle``
+    # have a ``bodies`` too, so a set built from every annotation swallows the very
+    # containers this is meant to close -- and only once a demo has annotated them,
+    # which is to say only from the second run onwards, exactly when a reset is
+    # what you reached for.
+    robot_bodies = {
+        id(body)
+        for robot in world.get_semantic_annotations_by_type(AbstractRobot)
+        for body in robot.bodies
+    }
+
+    if close_containers:
+        for connection in world.connections:
+            if getattr(connection, "raw_dof", None) is None:
+                continue
+            # The robot's own joints are streamed back from the sim every step, so
+            # writing them here would be overwritten within a cycle anyway -- and
+            # would fight the controller in the meantime. Everything else in the
+            # apartment has no such path and is this function's job.
+            if any(
+                id(body) in robot_bodies
+                for body in (connection.parent, connection.child)
+            ):
+                continue
+            if connection.position == 0.0:
+                continue
+            report["closed"].append(
+                f"{connection.name.name}={connection.position:.3f}"
+            )
+            connection.position = 0.0
+            connection.velocity = 0.0
+        if report["closed"]:
+            # The position setter writes the degree of freedom and stops there, so
+            # nothing downstream -- forward kinematics, or the WorldSynchronizer
+            # that carries this to giskard -- hears about it without this.
+            world.notify_state_change()
+
     if not detach_to_root:
         return report
 
-    robot_bodies = {
-        id(body)
-        for annotation in world.semantic_annotations
-        for body in getattr(annotation, "bodies", [])
-    }
     carried = [
         body
         for body in world.bodies
