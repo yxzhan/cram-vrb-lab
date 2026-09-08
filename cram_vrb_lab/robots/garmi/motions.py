@@ -77,7 +77,7 @@ Comfortably longer than the 0.8 s an unobstructed close takes, so it only ever
 decides the *obstructed* case.
 """
 
-MOVE_TIMEOUT = 15.0
+MOVE_TIMEOUT = 30.0
 """Seconds to keep driving at a navigation goal before calling the motion done.
 
 **Coupled to how far the base is asked to go and how fast it may go.** The drive

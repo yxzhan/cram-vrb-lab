@@ -26,10 +26,12 @@ sys.path.insert(0, str(REPO))
 # os.environ["ISAAC_WINDOW"] = "768x432"
 os.environ["ISAAC_WINDOW"] = "640x360"
 # os.environ["ISAAC_WINDOW"] = "512x288"
+# os.environ["DISPLAY"] = ":0"
+
 
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
 # os.environ["ISAAC_KITCHEN_PROPS"] = "1"
-os.environ["ISAAC_KITCHEN_PROPS"] = "1"
+os.environ["ISAAC_KITCHEN_PROPS"] = "0"
 os.environ["ISAAC_TRANSPORT_PROPS"] = "0"
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
@@ -50,8 +52,8 @@ from cram_vrb_lab.sim.isaac_app import livestream_enabled
 # sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
 #                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 # stream_proc = start_streaming_client() if livestream_enabled() else None
-# giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
-#                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
+                                    spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
 # %% [markdown]
 # ## CRAM context
@@ -279,10 +281,73 @@ def reset_pos():
 
 
 # %% [markdown]
+# ## Spawn bowl and spoon
+
+# %%
+from semantic_digital_twin.api import BodySpecification, Connection6DoFSpecification
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon
+from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+
+from cram_vrb_lab.paths import CRAM_SUBMODULE_DIR
+
+OBJECT_RESOURCES = CRAM_SUBMODULE_DIR / "coraplex" / "resources" / "objects"
+BOWL_NAME, SPOON_NAME = "bowl", "spoon"
+BOWL_STL = str(OBJECT_RESOURCES / "bowl.stl")
+SPOON_STL = str(OBJECT_RESOURCES / "spoon.stl")
+BOWL_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.0, 7.2, 1.0)
+SPOON_DRAWER_NAME = "drawer_1"
+SPOON_IN_DRAWER_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(-0.09, 0.0, -0.069)
+
+if not world.is_kinematic_structure_entity_in_world_by_name(BOWL_NAME):
+    Bowl.get_annotation_specification(
+        BOWL_NAME,
+        BodySpecification.mesh(BOWL_NAME, BOWL_STL, parent_T_self=BOWL_POSE),
+        parent_connection_specification=Connection6DoFSpecification(),
+    ).spawn(world)
+
+if not world.is_kinematic_structure_entity_in_world_by_name(SPOON_NAME):
+    Spoon.get_annotation_specification(
+        SPOON_NAME,
+        BodySpecification.mesh(
+            SPOON_NAME, SPOON_STL, parent_T_self=SPOON_IN_DRAWER_POSE
+        ),
+        parent_connection_specification=Connection6DoFSpecification(),
+    ).spawn(world, parent=world.get_body_by_name(SPOON_DRAWER_NAME))
+
+# %%
+from cram_vrb_lab.sim.scene_sync import SceneSyncClient
+
+scene_sync = SceneSyncClient(node)
+for name, stl, collider, mass in (
+    (BOWL_NAME, BOWL_STL, "convexDecomposition", 0.058),
+    (SPOON_NAME, SPOON_STL, "convexDecomposition", 0.05),
+):
+    body = world.get_body_by_name(name)
+    pose = np.asarray(body.global_pose.to_np())
+    quaternion = np.asarray(
+        HomogeneousTransformationMatrix(data=pose).to_quaternion().to_np()
+    ).ravel()
+    scene_sync.place(
+        name,
+        pose[:3, 3].ravel(),
+        quaternion,
+        mesh=stl,
+        collider=collider,
+        mass=mass,
+        track=False,
+    )
+print("sync:", scene_sync.apply())
+
+for name in (BOWL_NAME, SPOON_NAME):
+    body = world.get_body_by_name(name)
+    print(f"  {name:6s} {np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 4)}")
+
+
+# %% [markdown]
 # ## Open the drawer
 
 # %%
-DRAWER = "drawer_2"
+DRAWER = "drawer_1"
 DRAWER_ARM = Arms.LEFT
 STANDOFF = {Drawer: (1.0, 0.6), Door: (1.2, 0)}
 
@@ -295,10 +360,22 @@ reset_pos()
 drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
 # nudge_base(turn=math.pi / 6)
 
-# run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
-# work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
+run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
+work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
 # work_container(ClosingMotion, drawer_handle, DRAWER_ARM)
 print("opened:", drawer_joint.position)
+
+# %% [markdown]
+# ## Reset All
+#
+# %%
+from cram_vrb_lab.sim.scene_reset import SceneResetClient, reset_context
+
+scene_reset = SceneResetClient(node)
+print("sim:    ", scene_reset())
+print("context:", reset_context(world))
+time.sleep(2.0)
+print("base:   ", np.round(np.asarray(robot.root.global_pose.to_np())[:3, 3].ravel(), 4))
 
 # %% [markdown]
 # ## Perception

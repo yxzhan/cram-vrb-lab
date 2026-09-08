@@ -123,6 +123,17 @@ class RobotSpec:
     whose drive gains and park pose must be set *after* the last
     ``world.reset()``; ``None`` when the robot needs nothing."""
 
+    tune: Optional[Callable[..., None]] = None
+    """``(handle)``: re-apply the drive tuning, without moving the robot.
+
+    The half of :attr:`park` that survives being called at any moment. Needed by
+    anything that restarts physics while the sim is running -- deleting a prim has
+    to, and a restart makes PhysX re-read the drive parameters authored on the
+    prims, discarding every gain and force budget set through the tensor API.
+
+    ``None`` when the robot's drives need no tuning beyond what its description
+    already says, in which case a restart costs it nothing."""
+
     base_link_height: float = 0.0
     """Height [m] of the robot's root link above the floor, i.e. where ``odom``
     sits.

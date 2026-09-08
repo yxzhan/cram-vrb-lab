@@ -10,7 +10,9 @@ rather than written out per combination.
    scope. This module itself does not, so the entry script can import it early.
 """
 
+import sys
 import time
+import traceback
 
 import rclpy
 
@@ -184,19 +186,30 @@ def build(world, render, setup, spawn_pose, args):
 
         nodes.append(PropsROS(props))
 
-    # Every setup gets it: repeating a task means repeating its initial conditions,
-    # and without this the only way back to them is a restart. Costs one idle
-    # service until something calls it. The integrator comes from the robot's own
-    # bridge -- it holds the targets the drives chase, so a reset that skipped it
-    # would be undone on the next step; see SceneResetROS.
+    # Both get it in every setup: a reset costs one idle service and a sync one idle
+    # subscription until something calls them, and the alternative is remembering
+    # which demos are allowed to correct the render before the demo that needed it
+    # goes wrong quietly.
     from cram_vrb_lab.sim.scene_reset_bridge import SceneResetROS
+    from cram_vrb_lab.sim.scene_sync_bridge import SceneSyncROS
 
+    # The sync bridge needs a way to put the drive tuning back: deleting a prim
+    # restarts physics, which discards it. Taken from the robot's own spec rather
+    # than imported, so this stays robot-agnostic.
+    retune = (lambda: setup.robot.tune(robot)) if setup.robot.tune else None
+    sync = SceneSyncROS(world, retune=retune)
+    nodes.append(sync)
+    # The reset takes the sync bridge so a reset also forgets what was synced in:
+    # objects a plan spawned are not part of the scene it should return to.
+    # The integrator comes from the robot's own bridge -- it holds the targets the
+    # drives chase, so a reset that skipped it would be undone on the next step.
     nodes.append(
         SceneResetROS(
             world,
             robot=robot,
             integrator=getattr(nodes[0], "integrator", None),
             robot_bridge=nodes[0],
+            sync_bridge=sync,
         )
     )
     return nodes
@@ -305,6 +318,17 @@ def run(simulation_app, world, render, args):
                 cycles, window_start = 0, time.time()
     except KeyboardInterrupt:
         pass
+    except BaseException:
+        # Printed here, before the finally closes the app. simulation_app.close()
+        # ends the process, and it does so before Python gets to report an
+        # exception propagating out of run() -- so without this, any error raised
+        # on the sim loop thread looks exactly like a clean shutdown: the log ends
+        # at "Simulation App Shutting Down" with nothing above it. Three separate
+        # bugs in this repo presented that way before anyone thought to look.
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        raise
     finally:
         for node in nodes:
             node.destroy_node()

@@ -308,17 +308,29 @@ def undrive_wheels(garmi):
     garmi.set_friction_coefficients(zeros, joint_indices=wheel_dof)
 
 
-def move_to_park(garmi, world, render):
-    """Set the drive gains, undrive the wheels, and put the robot in its home pose.
+def tune_drives(garmi):
+    """Set every drive gain and force budget this robot needs. Moves nothing.
 
-    Both arms to :data:`~cram_vrb_lab.robots.garmi.joints.PARK_CONFIGURATION`,
-    hands open, lift down and head level.
+    Separate from :func:`move_to_park` because these have to be re-applied without
+    also re-posing the robot. Anything that stops and restarts physics makes PhysX
+    re-read the drive parameters *authored on the prims*, discarding everything set
+    through the tensor API here -- ``world.reset()`` does it, and so does the
+    ``stop -> delete -> play`` that deleting a prim mid-simulation requires.
 
-    .. warning::
-       Call this **last**, after everything else in the scene has been spawned.
-       ``world.reset()`` restores both the state physics started from and the
-       drive parameters authored on the prims, so gains and poses set before
-       anything that resets are silently thrown away.
+    Not a cosmetic loss. Measured across such a delete, driving the lift with the
+    same command before and after:
+
+    ==========================  ====================
+    when                        lift reached
+    ==========================  ====================
+    before the delete           ``[0.3573, 0.4080]``
+    after it, drives un-tuned   ``[0.0000, 0.0000]``
+    ==========================  ====================
+
+    The URDF's ``effort="2000"`` is exactly what the lift drive wants to spend, so
+    without :data:`COLUMN_MAX_EFFORT` the lower segment is pinned at its own ceiling
+    and cannot move at all. The arm gains and the fingers' grip force go the same
+    way, and just as silently.
     """
     arm_dof = dof_indices(garmi, ARM_JOINTS)
     finger_dof = dof_indices(garmi, FINGER_JOINTS)
@@ -350,6 +362,25 @@ def move_to_park(garmi, world, render):
         np.full((1, len(column_dof)), COLUMN_MAX_EFFORT), joint_indices=column_dof
     )
     undrive_wheels(garmi)
+
+
+def move_to_park(garmi, world, render):
+    """Tune the drives and put the robot in its home pose.
+
+    Both arms to :data:`~cram_vrb_lab.robots.garmi.joints.PARK_CONFIGURATION`,
+    hands open, lift down and head level.
+
+    .. warning::
+       Call this **last**, after everything else in the scene has been spawned.
+       ``world.reset()`` restores both the state physics started from and the
+       drive parameters authored on the prims, so gains and poses set before
+       anything that resets are silently thrown away.
+    """
+    tune_drives(garmi)
+
+    arm_dof = dof_indices(garmi, ARM_JOINTS)
+    finger_dof = dof_indices(garmi, FINGER_JOINTS)
+    column_dof = dof_indices(garmi, LIFT_JOINTS + HEAD_JOINTS)
 
     positions = garmi.get_joint_positions()
     for side in SIDES:

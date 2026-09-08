@@ -23,8 +23,8 @@ Running it
 Needs the Isaac scene and the giskard server already up, and the scene started with
 ``ISAAC_TRANSPORT_PROPS=1`` so the two objects the plan carries are actually there::
 
-    ISAAC_TRANSPORT_PROPS=1 binder/isaacsim_python_wrapper.sh demos/sim.py --robot garmi --scene garmi_apartment --spawn-position 0.0 5.0 0.0259 --spawn-yaw -1.5707963267948966
-    binder/cram_python_wrapper.sh demos/giskard_server.py --robot garmi --scene garmi_apartment --control-hz 15 --spawn-position 0.0 5.0 0.0259 --spawn-yaw -1.5707963267948966
+    ISAAC_TRANSPORT_PROPS=1 binder/isaacsim_python_wrapper.sh demos/sim.py --robot garmi --scene garmi_apartment --spawn-position 0.0 5.0 0.0259 --spawn-yaw 1.5707963267948966
+    binder/cram_python_wrapper.sh demos/giskard_server.py --robot garmi --scene garmi_apartment --control-hz 15 --spawn-position 0.0 5.0 0.0259 --spawn-yaw 1.5707963267948966
     binder/cram_python_wrapper.sh demos/garmi_transport_demo.py
 
 Without that variable Isaac renders the flat with nothing in it, the twin still gets

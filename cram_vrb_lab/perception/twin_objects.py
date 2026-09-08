@@ -199,7 +199,8 @@ def add_detections(world, detections, clear_previous=True, origin_offset=(0.0, 0
     )
 
 
-def add_boxes(world, boxes, clear_previous=True, origin_offsets=None):
+def add_boxes(world, boxes, clear_previous=True, origin_offsets=None, names=None,
+              color=None, movable=False):
     """Add one perceived body per ``(map_T_box, extents)`` pair; return the bodies.
 
     The half of :func:`add_detections` that touches the world, with the camera frame
@@ -215,7 +216,22 @@ def add_boxes(world, boxes, clear_previous=True, origin_offsets=None):
         for no offset. See :func:`add_detections` for what the offset is *for*; it is
         a plain list here because the callable form is resolved against whatever the
         caller has (a ``Detection``, a prop), which this function knows nothing about.
+    :param names: a name per box, or ``None`` to number them ``perceived_0``, ... A
+        detection has no name worth keeping, but an object a plan *spawned* does:
+        it is the handle both this world and the render know it by, so the two can
+        still be talked about together afterwards.
+    :param color: RGBA for every box, or ``None`` for :data:`DETECTION_COLOR`.
+    :param movable: whether these bodies must be able to be *moved* afterwards.
+
+        A detection is not: it is a report of where something was seen, and a
+        ``FixedConnection`` says exactly that. Anything whose pose is written later
+        -- an object physics pushes around, one a plan carries -- needs a connection
+        with the degrees of freedom to carry a pose, or the write fails outright
+        with ``NotImplementedError: Origin can not be set for Connection:
+        FixedConnection``. ``demo_ori.py`` records the same requirement for the
+        bowl it transports.
     """
+    from semantic_digital_twin.world_description.connections import Connection6DoF
     boxes = list(boxes)
     if origin_offsets is None:
         origin_offsets = [(0.0, 0.0, 0.0)] * len(boxes)
@@ -232,24 +248,34 @@ def add_boxes(world, boxes, clear_previous=True, origin_offsets=None):
             box_T_origin = np.eye(4)
             box_T_origin[:3, 3] = offset
 
-            body = _detection_body(f"{DETECTION_PREFIX}_{index}", extents, offset)
+            name = f"{DETECTION_PREFIX}_{index}" if names is None else names[index]
+            body = _detection_body(name, extents, offset, color)
             world.add_kinematic_structure_entity(body)
-            world.add_connection(
-                FixedConnection(
-                    parent=world.root,
-                    child=body,
-                    parent_T_connection_expression=(
-                        HomogeneousTransformationMatrix(
-                            data=np.asarray(map_T_box) @ box_T_origin
-                        )
-                    ),
-                )
+            pose = HomogeneousTransformationMatrix(
+                data=np.asarray(map_T_box) @ box_T_origin
             )
+            if movable:
+                world.add_connection(
+                    Connection6DoF.create_with_dofs(
+                        parent=world.root,
+                        child=body,
+                        world=world,
+                        parent_T_connection_expression=pose,
+                    )
+                )
+            else:
+                world.add_connection(
+                    FixedConnection(
+                        parent=world.root,
+                        child=body,
+                        parent_T_connection_expression=pose,
+                    )
+                )
             bodies.append(body)
     return bodies
 
 
-def _detection_body(name, extents, origin_offset=(0.0, 0.0, 0.0)):
+def _detection_body(name, extents, origin_offset=(0.0, 0.0, 0.0), color=None):
     """A box body of the given side lengths, ``-origin_offset`` from its own origin.
 
     The shape is shifted by the negative of what the body frame was shifted by, so
@@ -266,7 +292,7 @@ def _detection_body(name, extents, origin_offset=(0.0, 0.0, 0.0)):
         return Box(
             origin=HomogeneousTransformationMatrix.from_xyz_rpy(x=-x, y=-y, z=-z),
             scale=Scale(*(float(value) for value in extents)),
-            color=Color(*DETECTION_COLOR),
+            color=Color(*(DETECTION_COLOR if color is None else color)),
         )
 
     return Body(

@@ -97,7 +97,7 @@ def window_size():
     attached) does not actually render, so measuring the pixel scaling needs a
     machine where the frame is expensive in the first place.
     """
-    width, _, height = os.environ.get("ISAAC_WINDOW", "1280x960").partition("x")
+    width, _, height = os.environ.get("ISAAC_WINDOW", "640x360").partition("x")
     return int(width), int(height)
 
 

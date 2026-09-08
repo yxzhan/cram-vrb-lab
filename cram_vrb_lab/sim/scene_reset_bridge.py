@@ -155,8 +155,17 @@ class SceneResetROS(SimBridge):
                 "no snapshot yet -- the sim has not completed a step since it started"
             )
             return response
-        response.success = True
-        response.message = self._restore()
+        # Guarded for the same reason SceneSyncROS guards its requests: this runs on
+        # the sim loop thread, so an exception here does not fail the reset, it ends
+        # the simulator -- and silently, since simulation_app.close() beats Python to
+        # reporting it. A failed reset must be a failed reset.
+        try:
+            response.message = self._restore()
+            response.success = True
+        except Exception as failure:  # noqa: BLE001 - a failed reset must not be fatal
+            response.success = False
+            response.message = f"{type(failure).__name__}: {failure}"
+            self.get_logger().error(f"scene reset failed: {response.message}")
         return response
 
     def apply_commands(self, dt: float) -> None:
@@ -204,13 +213,27 @@ class SceneResetROS(SimBridge):
         if callable(resync):
             resync()
 
-        forgotten = []
-        forget = getattr(self.sync_bridge, "forget_all", None)
-        if callable(forget):
-            forgotten = forget()
+        # Deleted before the snapshot is restored below would be wrong: deleting
+        # restarts physics, and a restart discards exactly what the restore just
+        # wrote. So this runs last, and re-applies the robot state after it.
+        dropped = []
+        delete_spawned = getattr(self.sync_bridge, "delete_spawned", None)
+        if callable(delete_spawned):
+            dropped = delete_spawned()
+            if dropped and self.robot is not None:
+                # The stop/play inside the delete reverts the robot too, so put it
+                # back where the snapshot says a second time.
+                self.robot.set_joint_positions(snapshot["joints"])
+                self.robot.set_joint_velocities(np.zeros_like(snapshot["joints"]))
+                self.robot.set_joint_position_targets(snapshot["joints"])
+                positions, orientations = snapshot["base"]
+                self.robot.set_world_poses(positions, orientations)
+                resync = getattr(self.robot_bridge, "resync_base", None)
+                if callable(resync):
+                    resync()
 
         return (
             f"restored {restored} bodies"
             + ("" if self.robot is None else " and the robot")
-            + (f", dropped {len(forgotten)} synced-in" if forgotten else "")
+            + (f", deleted {len(dropped)} synced-in" if dropped else "")
         )

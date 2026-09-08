@@ -72,6 +72,12 @@ def _park(robot, world, render):
     move_to_park(robot, world, render)
 
 
+def _tune(robot):
+    from .isaac_node import tune_drives
+
+    tune_drives(robot)
+
+
 GARMI = RobotSpec(
     name="garmi",
     giskard_world=_giskard_world,
@@ -81,6 +87,9 @@ GARMI = RobotSpec(
     # Last: spawning a body resets the world, which throws away the drive gains
     # and the park pose. See move_to_park's warning.
     park=_park,
+    # Re-applied after anything that restarts physics; without it GARMI's lift is
+    # frozen by its own force limit the first time a prim is deleted.
+    tune=_tune,
     # base_link rides above the wheels, and the twin's OmniDrive cannot represent
     # that -- so map -> odom carries it. See BASE_LINK_HEIGHT.
     base_link_height=BASE_LINK_HEIGHT,
