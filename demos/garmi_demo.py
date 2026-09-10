@@ -24,8 +24,8 @@ sys.path.insert(0, str(REPO))
 # os.environ["ISAAC_WINDOW"] = "960x540"
 # os.environ["ISAAC_WINDOW"] = "854x480"
 # os.environ["ISAAC_WINDOW"] = "768x432"
-os.environ["ISAAC_WINDOW"] = "640x360"
-# os.environ["ISAAC_WINDOW"] = "512x288"
+# os.environ["ISAAC_WINDOW"] = "640x360"
+os.environ["ISAAC_WINDOW"] = "512x288"
 # os.environ["DISPLAY"] = ":0"
 
 
@@ -35,7 +35,7 @@ os.environ["ISAAC_KITCHEN_PROPS"] = "0"
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
-SPAWN_POSITION = (0, 5.0, 0.0259)
+SPAWN_POSITION = (0, 6.0, 0.0259)
 SPAWN_YAW = math.pi / 2
 
 from launcher import (
@@ -47,12 +47,13 @@ from launcher import (
 )
 from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
-# rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
-# sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
-#                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
-# stream_proc = start_streaming_client() if livestream_enabled() else None
-# giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
-#                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+if not in_notebook:
+    rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
+    sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
+                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+    stream_proc = start_streaming_client() if livestream_enabled() else None
+    giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
+                                        spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
 # %% [markdown]
 # ## CRAM context
@@ -90,7 +91,8 @@ from coraplex.robot_plans.motions.gripper import (
 )
 from coraplex.robot_plans.motions.robot_body import MoveJointsMotion
 from coraplex.view_manager import ViewManager
-from giskardpy.data_types.exceptions import GiskardException, CollisionViolatedError
+from giskardpy.data_types.exceptions import GiskardException
+from giskardpy.motion_statechart.exceptions import CollisionViolatedError
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
@@ -287,7 +289,7 @@ BOWL_STL = str(OBJECT_RESOURCES / "bowl.stl")
 SPOON_STL = str(OBJECT_RESOURCES / "spoon.stl")
 BOWL_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.0, 7.2, 1.0)
 SPOON_DRAWER_NAME = "drawer_1"
-SPOON_IN_DRAWER_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(-0.09, 0.0, -0.069)
+SPOON_IN_DRAWER_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.00, 0.0, -0.02)
 SPOON2_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.3, 7.2, 1.0)
 
 # Where the gripper should take hold, in *mesh* coordinates [m].
@@ -306,8 +308,8 @@ SPOON2_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.3, 7.2, 1.0)
 #   spoon: the middle of the handle, which is 11 mm wide there; x > 0.03 is the scoop.
 GRASP_POINTS = {
     BOWL_NAME: (0.0, 0.0677, 0.028),
-    SPOON_NAME: (0.0, 0.0, 0.008),
-    SPOON2_NAME: (0.0, 0.0, 0.008),
+    SPOON_NAME: (0.0, 0.0, 0.02),
+    SPOON2_NAME: (0.0, 0.0, 0.02),
 }
 
 
@@ -487,7 +489,7 @@ drawer_joint = world.get_connection_by_name(f"{DRAWER}_joint")
 
 
 # run_plan(sequential([
-#     ClosingMotion(drawer_handle, DRAWER_ARM),
+#     # ClosingMotion(drawer_handle, DRAWER_ARM),
 #     MoveGripperMotion(GripperState.OPEN, DRAWER_ARM)
 # ], context=context), collision_avoidance=False)
 
@@ -508,12 +510,25 @@ end_effector = context.robot.get_right_arm_if_specified().end_effector
 # bowl = world.get_semantic_annotations_by_type(Bowl)[0]
 # spoon = world.get_semantic_annotations_by_type(Spoon)[1]
 
-BOWL_TARGET_POINT = grasp_target([1.6, 5.2, 0.85], BOWL_NAME)
-SPOON_TARGET_POINT = grasp_target([1.6, 5.3, 0.8], SPOON_NAME)
+BOWL_TARGET_POINT = grasp_target([1.6, 5.2, 0.88], BOWL_NAME)
+SPOON_TARGET_POINT = grasp_target([1.6, 5.3, 0.83], SPOON_NAME)
 
 done = run_plan(sequential([
     ParkArmsAction(arm=Arms.BOTH),
-    # Note: always need TorsoState.HIGH or next(iter(self)) of CostmapLocation fails
+    # # Note: always need TorsoState.HIGH or next(iter(self)) of CostmapLocation fails
+    # TransportAction(
+    #     object_designator=world.get_semantic_annotations_by_type(Spoon)[1],
+    #     arm=Arms.RIGHT,
+    #     grasp_description=GraspDescription(
+    #         ApproachDirection.RIGHT,
+    #         VerticalAlignment.TOP,
+    #         rotate_gripper=True,
+    #         end_effector=end_effector,
+    #     ),
+    #     target_location=Pose(
+    #         position=SPOON_TARGET_POINT, reference_frame=world.root
+    #     ),
+    # ),
     TransportAction(
         object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
         arm=Arms.RIGHT,
@@ -527,22 +542,9 @@ done = run_plan(sequential([
             position=BOWL_TARGET_POINT, reference_frame=world.root
         ),
     ),
-    TransportAction(
-        object_designator=world.get_semantic_annotations_by_type(Spoon)[1],
-        arm=Arms.RIGHT,
-        grasp_description=GraspDescription(
-            ApproachDirection.RIGHT,
-            VerticalAlignment.TOP,
-            rotate_gripper=True,
-            end_effector=end_effector,
-        ),
-        target_location=Pose(
-            position=SPOON_TARGET_POINT, reference_frame=world.root
-        ),
-    ),
     NavigateAction(Pose(
         Point3.from_iterable(
-            [0, 6.0, 0]
+            [-1, 6.0, 0]
         ),
         Quaternion.from_iterable(
             [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
@@ -563,6 +565,10 @@ done = run_plan(sequential([
         ),
     ),
 ], context=context), collision_avoidance=False)
+
+# %%
+time.sleep(10)
+stop()
 
 # %% [markdown]
 # ## Reset All
