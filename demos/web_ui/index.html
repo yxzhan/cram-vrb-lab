@@ -87,7 +87,9 @@
       display: grid;
       grid-template-columns: var(--left, 50%) 6px 1fr;
     }
-    .pane { position: relative; overflow: hidden; }
+    /* height, not just stretch: a lone pane sits in a `display: block` wrap, where an
+       auto height would leave the iframe's own 100% resolving against nothing */
+    .pane { position: relative; overflow: hidden; height: 100%; }
     .divider {
       background: #313244;
       cursor: col-resize;
@@ -142,7 +144,7 @@
     // only pane of its tab and the divider with nothing to split.
     const targets = [
       { panes: [
-          { name: "NeemHub", path: "proxy/8711" },
+          { name: "NeemHub", path: "proxy/8711/" },
           { name: "Desktop", path: "desktop/", skipLocal: true },
       ] },
       { panes: [{ name: "VS Code", path: "vscode/" }] },
