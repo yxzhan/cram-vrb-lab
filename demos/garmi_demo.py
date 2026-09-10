@@ -90,7 +90,7 @@ from coraplex.robot_plans.motions.gripper import (
 )
 from coraplex.robot_plans.motions.robot_body import MoveJointsMotion
 from coraplex.view_manager import ViewManager
-from giskardpy.data_types.exceptions import GiskardException
+from giskardpy.data_types.exceptions import GiskardException, CollisionViolatedError
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.datastructures.definitions import GripperState, TorsoState
@@ -148,18 +148,19 @@ ARRIVED = 0.05
 GRASPED = 0.01
 RETREAT = 0.08
 ARM_PREFIX = {Arms.LEFT: "left", Arms.RIGHT: "right"}
-TUCK_JOINTS = ["fr3_joint3", "fr3_joint4"]
-TUCK_POSITIONS = {Arms.LEFT: [-2, -1.5], Arms.RIGHT: [2, -1.5]}
-
 
 def run_plan(plan, collision_avoidance=True, real_mode=True):
     robot_mode = real_robot if real_mode else simulated_robot
     try:
         with robot_mode(collision_avoidance=collision_avoidance):
             plan.perform()
-    except GiskardException as failure:
-        print(f"  giskard failed -- {type(failure).__name__}: {failure}")
+    except (GiskardException, CollisionViolatedError) as failure:
+        print(f"Catch giskard failed -- {type(failure).__name__}: {failure}")
         return False
+    except KeyboardInterrupt:
+        from cram_vrb_lab.sim.scene_reset import cancel_motion
+        print("  interrupted --", cancel_motion(context))
+        raise
     return True
 
 
@@ -179,7 +180,7 @@ def annotate(view_type, name):
     return handle
 
 
-def drive_to(handle_name, standoff, lateral, attempts=10):
+def drive_to(handle_name, standoff, lateral, attempts=1):
     base_z = float(np.asarray(robot.root.global_pose.to_np())[2, 3])
     target = Pose(
         Point3.from_iterable(
@@ -211,14 +212,6 @@ def nudge_base(forward=0.0, left=0.0, turn=0.0):
         reference_frame=world.root,
     )
     return run_plan(execute_single(NavigateAction(target), context=context))
-
-
-def tuck_arm(arm, positions=None):
-    positions = TUCK_POSITIONS[arm] if positions is None else positions
-    names = [f"{ARM_PREFIX[arm]}_{joint}" for joint in TUCK_JOINTS]
-    return run_plan(
-        execute_single(MoveJointsMotion(names, list(positions)), context=context)
-    )
 
 
 def grasp_handle(handle, arm, attempts=3):
@@ -262,9 +255,7 @@ def retreat(arm, distance=RETREAT):
     )
 
 
-def work_container(motion, handle, arm, attempts=3, tuck=False):
-    if tuck:
-        tuck_arm(Arms.RIGHT if arm == Arms.LEFT else Arms.LEFT)
+def work_container(motion, handle, arm, attempts=3):
     grasp_handle(handle, arm, attempts)
     run_plan(execute_single(motion(handle, arm), context=context))
     run_plan(execute_single(MoveGripperMotion(GripperState.OPEN, arm), context=context))
@@ -291,46 +282,127 @@ from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from cram_vrb_lab.paths import CRAM_SUBMODULE_DIR
 
 OBJECT_RESOURCES = CRAM_SUBMODULE_DIR / "coraplex" / "resources" / "objects"
-BOWL_NAME, SPOON_NAME = "bowl", "spoon"
+BOWL_NAME, SPOON_NAME, SPOON2_NAME = "bowl", "spoon", "spoon2"
 BOWL_STL = str(OBJECT_RESOURCES / "bowl.stl")
 SPOON_STL = str(OBJECT_RESOURCES / "spoon.stl")
 BOWL_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.0, 7.2, 1.0)
 SPOON_DRAWER_NAME = "drawer_1"
 SPOON_IN_DRAWER_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(-0.09, 0.0, -0.069)
+SPOON2_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.3, 7.2, 1.0)
 
-if not world.is_kinematic_structure_entity_in_world_by_name(BOWL_NAME):
-    Bowl.get_annotation_specification(
-        BOWL_NAME,
-        BodySpecification.mesh(BOWL_NAME, BOWL_STL, parent_T_self=BOWL_POSE),
-        parent_connection_specification=Connection6DoFSpecification(),
-    ).spawn(world)
+# Where the gripper should take hold, in *mesh* coordinates [m].
+#
+# The gripper always reaches for the body's own origin: ``PickUpAction`` hands its reach
+# ``Pose(reference_frame=object.root)`` and ``GraspDescription.grasp_pose_sequence``
+# does the same, so nothing downstream offers a grasp offset to pass. Both meshes are
+# centred on their bounding box, which puts that origin in the middle of the bowl's
+# cavity and halfway through the spoon's thickness -- the fingers close on air 3 cm
+# above the table, or into the table. So the *body frame* is what has to move: it is
+# placed on the point below and the mesh is hung off it, and every grasp then aims
+# there.
+#
+#   bowl:  the rim on the +x side (the lip is x 0.065..0.070 at z 0.033), a few mm below
+#          the top edge so the fingers straddle the wall instead of the tip.
+#   spoon: the middle of the handle, which is 11 mm wide there; x > 0.03 is the scoop.
+GRASP_POINTS = {
+    BOWL_NAME: (0.0, 0.0677, 0.028),
+    SPOON_NAME: (0.0, 0.0, 0.008),
+    SPOON2_NAME: (0.0, 0.0, 0.008),
+}
 
-if not world.is_kinematic_structure_entity_in_world_by_name(SPOON_NAME):
-    Spoon.get_annotation_specification(
-        SPOON_NAME,
-        BodySpecification.mesh(
-            SPOON_NAME, SPOON_STL, parent_T_self=SPOON_IN_DRAWER_POSE
-        ),
-        parent_connection_specification=Connection6DoFSpecification(),
-    ).spawn(world, parent=world.get_body_by_name(SPOON_DRAWER_NAME))
+
+def body_T_mesh(name):
+    """The mesh's placement inside the body frame, i.e. ``BodySpecification.mesh``'s
+    ``origin``.
+
+    Shifting the mesh by ``-grasp_point`` is the same thing as moving the body origin
+    onto ``grasp_point``, and the second is what we mean.
+    """
+    x, y, z = GRASP_POINTS.get(name, (0.0, 0.0, 0.0))
+    return HomogeneousTransformationMatrix.from_xyz_rpy(-x, -y, -z)
+
+
+def grasp_target(point, name):
+    """``point`` -- where the mesh should end up -- as the body-origin target an action
+    takes, since ``PlaceAction`` puts the *origin* at the pose it is given.
+
+    Only valid for a target with no rotation, which is what the transports below use.
+    """
+    offset = GRASP_POINTS.get(name, (0.0, 0.0, 0.0))
+    return Point3.from_iterable([p + o for p, o in zip(point, offset)])
+
+
+def ensure_object(annotation, name, stl, pose, parent=None):
+    """Spawn the object, or put an existing one back where it started.
+
+    Both halves matter after a reset. ``reset_context`` takes a carried object off
+    the gripper with ``move_branch``, which *preserves its world pose* -- so the body
+    is still floating where the hand was, and a spawn guarded on the name alone skips
+    it and then syncs that pose into Isaac. That is the bowl reappearing in the
+    gripper.
+
+    ``pose`` says where the *mesh* goes, as it did before there were grasp points, so
+    the body is placed at ``pose`` composed with the offset that separates the two.
+    """
+    self_T_mesh = body_T_mesh(name)
+    parent_T_self = pose @ self_T_mesh.inverse()
+    if not world.is_kinematic_structure_entity_in_world_by_name(name):
+        annotation.get_annotation_specification(
+            name,
+            BodySpecification.mesh(
+                name, stl, origin=self_T_mesh, parent_T_self=parent_T_self
+            ),
+            parent_connection_specification=Connection6DoFSpecification(),
+        ).spawn(world, parent=parent)
+        return "spawned"
+    body = world.get_body_by_name(name)
+    # Re-apply the mesh offset as well: a reset leaves the body in the world, so this is
+    # the only path by which a changed grasp point reaches an object already spawned.
+    # A shape origin is model rather than state, so it goes through modify_world, and
+    # only when it really differs, since that republishes the world. The visual and the
+    # collision shape are one object, so the single write moves both.
+    shape = body.collision[0] if len(body.collision) else None
+    if shape is not None and not np.allclose(
+        np.asarray(shape.origin.to_np()), np.asarray(self_T_mesh.to_np())
+    ):
+        with world.modify_world():
+            shape.origin = self_T_mesh.copy_with_new_reference_frames(body, None)
+    target_parent = world.root if parent is None else parent
+    world.move_branch(body, target_parent)
+    # ``pose`` is a plain parent-relative matrix, but Connection6DoF.origin now runs it
+    # through ``World.transform``, which refuses a matrix without a reference frame.
+    body.parent_connection.origin = parent_T_self.copy_with_new_reference_frames(
+        target_parent, body
+    )
+    world.notify_state_change()
+    return "put back"
+
+
+print("bowl:  ", ensure_object(Bowl, BOWL_NAME, BOWL_STL, BOWL_POSE))
+print("spoon: ", ensure_object(
+    Spoon, SPOON_NAME, SPOON_STL, SPOON_IN_DRAWER_POSE,
+    parent=world.get_body_by_name(SPOON_DRAWER_NAME),
+))
+print("spoon2:", ensure_object(Spoon, SPOON2_NAME, SPOON_STL, SPOON2_POSE))
 
 # %%
-from cram_vrb_lab.sim.scene_sync import SceneSyncClient
+from cram_vrb_lab.sim.scene_sync import SceneSyncClient, shape_pose_in_world
 
 scene_sync = SceneSyncClient(node)
 for name, stl, collider, mass in (
     (BOWL_NAME, BOWL_STL, "convexDecomposition", 0.058),
     (SPOON_NAME, SPOON_STL, "convexDecomposition", 0.05),
+    (SPOON2_NAME, SPOON_STL, "convexDecomposition", 0.05),
 ):
     body = world.get_body_by_name(name)
-    pose = np.asarray(body.global_pose.to_np())
-    quaternion = np.asarray(
-        HomogeneousTransformationMatrix(data=pose).to_quaternion().to_np()
-    ).ravel()
+    # Isaac spawns the mesh file at the pose it is handed and knows nothing of the twin's
+    # body frames, so what crosses is the mesh's pose, not the body's. ``pull`` undoes
+    # the same offset on the way back.
+    position, orientation = shape_pose_in_world(body)
     scene_sync.place(
         name,
-        pose[:3, 3].ravel(),
-        quaternion,
+        position,
+        orientation,
         mesh=stl,
         collider=collider,
         mass=mass,
@@ -338,9 +410,21 @@ for name, stl, collider, mass in (
     )
 print("sync:", scene_sync.apply())
 
-for name in (BOWL_NAME, SPOON_NAME):
+
+for name in (BOWL_NAME, SPOON_NAME, SPOON2_NAME):
     body = world.get_body_by_name(name)
     print(f"  {name:6s} {np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 4)}")
+
+
+from time import sleep
+
+sleep(1)
+moved = scene_sync.pull(world)
+print("Object Settled:")
+for name in (BOWL_NAME, SPOON_NAME, SPOON2_NAME):
+    body = world.get_body_by_name(name)
+    print(f"  {name:6s} {np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 4)}")
+
 
 # %%
 # Weld a grasped object to the hand in Isaac for as long as the twin says it is held.
@@ -387,12 +471,33 @@ drawer_joint = world.get_connection_by_name(f"{DRAWER}_joint")
 
 # reset_pos()
 # drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
-# nudge_base(turn=math.pi / 6)
+
+# run_plan(sequential([
+#     # LookAtAction(drawer_handle.global_pose),
+#     GraspingAction(drawer_handle, DRAWER_ARM, GraspDescription(
+#         ApproachDirection.FRONT,
+#         VerticalAlignment.NoAlignment,
+#         ViewManager.get_end_effector_view(DRAWER_ARM, robot),
+#         manipulation_offset=0.1,
+#     )),
+#     OpeningMotion(drawer_handle, DRAWER_ARM),
+#     # ClosingMotion(drawer_handle, DRAWER_ARM),
+#     MoveGripperMotion(GripperState.OPEN, DRAWER_ARM)
+# ], context=context), collision_avoidance=False)
+
+
+# run_plan(sequential([
+#     ClosingMotion(drawer_handle, DRAWER_ARM),
+#     MoveGripperMotion(GripperState.OPEN, DRAWER_ARM)
+# ], context=context), collision_avoidance=False)
+
+# retreat(DRAWER_ARM)
+# reset_pos()
 
 # run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
 # work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
 # work_container(ClosingMotion, drawer_handle, DRAWER_ARM)
-print("opened:", drawer_joint.position)
+# print("opened:", drawer_joint.position)
 
 # %%
 # The annotation, not the body: TransportAction reads .root off its object_designator.
@@ -403,34 +508,47 @@ end_effector = context.robot.get_right_arm_if_specified().end_effector
 # bowl = world.get_semantic_annotations_by_type(Bowl)[0]
 # spoon = world.get_semantic_annotations_by_type(Spoon)[1]
 
-BOWL_TARGET_POINT = Point3.from_iterable([1.6, 5.2, 0.85])
-SPOON_TARGET_POINT = Point3.from_iterable([1.6, 5.3, 0.8])
+BOWL_TARGET_POINT = grasp_target([1.6, 5.2, 0.85], BOWL_NAME)
+SPOON_TARGET_POINT = grasp_target([1.6, 5.3, 0.8], SPOON_NAME)
 
 done = run_plan(sequential([
     ParkArmsAction(arm=Arms.BOTH),
     # Note: always need TorsoState.HIGH or next(iter(self)) of CostmapLocation fails
-    # TransportAction(
-    #     object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
-    #     arm=Arms.RIGHT,
-    #     grasp_description=GraspDescription(
-    #         ApproachDirection.RIGHT,
-    #         VerticalAlignment.TOP,
-    #         end_effector,
-    #         rotate_gripper=True,
-    #     ),
-    #     target_location=Pose(
-    #         position=BOWL_TARGET_POINT, reference_frame=world.root
-    #     ),
-    # ),
-    # NavigateAction(Pose(
-    #     Point3.from_iterable(
-    #         [-1, 6.0, 0]
-    #     ),
-    #     Quaternion.from_iterable(
-    #         [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
-    #     ),
-    #     reference_frame=world.root,
-    # )),
+    TransportAction(
+        object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
+        arm=Arms.RIGHT,
+        grasp_description=GraspDescription(
+            ApproachDirection.RIGHT,
+            VerticalAlignment.TOP,
+            end_effector,
+            rotate_gripper=True,
+        ),
+        target_location=Pose(
+            position=BOWL_TARGET_POINT, reference_frame=world.root
+        ),
+    ),
+    TransportAction(
+        object_designator=world.get_semantic_annotations_by_type(Spoon)[1],
+        arm=Arms.RIGHT,
+        grasp_description=GraspDescription(
+            ApproachDirection.RIGHT,
+            VerticalAlignment.TOP,
+            rotate_gripper=True,
+            end_effector=end_effector,
+        ),
+        target_location=Pose(
+            position=SPOON_TARGET_POINT, reference_frame=world.root
+        ),
+    ),
+    NavigateAction(Pose(
+        Point3.from_iterable(
+            [0, 6.0, 0]
+        ),
+        Quaternion.from_iterable(
+            [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
+        ),
+        reference_frame=world.root,
+    )),
     TransportAction(
         object_designator=world.get_semantic_annotations_by_type(Spoon)[0],
         arm=Arms.RIGHT,
@@ -444,15 +562,18 @@ done = run_plan(sequential([
             position=SPOON_TARGET_POINT, reference_frame=world.root
         ),
     ),
-], context=context))
+], context=context), collision_avoidance=False)
 
 # %% [markdown]
 # ## Reset All
 #
 # %%
-from cram_vrb_lab.sim.scene_reset import SceneResetClient, reset_context
+from cram_vrb_lab.sim.scene_reset import SceneResetClient, cancel_motion, reset_context
 
 scene_reset = SceneResetClient(node)
+# First, or the goal giskard is still executing keeps commanding the robot and carries
+# on with whatever the interrupted plan was doing, out of the pose the reset restores.
+print("giskard:", cancel_motion(context))
 print("sim:    ", scene_reset())
 print("context:", reset_context(world))
 time.sleep(2.0)
@@ -880,7 +1001,7 @@ print("pick and place:", done)
 # %%
 robot.mobile_base.full_body_controlled = False
 
-work_container(ClosingMotion, drawer_handle, DRAWER_ARM, tuck=False)
+work_container(ClosingMotion, drawer_handle, DRAWER_ARM)
 nudge_base(-0.3)
 reset_pos()
 print("closed:", drawer_joint.position)
@@ -901,10 +1022,10 @@ drive_to(f"{DOOR}_handle", *STANDOFF[Door])
 reset_pos()
 run_plan(execute_single(LookAtAction(door_handle.global_pose), context=context))
 
-work_container(OpeningMotion, door_handle, DOOR_ARM, tuck=True)
+work_container(OpeningMotion, door_handle, DOOR_ARM)
 print("opened:", door_joint.position)
 
-work_container(ClosingMotion, door_handle, DOOR_ARM, tuck=True)
+work_container(ClosingMotion, door_handle, DOOR_ARM)
 print("closed:", door_joint.position)
 
 # %%

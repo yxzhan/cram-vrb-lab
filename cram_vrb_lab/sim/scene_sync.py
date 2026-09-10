@@ -238,10 +238,14 @@ class SceneSyncClient:
             if body.parent_kinematic_structure_entity is not world.root:
                 continue
             before = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
-            body.parent_connection.origin = (
-                HomogeneousTransformationMatrix.from_xyz_quaternion(
-                    *pose["position"], *pose["orientation"], reference_frame=world.root
-                )
+            # The sim reports where the *geometry* is; the twin stores where the body
+            # frame is, and the two are the same thing only for a body whose origin sits
+            # on its mesh. See :func:`body_T_shape`.
+            map_T_body = _pose_matrix(
+                pose["position"], pose["orientation"]
+            ) @ np.linalg.inv(body_T_shape(body))
+            body.parent_connection.origin = HomogeneousTransformationMatrix(
+                data=map_T_body, reference_frame=world.root
             )
             after = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
             moved[name] = float(np.linalg.norm(after - before))
@@ -466,6 +470,42 @@ def _remove_body(world, body) -> None:
         if body.parent_connection is not None:
             world.remove_connection(body.parent_connection)
         world.remove_kinematic_structure_entity(body)
+
+
+def body_T_shape(body):
+    """``body``'s frame to the frame of the mesh file that draws it, as a 4x4.
+
+    Identity for the ordinary body, whose origin *is* its mesh's origin. Not identity
+    for one whose frame was deliberately moved off its geometry -- onto the rim of a
+    bowl, onto the handle of a spoon -- which is how the twin says where a gripper
+    should reach, since ``PickUpAction`` always targets the body origin. Isaac knows
+    nothing of that: it spawns a mesh file at the pose it is handed, so the pose that
+    crosses this boundary is always the mesh's, and this is the conversion.
+    """
+    import numpy as np
+
+    shapes = getattr(body, "collision", None)
+    if not shapes:
+        return np.eye(4)
+    return np.asarray(shapes[0].origin.to_np())
+
+
+def shape_pose_in_world(body):
+    """``(position, xyzw)`` of ``body``'s geometry in ``map`` -- what :meth:`place` wants.
+
+    The counterpart of the conversion :meth:`SceneSyncClient.pull` undoes on the way
+    back, so a body with a moved frame stays in one place while crossing both ways.
+    """
+    import numpy as np
+    from semantic_digital_twin.spatial_types.spatial_types import (
+        HomogeneousTransformationMatrix,
+    )
+
+    map_T_shape = np.asarray(body.global_pose.to_np()) @ body_T_shape(body)
+    orientation = np.asarray(
+        HomogeneousTransformationMatrix(data=map_T_shape).to_quaternion().to_np()
+    ).ravel()
+    return map_T_shape[:3, 3].ravel(), orientation
 
 
 def _pose_matrix(position, orientation):

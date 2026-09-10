@@ -18,7 +18,9 @@ says so). What this restores instead is a *snapshot* taken once the scene was fu
 built, settled and parked -- the state a demo actually begins from.
 
 The twin half is :func:`reset_context`, and it is deliberately a separate call: it
-touches nothing Isaac owns, and a plan may well want one without the other.
+touches nothing Isaac owns, and a plan may well want one without the other. So is
+:func:`cancel_motion`, which stops the goal giskard may still be executing -- run it
+first, or the old goal drives out of the pose the reset just restored.
 """
 
 from __future__ import annotations
@@ -79,6 +81,69 @@ class SceneResetClient:
         if not response.success:
             raise RuntimeError(f"scene reset failed: {response.message}")
         return response.message
+
+
+def cancel_motion(context, timeout: float = 5.0) -> str:
+    """Stop the goal giskard is still executing; returns what was found.
+
+    The third half of a reset, and the one neither the sim nor the twin covers. A goal
+    lives on the **giskard server**: interrupting the cell that waits for it only drops
+    the wait, and restarting the notebook does not touch it either. The server goes on
+    running the motion it was handed -- so a scene reset lands in the middle of a plan
+    that is still driving, and the robot walks straight back out of the pose the reset
+    just restored, continuing the operation that was interrupted.
+
+    Two leftovers, and the second is why this is not one line:
+
+    - **The goal.** ``cancel_goal_async`` asks the server to stop.
+      ``ActionServerHandler.cancel_callback`` accepts every cancel and ``ControlLoop``
+      answers ``raise_if_canceled`` by stopping, which zeroes the commanded velocities,
+      so the robot halts rather than coasting on a latched twist.
+    - **The result nobody read.** A goal that ends -- cancelled, aborted, or simply
+      finished after its client walked away -- still delivers its result into
+      ``MyActionClient.result``, where it stays because the ``get_result`` that would
+      have consumed it is gone. The *next* goal then awaits ``self.result`` and finds
+      that one already there, so the next plan fails instantly with the previous run's
+      ``ExecutionCanceledException``. The mailbox is emptied here as well.
+
+    Call it **before** the sim reset: cancelling after it has already let the old goal
+    command a step or two into the restored scene.
+
+    :param context: the CRAM context whose ``giskard_wrapper`` sent the goal. Note that
+        reading that property builds a wrapper when the context has never run a motion,
+        which waits for giskard's action server.
+    :param timeout: seconds to wait for the cancel to be answered and the goal to end.
+    """
+    import time
+
+    from giskardpy.middleware.ros2.exceptions import NoActiveGoalToCancelError
+
+    client = context.giskard_wrapper._client
+    goal_id = client._current_goal_id
+    deadline = time.monotonic() + timeout
+    try:
+        future = context.giskard_wrapper.cancel_goal_async()
+    except NoActiveGoalToCancelError:
+        report = "no active goal"
+    else:
+        while not future.done() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        if not future.done():
+            report = f"goal #{goal_id}: cancel request went unanswered"
+        else:
+            # The server answers the cancel before the motion is actually over; the goal
+            # has ended when its own done callback drops the handle.
+            while client._goal_handle is not None and time.monotonic() < deadline:
+                time.sleep(0.02)
+            report = (
+                f"cancelled goal #{goal_id}"
+                if client._goal_handle is None
+                else f"goal #{goal_id}: cancelled, but it has not ended yet"
+            )
+    if client.result is not None:
+        client.result = None
+        report += ", dropped a stale result"
+    return report
 
 
 def reset_context(world, detach_to_root: bool = True, close_containers: bool = True) -> dict:
