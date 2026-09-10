@@ -71,6 +71,21 @@
     .tab .open-btn:hover { background: rgba(0,0,0,0.35); }
     .tab.active .open-btn { background: rgba(0,0,0,0.15); }
 
+    /* pushed to the right edge; stays hidden until the revision is known */
+    .commit-link {
+      margin-left: auto;
+      display: none;
+      padding: 4px 10px;
+      border: 1px solid #313244;
+      border-radius: 6px;
+      color: #a6adc8;
+      text-decoration: none;
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .commit-link.shown { display: inline-block; }
+    .commit-link:hover { background: #313244; color: #cdd6f4; }
+
     main {
       flex: 1;
       position: relative;
@@ -113,6 +128,7 @@
     <!-- <img class="logo" src="https://cramera.informatik.uni-bremen.de/img/aicor-logo.png" alt="CRAM Workspace"> -->
      <span class="title">CRAM Workspace</span>
     <!-- tabs injected by script -->
+    <a class="commit-link" target="_blank" rel="noopener" title="the commit this workspace is running"></a>
   </header>
   <main></main>
 
@@ -219,6 +235,20 @@
       main.appendChild(wrap);
       frames.push({ wrap, iframes });
     });
+
+    // BINDER_REF_URL, written next to this page by binder/entrypoint.sh. Re-appended so
+    // it is the last header child whatever the markup order, which floats it right.
+    const commitLink = document.querySelector(".commit-link");
+    header.appendChild(commitLink);
+    fetch("version.json", { cache: "no-store" })
+      .then(response => (response.ok ? response.json() : null))
+      .then(version => {
+        if (!version || !version.url) return;
+        commitLink.href = version.url;
+        commitLink.textContent = version.url.split("/").pop().slice(0, 7);
+        commitLink.classList.add("shown");
+      })
+      .catch(() => { /* not on binder: nothing to link to, leave it hidden */ });
 
     function makeDivider(wrap) {
       const divider = document.createElement("div");

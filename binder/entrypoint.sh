@@ -27,5 +27,13 @@ if [ -x "${CRAMERA_PYTHON}" ]; then
     ) > "${CRAMERA_LOG}" 2>&1 &
 fi
 
+# Which commit this pod runs, for the link in the workspace page's header. The page is
+# static and the image carries no .git (see .dockerignore), so the ready-made url
+# BinderHub puts in the environment is written next to the page for it to read.
+if [ -n "${BINDER_REF_URL}" ]; then
+    printf '{"url": "%s"}\n' "${BINDER_REF_URL}" \
+        > "${HOME}/cram-vrb-lab/demos/web_ui/version.json" 2>/dev/null
+fi
+
 # The following line will allow the binderhub start Jupyterlab, should be at the end of the entrypoint.
 exec "$@"
