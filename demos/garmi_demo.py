@@ -32,7 +32,6 @@ os.environ["ISAAC_WINDOW"] = "640x360"
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
 # os.environ["ISAAC_KITCHEN_PROPS"] = "1"
 os.environ["ISAAC_KITCHEN_PROPS"] = "0"
-os.environ["ISAAC_TRANSPORT_PROPS"] = "0"
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
@@ -52,8 +51,8 @@ from cram_vrb_lab.sim.isaac_app import livestream_enabled
 # sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
 #                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 # stream_proc = start_streaming_client() if livestream_enabled() else None
-giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
-                                    spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
+# giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
+#                                     spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
 # %% [markdown]
 # ## CRAM context
@@ -67,6 +66,7 @@ import threading
 import nest_asyncio
 import numpy as np
 import rclpy
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
 from coraplex.datastructures.dataclasses import Context
@@ -334,13 +334,42 @@ for name, stl, collider, mass in (
         mesh=stl,
         collider=collider,
         mass=mass,
-        track=False,
+        track=True,
     )
 print("sync:", scene_sync.apply())
 
 for name in (BOWL_NAME, SPOON_NAME):
     body = world.get_body_by_name(name)
     print(f"  {name:6s} {np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 4)}")
+
+# %%
+# Weld a grasped object to the hand in Isaac for as long as the twin says it is held.
+# A timer rather than a call after the pick, because TransportAction picks up, drives
+# and puts down inside one perform().
+GARMI_PRIM_ROOT = "/garmi"
+_carry_lock = threading.Lock()
+
+
+def _carry_tick():
+    if not _carry_lock.acquire(blocking=False):
+        return
+    try:
+        if scene_sync.sync_attachments(world, GARMI_PRIM_ROOT):
+            print("carry:", scene_sync.apply())
+    except Exception as failure:
+        print(f"  carry sync failed -- {type(failure).__name__}: {failure}")
+    finally:
+        _carry_lock.release()
+
+
+_previous = globals().get("carry_timer")
+if _previous is not None:
+    node.destroy_timer(_previous)
+# Its own callback group: apply() blocks on an ack that arrives on this node, and
+# rclpy puts a node's callbacks in one mutually exclusive group by default.
+carry_timer = node.create_timer(
+    0.1, _carry_tick, callback_group=ReentrantCallbackGroup()
+)
 
 
 # %% [markdown]
@@ -356,14 +385,66 @@ robot.mobile_base.full_body_controlled = False
 drawer_handle = annotate(Drawer, DRAWER)
 drawer_joint = world.get_connection_by_name(f"{DRAWER}_joint")
 
-reset_pos()
-drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
+# reset_pos()
+# drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
 # nudge_base(turn=math.pi / 6)
 
-run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
-work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
+# run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
+# work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
 # work_container(ClosingMotion, drawer_handle, DRAWER_ARM)
 print("opened:", drawer_joint.position)
+
+# %%
+# The annotation, not the body: TransportAction reads .root off its object_designator.
+from coraplex.robot_plans.actions.composite.transporting import TransportAction
+
+end_effector = context.robot.get_right_arm_if_specified().end_effector
+
+# bowl = world.get_semantic_annotations_by_type(Bowl)[0]
+# spoon = world.get_semantic_annotations_by_type(Spoon)[1]
+
+BOWL_TARGET_POINT = Point3.from_iterable([1.6, 5.2, 0.85])
+SPOON_TARGET_POINT = Point3.from_iterable([1.6, 5.3, 0.8])
+
+done = run_plan(sequential([
+    ParkArmsAction(arm=Arms.BOTH),
+    # Note: always need TorsoState.HIGH or next(iter(self)) of CostmapLocation fails
+    # TransportAction(
+    #     object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
+    #     arm=Arms.RIGHT,
+    #     grasp_description=GraspDescription(
+    #         ApproachDirection.RIGHT,
+    #         VerticalAlignment.TOP,
+    #         end_effector,
+    #         rotate_gripper=True,
+    #     ),
+    #     target_location=Pose(
+    #         position=BOWL_TARGET_POINT, reference_frame=world.root
+    #     ),
+    # ),
+    # NavigateAction(Pose(
+    #     Point3.from_iterable(
+    #         [-1, 6.0, 0]
+    #     ),
+    #     Quaternion.from_iterable(
+    #         [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
+    #     ),
+    #     reference_frame=world.root,
+    # )),
+    TransportAction(
+        object_designator=world.get_semantic_annotations_by_type(Spoon)[0],
+        arm=Arms.RIGHT,
+        grasp_description=GraspDescription(
+            ApproachDirection.RIGHT,
+            VerticalAlignment.TOP,
+            rotate_gripper=True,
+            end_effector=end_effector,
+        ),
+        target_location=Pose(
+            position=SPOON_TARGET_POINT, reference_frame=world.root
+        ),
+    ),
+], context=context))
 
 # %% [markdown]
 # ## Reset All

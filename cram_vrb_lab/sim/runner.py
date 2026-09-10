@@ -197,7 +197,8 @@ def build(world, render, setup, spawn_pose, args):
     # restarts physics, which discards it. Taken from the robot's own spec rather
     # than imported, so this stays robot-agnostic.
     retune = (lambda: setup.robot.tune(robot)) if setup.robot.tune else None
-    sync = SceneSyncROS(world, retune=retune)
+    # The robot too: a carried object rides one of its links.
+    sync = SceneSyncROS(world, retune=retune, robot=robot)
     nodes.append(sync)
     # The reset takes the sync bridge so a reset also forgets what was synced in:
     # objects a plan spawned are not part of the scene it should return to.

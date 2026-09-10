@@ -20,20 +20,19 @@ synchronized instead of building its own.
 Running it
 ==========
 
-Needs the Isaac scene and the giskard server already up, and the scene started with
-``ISAAC_TRANSPORT_PROPS=1`` so the two objects the plan carries are actually there::
+Needs the Isaac scene and the giskard server already up::
 
-    ISAAC_TRANSPORT_PROPS=1 binder/isaacsim_python_wrapper.sh demos/sim.py --robot garmi --scene garmi_apartment --spawn-position 0.0 5.0 0.0259 --spawn-yaw 1.5707963267948966
+    binder/isaacsim_python_wrapper.sh demos/sim.py --robot garmi --scene garmi_apartment --spawn-position 0.0 5.0 0.0259 --spawn-yaw 1.5707963267948966
     binder/cram_python_wrapper.sh demos/giskard_server.py --robot garmi --scene garmi_apartment --control-hz 15 --spawn-position 0.0 5.0 0.0259 --spawn-yaw 1.5707963267948966
     binder/cram_python_wrapper.sh demos/garmi_transport_demo.py
 
-Without that variable Isaac renders the flat with nothing in it, the twin still gets
-its bowl and spoon from ``populate_scene``, and the run closes the hand on air --
-which is exactly the phantom-object run
-:data:`~cram_vrb_lab.scenes.garmi_apartment.constants.TRANSPORT_PROPS` exists to
-prevent. Both sides read that one table, so the twin's belief and the physics agree
-by construction; :meth:`GarmiApartmentOnIsaac.align_with_isaac` is what applies it to
-the twin.
+Nothing has to be spawned into the scene beforehand. Upstream's ``populate_scene``
+puts the bowl and the spoon into the twin, and
+:meth:`GarmiApartmentOnIsaac.sync_to_isaac` puts *those same two files* into the
+render at the poses the twin already chose. That replaced a hardcoded prop table
+the sim used to spawn at load time behind an ``ISAAC_TRANSPORT_PROPS`` flag: the
+table had to state the poses a second time, and the two statements drifted apart
+whenever either side moved. One description now, and it belongs to the plan.
 
 ``--simulated`` runs upstream's own kinematic path unchanged and needs neither
 process, which is the reference to compare a real run against.
@@ -45,6 +44,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -63,7 +63,7 @@ from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
 )
 
-from cram_vrb_lab.scenes.garmi_apartment.constants import TRANSPORT_PROPS
+from cram_vrb_lab.sim.scene_sync import SceneSyncClient
 
 # Imported for its side effect. Upstream's build_context passes
 # AlternativeMotion.discover_all(), which returns every AlternativeMotion subclass that
@@ -71,6 +71,15 @@ from cram_vrb_lab.scenes.garmi_apartment.constants import TRANSPORT_PROPS
 # the gripper and opening/closing a container, each carrying the CountSeconds deadline
 # giskard has no equivalent of -- into upstream's context without overriding it.
 import cram_vrb_lab.robots.garmi.motions  # noqa: F401
+
+SETTLE_SECONDS = 1.0
+"""Seconds to let a freshly synced object come to rest before reading it back.
+
+Both objects are placed where the twin put them, which is not where they end up:
+``bowl.stl`` is released above the worktop and ``spoon.stl`` inside a drawer, and
+each drops a little. Pulling before they settle would write the falling pose into
+the twin and leave the plan reaching for a place the object has already left.
+"""
 
 UPSTREAM_DEMO_PATH = (
     REPO
@@ -136,7 +145,7 @@ class GarmiApartmentOnIsaac(upstream.GarmiApartmentDemonstration):
 
         Upstream's demonstration goes in unmodified until a real run shows what it
         cannot do, and each thing it cannot do earns one narrow, commented patch here
-        rather than a fork of the plan. So far there is one: :meth:`align_with_isaac`.
+        rather than a fork of the plan. So far there is one: :meth:`sync_to_isaac`.
 
         What a real run is already known to hit, still unpatched:
 
@@ -163,68 +172,72 @@ class GarmiApartmentOnIsaac(upstream.GarmiApartmentDemonstration):
         :param context: The context the plan is about to be built against; its
             ``world`` is the one the controller is serving on a real run.
         """
-        if self.execution_type is not ExecutionType.SIMULATED:
-            self.align_with_isaac(context)
+        if self.execution_type is ExecutionType.SIMULATED:
+            return
+        self.sync_to_isaac(context)
 
     @staticmethod
-    def align_with_isaac(context: Context) -> None:
-        """Move the twin's bowl and spoon to where Isaac actually simulates them.
+    def sync_to_isaac(context: Context) -> None:
+        """Put the objects upstream spawned into the twin into Isaac as well.
 
-        ``populate_scene`` puts them at upstream's poses, which were written against a
-        world that is stepped kinematically and contains nothing else. Two of those
-        numbers do not survive contact with this scene:
+        ``populate_scene`` is upstream's and spawns ``bowl.stl`` and ``spoon.stl``
+        into the *twin*, which is all a kinematic run needs. A run against physics
+        needs them in the render too, or the hand closes on nothing and
+        ``PickUpAction`` attaches the body anyway, because a kinematic attach cannot
+        fail.
 
-        - ``BOWL_POSE``'s z of 1.0 is not this worktop. It raycasts at 0.945, and the
-          bowl mesh carries its origin at its bounding-box centre, so the twin
-          believes the bowl floats 2 cm above a surface Isaac has it resting on. A
-          reach aimed at the belief closes the hand above the rim.
-        - ``BOWL_POSE``'s x/y stand where nothing is. Isaac puts the bowl where
-          :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.TRANSPORT_PROPS` says,
-          in the free band of worktop between the kitchen props' two rows.
+        The same two files, at the poses the twin already put them at -- so the two
+        sides describe one object rather than two descriptions someone has to keep
+        in step. That is the whole reason this replaced a hardcoded prop table: the
+        table had to state the poses a second time, and the twin's and the render's
+        drifted apart every time either moved.
 
-        The spoon moves too, and by less: upstream's drawer-relative pose resolves to
-        within 16 mm of where
-        :data:`~cram_vrb_lab.scenes.garmi_apartment.constants.TRANSPORT_PROPS` puts
-        it. Applied anyway rather than skipped -- "close enough" is a claim that
-        should be re-derived every run, not assumed.
+        ``track=True``: these are objects physics decides about. Once released they
+        fall, settle, and get knocked around, and the twin should follow rather than
+        keep asserting where the plan last put them.
 
-        The connection is left alone, so the spoon keeps hanging off ``drawer_1`` and
-        still travels with it when the plan pulls it open; only the pose it hangs at
-        changes. ``Connection6DoF.origin`` takes a transform in any frame and converts
-        into the parent's, which is what lets one ``map`` constant drive both.
+        Tracking only makes the sim *publish*, though; ``pull`` is what writes those
+        poses into the twin. This pulls once here, after letting the objects settle,
+        so the plan starts from where they came to rest rather than from where they
+        were released. A plan that wants to know again later calls ``pull`` again --
+        it is deliberately not automatic, because a pose applied mid-motion would
+        move an object under the plan reaching for it.
 
-        Only for a run that is driving Isaac. ``--simulated`` builds its own world
-        with no physics behind it, and there upstream's poses are the correct ones --
-        nothing is standing anywhere for them to disagree with.
+        The colliders are per object and not interchangeable: ``convexDecomposition``
+        holds the bowl's cavity open where a single hull would fill it in.
         """
         world = context.world
-        for prop in TRANSPORT_PROPS:
-            body = world.get_body_by_name(prop.name)
-            box = body.collision.as_bounding_box_collection_in_frame(
-                body
-            ).bounding_box()
-
-            # position[2] is the *surface*; the body's origin is its box centre, so
-            # it sits half a box above it -- the same grounding the Isaac side does by
-            # measuring, in closed form here because the twin has no physics to settle
-            # it. In map for both, ``inside`` included: see TransportProp.position for
-            # the 208 mm this cost when it was stated in the drawer's frame.
-            target = HomogeneousTransformationMatrix.from_xyz_rpy(
-                prop.position[0],
-                prop.position[1],
-                prop.position[2] + box.dimensions[2] / 2,
-                yaw=prop.yaw,
-                reference_frame=world.root,
+        sync = SceneSyncClient(context.ros_node)
+        for name, stl, collider, mass in (
+            (upstream.BOWL_NAME, upstream.BOWL_STL, "convexDecomposition", 0.058),
+            (upstream.SPOON_NAME, upstream.SPOON_STL, "convexDecomposition", 0.05),
+        ):
+            body = world.get_body_by_name(name)
+            pose = np.asarray(body.global_pose.to_np())
+            sync.place(
+                name,
+                pose[:3, 3].ravel(),
+                np.asarray(
+                    HomogeneousTransformationMatrix(data=pose).to_quaternion().to_np()
+                ).ravel(),
+                mesh=stl,
+                collider=collider,
+                mass=mass,
+                track=True,
             )
+        print(f"  synced to Isaac: {sync.apply()}", flush=True)
 
-            before = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
-            body.parent_connection.origin = target
-            after = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
-            print(
-                f"  {prop.name}: {np.round(before, 4)} -> {np.round(after, 4)}"
-                f"  (moved {np.linalg.norm(after - before) * 1000:.1f} mm)",
-                flush=True,
-            )
+        # Settle, then take the settled poses back. bowl.stl is released above the
+        # worktop and spoon.stl inside a drawer; both drop a little before they rest.
+        deadline = time.monotonic() + SETTLE_SECONDS
+        while time.monotonic() < deadline:
+            time.sleep(0.1)
+        moved = sync.pull(world)
+        print(
+            "  pulled back: "
+            + (", ".join(f"{n} {d * 1000:.1f} mm" for n, d in moved.items()) or "nothing"),
+            flush=True,
+        )
 
 
 def main(execution_type: ExecutionType = ExecutionType.REAL) -> None:

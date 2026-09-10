@@ -94,6 +94,8 @@ def encode_request(
     objects: Sequence[Dict],
     remove: Sequence[str] = (),
     request_id: Optional[str] = None,
+    attach: Sequence[Dict] = (),
+    detach: Sequence[str] = (),
 ) -> str:
     """Build the JSON one sync request carries.
 
@@ -106,12 +108,16 @@ def encode_request(
         described.
     :param remove: prim names under :data:`SYNC_ROOT` to delete. Only ever things
         this interface created; it will not touch the apartment or the robot.
+    :param attach: each ``{"name", "link"}`` -- carry the object on that prim.
+    :param detach: names to hand back to physics.
     """
     return json.dumps(
         {
             "id": request_id or str(uuid.uuid4()),
             "objects": list(objects),
             "remove": list(remove),
+            "attach": list(attach),
+            "detach": list(detach),
         }
     )
 
@@ -163,6 +169,10 @@ class SceneSyncClient:
         self._acks: Dict[str, Dict] = {}
         self._pending: List[Dict] = []
         self._remove: List[str] = []
+        self._attach: List[Dict] = []
+        self._detach: List[str] = []
+        self._synced: List[str] = []
+        self._carried: Dict[str, str] = {}
         self._poses: Dict[str, Dict] = {}
         self._publisher = node.create_publisher(String, SCENE_SYNC_TOPIC, 10)
         self._subscription = node.create_subscription(
@@ -286,6 +296,65 @@ class SceneSyncClient:
                 name, position, orientation, size, mass, track, mesh, collider
             )
         )
+        if name not in self._synced:
+            self._synced.append(name)
+
+    def attach(self, name: str, link: str) -> None:
+        """Queue "carry ``name`` rigidly on ``link``", an absolute prim path.
+
+        Nothing in Isaac knows a plan picked something up: the object stays a free
+        rigid body held between two fingers by friction, and the base is teleported
+        rather than driven, so the hand arrives somewhere new having reported no
+        motion and whatever it held is left behind. This asserts the carry instead --
+        the object goes kinematic and rides the link at the offset it was grasped at.
+        """
+        self._attach.append({"name": str(name), "link": str(link)})
+
+    def detach(self, name: str) -> None:
+        """Queue "hand ``name`` back to physics". Send it after the gripper opens."""
+        self._detach.append(str(name))
+
+    def sync_attachments(self, world, prim_root: str) -> List[str]:
+        """Queue the attach/detach that makes Isaac agree with what the twin holds.
+
+        ``PickUpAction`` re-parents the body onto the tool frame and ``PlaceAction``
+        puts it back, so this only has to read that. The tool frame itself has no
+        geometry and need not have a prim, so it walks up to the nearest link that
+        does; both are rigid, and the sim measures the offset from where they are.
+
+        :return: the names whose carry changed. Empty means nothing to :meth:`apply`.
+        """
+        from semantic_digital_twin.robots.robot_parts import AbstractRobot
+
+        robot_bodies = {
+            id(link)
+            for robot in world.get_semantic_annotations_by_type(AbstractRobot)
+            for link in robot.bodies
+        }
+        carried: Dict[str, str] = {}
+        for name in self._synced:
+            try:
+                body = world.get_body_by_name(name)
+            except Exception:
+                continue
+            link = body.parent_kinematic_structure_entity
+            while link is not None and id(link) in robot_bodies:
+                if len(link.collision):
+                    carried[name] = f"{prim_root}/{link.name.name}"
+                    break
+                link = link.parent_kinematic_structure_entity
+
+        changed = []
+        for name, link in carried.items():
+            if self._carried.get(name) != link:
+                self.attach(name, link)
+                changed.append(name)
+        for name in self._carried:
+            if name not in carried:
+                self.detach(name)
+                changed.append(name)
+        self._carried = carried
+        return changed
 
     def remove(self, name: str) -> None:
         """Queue "delete ``name``". Only affects prims under :data:`SYNC_ROOT`."""
@@ -302,8 +371,11 @@ class SceneSyncClient:
             in one piece or not at all.
         """
         request_id = str(uuid.uuid4())
-        payload = encode_request(self._pending, self._remove, request_id)
+        payload = encode_request(
+            self._pending, self._remove, request_id, self._attach, self._detach
+        )
         self._pending, self._remove = [], []
+        self._attach, self._detach = [], []
         deadline = time.monotonic() + (self.timeout if timeout is None else timeout)
 
         # Wait for the bridge's subscription to be matched before publishing. A topic

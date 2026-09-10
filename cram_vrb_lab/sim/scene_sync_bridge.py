@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import threading
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import trimesh
@@ -23,7 +23,7 @@ from isaacsim.core.utils.prims import (
 from pxr import Gf, UsdGeom, UsdPhysics
 from std_msgs.msg import String
 
-from cram_vrb_lab.sim.ros_utils import SimBridge
+from cram_vrb_lab.sim.ros_utils import SimBridge, as_np
 from cram_vrb_lab.sim.scene_sync import (
     SCENE_SYNC_ACK_TOPIC,
     SCENE_SYNC_POSE_TOPIC,
@@ -53,7 +53,7 @@ class SceneSyncROS(SimBridge):
 
     receives_commands = True  # the whole point is the subscription
 
-    def __init__(self, world, retune=None):
+    def __init__(self, world, retune=None, robot=None):
         """
         :param retune: called after physics is restarted, to put the drive tuning
             back. **Deleting a prim mid-simulation requires stopping and replaying
@@ -66,6 +66,7 @@ class SceneSyncROS(SimBridge):
         super().__init__("scene_sync_ros")
         self.world = world
         self.retune = retune
+        self.robot = robot
         self._requests: List[Dict] = []
         self._lock = threading.Lock()
         self.create_subscription(String, SCENE_SYNC_TOPIC, self._on_request, 10)
@@ -75,6 +76,9 @@ class SceneSyncROS(SimBridge):
         self._spawned: Dict[str, Dict] = {}
         self._view: Optional[RigidPrim] = None
         self._viewed: List[str] = []
+        self._attached: Dict[str, Dict] = {}
+        self._carry_view: Optional[RigidPrim] = None
+        self._carry_viewed: List[str] = []
         define_prim(SYNC_ROOT, "Xform")
 
     def _release_view(self) -> None:
@@ -96,6 +100,8 @@ class SceneSyncROS(SimBridge):
         """
         self._view = None
         self._viewed = []
+        self._carry_view = None
+        self._carry_viewed = []
 
     def _on_request(self, message: String) -> None:
         """Queue a request. Deliberately does no stage work; see the class docstring."""
@@ -126,11 +132,20 @@ class SceneSyncROS(SimBridge):
                     "moved": [],
                     "created": [],
                     "removed": [],
+                    "attached": [],
+                    "detached": [],
                     "missing": [],
                     "error": f"{type(failure).__name__}: {failure}",
                 }
                 self.get_logger().error(f"scene sync failed: {report['error']}")
             self._ack.publish(String(data=json.dumps(report)))
+
+        if self._attached:
+            try:
+                self._carry_attached()
+            except Exception as failure:  # noqa: BLE001 - same reason as above
+                self.get_logger().error(f"carry failed: {failure}")
+                self._attached.clear()
 
     def _apply(self, request: Dict) -> Dict:
         report = {
@@ -138,6 +153,8 @@ class SceneSyncROS(SimBridge):
             "moved": [],
             "created": [],
             "removed": [],
+            "attached": [],
+            "detached": [],
             "missing": [],
         }
         for entry in request.get("objects", []):
@@ -172,6 +189,17 @@ class SceneSyncROS(SimBridge):
             elif not entry.get("track") and name in self._tracked:
                 self._tracked.remove(name)
 
+        for entry in request.get("attach", []):
+            name = entry["name"]
+            if self._attach(name, entry["link"]):
+                report["attached"].append(name)
+            else:
+                report["missing"].append(name)
+
+        for name in request.get("detach", []):
+            if self._detach(name):
+                report["detached"].append(name)
+
         for name in request.get("remove", []):
             path = f"{SYNC_ROOT}/{name}"
             # Scoped to SYNC_ROOT by construction: a request cannot name its way out
@@ -182,7 +210,124 @@ class SceneSyncROS(SimBridge):
             self._spawned.pop(name, None)
             if name in self._tracked:
                 self._tracked.remove(name)
+            self._detach(name)
         return report
+
+    @staticmethod
+    def _matrix(position, orientation) -> np.ndarray:
+        """4x4 from a position and a ``(w, x, y, z)`` quaternion."""
+        w, x, y, z = (float(value) for value in orientation)
+        return np.array(
+            Gf.Matrix4d(
+                Gf.Rotation(Gf.Quatd(w, Gf.Vec3d(x, y, z))),
+                Gf.Vec3d(*(float(value) for value in position)),
+            ),
+            dtype=float,
+        ).T
+
+    @staticmethod
+    def _quaternion(matrix: np.ndarray) -> List[float]:
+        """The rotation of a 4x4, as ROS ``(x, y, z, w)``."""
+        rotation = Gf.Matrix4d(*matrix.T.ravel().tolist()).GetOrthonormalized()
+        quaternion = rotation.ExtractRotationQuat()
+        imaginary = quaternion.GetImaginary()
+        return [float(v) for v in imaginary] + [float(quaternion.GetReal())]
+
+    def _link_poses(self, paths: List[str]) -> Dict[str, np.ndarray]:
+        """Link poses off the robot's own articulation view.
+
+        Never a ``RigidPrim``: it decides whether it holds articulation links from
+        ``_prim_paths[0]`` alone, and when it decides wrong its constructor rewrites
+        every prim's xform ops -- which deletes the ``xformOp:transform`` the URDF
+        importer authored and takes the link out of the render.
+        """
+        if self.robot is None:
+            return {}
+        transforms = as_np(self.robot._physics_view.get_link_transforms()).reshape(-1, 7)
+        index_of = {n.split("/")[-1]: i for i, n in enumerate(self.robot.body_names)}
+        poses = {}
+        for path in paths:
+            index = index_of.get(path.split("/")[-1])
+            if index is not None:
+                t = transforms[index]
+                # this view is (x, y, z, w); _matrix takes (w, x, y, z)
+                poses[path] = self._matrix(t[:3], (t[6], t[3], t[4], t[5]))
+        return poses
+
+    def _object_poses(self, paths: List[str]) -> Dict[str, np.ndarray]:
+        """Synced-object poses, from a cached view over prims this bridge created."""
+        if self._carry_viewed != paths:
+            self._carry_view = None
+            self._carry_viewed = []
+            view = RigidPrim(paths, name="scene_sync_carry", reset_xform_properties=False)
+            # else get_world_poses silently falls back to the stale stage
+            view.initialize()
+            self._carry_view, self._carry_viewed = view, paths
+        positions, orientations = self._carry_view.get_world_poses()
+        return {
+            path: self._matrix(positions[i], orientations[i])
+            for i, path in enumerate(paths)
+        }
+
+    @staticmethod
+    def _set_kinematic(prim, kinematic: bool) -> None:
+        UsdPhysics.RigidBodyAPI(prim).CreateKinematicEnabledAttr().Set(bool(kinematic))
+
+    def _attach(self, name: str, link_path: str) -> bool:
+        """Freeze ``name`` onto ``link_path``. The offset is measured on the next step."""
+        path = f"{SYNC_ROOT}/{name}"
+        if not is_prim_path_valid(path) or not self._link_poses([link_path]):
+            return False
+        self._attached[name] = {"link": link_path, "link_T_object": None}
+        self._set_kinematic(self.world.stage.GetPrimAtPath(path), True)
+        return True
+
+    def _detach(self, name: str) -> bool:
+        if self._attached.pop(name, None) is None:
+            return False
+        path = f"{SYNC_ROOT}/{name}"
+        if is_prim_path_valid(path):
+            prim = self.world.stage.GetPrimAtPath(path)
+            self._set_kinematic(prim, False)
+            for attribute in ("physics:velocity", "physics:angularVelocity"):
+                if prim.HasAttribute(attribute):
+                    prim.GetAttribute(attribute).Set(Gf.Vec3f(0.0))
+        return True
+
+    def _carry_attached(self) -> None:
+        """Put every attached object back on its link. Kinematic, so this is the only
+        thing that moves it."""
+        alive = {}
+        for name, carry in list(self._attached.items()):
+            path = f"{SYNC_ROOT}/{name}"
+            if is_prim_path_valid(path):
+                alive[name] = path
+            else:
+                self._attached.pop(name, None)
+        if not alive:
+            self._carry_view, self._carry_viewed = None, []
+            return
+
+        object_poses = self._object_poses(list(alive.values()))
+        link_poses = self._link_poses(
+            list({self._attached[n]["link"] for n in alive})
+        )
+        for name, path in alive.items():
+            carry = self._attached[name]
+            world_T_link = link_poses.get(carry["link"])
+            if world_T_link is None:
+                self._detach(name)
+            elif carry["link_T_object"] is None:
+                carry["link_T_object"] = np.linalg.inv(world_T_link) @ object_poses[path]
+            else:
+                world_T_object = world_T_link @ carry["link_T_object"]
+                self._place(
+                    path,
+                    {
+                        "position": world_T_object[:3, 3].tolist(),
+                        "orientation": self._quaternion(world_T_object),
+                    },
+                )
 
     def _delete(self, path: str) -> None:
         """Remove a prim, around the stop/play that makes it survivable.
@@ -237,6 +382,7 @@ class SceneSyncROS(SimBridge):
                 self.retune()
         self._tracked.clear()
         self._spawned.clear()
+        self._attached.clear()
         return names
 
     def restore_spawned(self) -> List[str]:
@@ -267,6 +413,8 @@ class SceneSyncROS(SimBridge):
         state it wants, so spawning the same name again moves the object that is
         already there rather than adding a second. Nothing accumulates.
         """
+        for name in list(self._attached):
+            self._detach(name)
         restored = []
         for name, pose in self._spawned.items():
             path = f"{SYNC_ROOT}/{name}"
