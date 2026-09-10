@@ -82,6 +82,22 @@
       display: none;
     }
     .frame-wrap.active { display: block; }
+    /* two panes side by side: the left one's width is the stored ratio */
+    .frame-wrap.split.active {
+      display: grid;
+      grid-template-columns: var(--left, 50%) 6px 1fr;
+    }
+    .pane { position: relative; overflow: hidden; }
+    .divider {
+      background: #313244;
+      cursor: col-resize;
+      transition: background .15s;
+    }
+    .divider:hover, .frame-wrap.dragging .divider { background: #89b4fa; }
+    /* while dragging, the pointer must not be swallowed by an iframe: without this the
+       drag stops the moment the cursor crosses into one */
+    .frame-wrap.dragging iframe { pointer-events: none; }
+    body.dragging { user-select: none; }
     iframe {
       width: 100%;
       height: 100%;
@@ -118,16 +134,43 @@
       return BASE + path;                                              // relative to BASE
     }
 
-    // running locally -> no desktop service available, hide that tab
+    // running locally -> no desktop service available, leave that pane out
     const isLocalhost = ["localhost", "127.0.0.1", "::1", ""].includes(window.location.hostname);
 
+    // one entry per tab; a tab with two panes shows them side by side, split by a
+    // draggable divider. The desktop drops out on localhost, which leaves NeemHub the
+    // only pane of its tab and the divider with nothing to split.
     const targets = [
-      { name: "Desktop", path: "desktop/", skipLocal: true },
-      { name: "VS Code", path: "vscode/" },
-      { name: "NeemHub", path: "https://cramera.informatik.uni-bremen.de/?scene=garmi_pick_place" },
-      { name: "JupyterLab", path: "lab" }
-    ].filter(t => !(isLocalhost && t.skipLocal))
-     .map(t => ({ name: t.name, url: resolve(t.path) }));
+      { panes: [
+          { name: "NeemHub", path: "proxy/8711" },
+          { name: "Desktop", path: "desktop/", skipLocal: true },
+      ] },
+      { panes: [{ name: "VS Code", path: "vscode/" }] },
+      { panes: [{ name: "JupyterLab", path: "lab" }] },
+    ].map(t => ({ panes: t.panes.filter(p => !(isLocalhost && p.skipLocal)) }))
+     .filter(t => t.panes.length)
+     .map(t => ({
+       name: t.panes.map(p => p.name).join(" + "),
+       panes: t.panes.map(p => ({ name: p.name, url: resolve(p.path) })),
+     }));
+
+    const STORAGE_TAB = "cram-workspace.tab";
+    const STORAGE_SPLIT = "cram-workspace.split";
+    const DEFAULT_SPLIT = 50;      // percent of the width the left pane takes
+    const MIN_SPLIT = 10;          // keep a grabbable strip of either pane on screen
+
+    // localStorage throws rather than returning null in a browser set to block site
+    // data, and the workspace has to come up anyway -- unstored just means defaults.
+    function stored(key) {
+      try { return window.localStorage.getItem(key); } catch (e) { return null; }
+    }
+    function store(key, value) {
+      try { window.localStorage.setItem(key, value); } catch (e) { /* not fatal */ }
+    }
+
+    const clamp = percent => Math.min(100 - MIN_SPLIT, Math.max(MIN_SPLIT, percent));
+    const storedSplit = parseFloat(stored(STORAGE_SPLIT));
+    let split = Number.isFinite(storedSplit) ? clamp(storedSplit) : DEFAULT_SPLIT;
 
     const header = document.querySelector("header");
     const main = document.querySelector("main");
@@ -137,42 +180,103 @@
     targets.forEach((t, i) => {
       // tab button
       const tab = document.createElement("button");
-      tab.className = "tab" + (i === 0 ? " active" : "");
+      tab.className = "tab";
       tab.innerHTML = `<span>${t.name}</span>`;
 
-      const openBtn = document.createElement("a");
-      openBtn.className = "open-btn";
-      openBtn.href = t.url;
-      openBtn.target = "_blank";
-      openBtn.rel = "noopener";
-      openBtn.title = "open in new tab";
-      openBtn.textContent = "↗";
-      openBtn.addEventListener("click", e => e.stopPropagation());
-      tab.appendChild(openBtn);
+      // one ↗ per pane, so either half of a split tab can be opened on its own
+      t.panes.forEach(pane => {
+        const openBtn = document.createElement("a");
+        openBtn.className = "open-btn";
+        openBtn.href = pane.url;
+        openBtn.target = "_blank";
+        openBtn.rel = "noopener";
+        openBtn.title = `open ${pane.name} in new tab`;
+        openBtn.textContent = "↗";
+        openBtn.addEventListener("click", e => e.stopPropagation());
+        tab.appendChild(openBtn);
+      });
 
       tab.addEventListener("click", () => activate(i));
       header.appendChild(tab);
       tabs.push(tab);
 
-      // frame (lazy: src set on first activation)
+      // panes (lazy: src set on first activation)
       const wrap = document.createElement("div");
-      wrap.className = "frame-wrap" + (i === 0 ? " active" : "");
-      const iframe = document.createElement("iframe");
-      iframe.dataset.src = t.url;
-      wrap.appendChild(iframe);
+      wrap.className = "frame-wrap" + (t.panes.length > 1 ? " split" : "");
+      const iframes = t.panes.map((pane, paneIndex) => {
+        if (paneIndex > 0) wrap.appendChild(makeDivider(wrap));
+        const holder = document.createElement("div");
+        holder.className = "pane";
+        const iframe = document.createElement("iframe");
+        iframe.dataset.src = pane.url;
+        iframe.title = pane.name;
+        holder.appendChild(iframe);
+        wrap.appendChild(holder);
+        return iframe;
+      });
       main.appendChild(wrap);
-      frames.push({ wrap, iframe });
+      frames.push({ wrap, iframes });
     });
+
+    function makeDivider(wrap) {
+      const divider = document.createElement("div");
+      divider.className = "divider";
+      divider.title = "drag to resize, double-click to even out";
+      divider.addEventListener("pointerdown", event => startDrag(event, wrap));
+      divider.addEventListener("dblclick", () => {
+        applySplit(DEFAULT_SPLIT);
+        store(STORAGE_SPLIT, String(split));
+      });
+      return divider;
+    }
+
+    function applySplit(percent) {
+      split = clamp(percent);
+      frames.forEach(f => f.wrap.style.setProperty("--left", split + "%"));
+    }
+
+    function startDrag(event, wrap) {
+      event.preventDefault();
+      wrap.classList.add("dragging");
+      document.body.classList.add("dragging");
+      // captured so a release outside the window still ends the drag, rather than
+      // leaving the divider stuck to the cursor
+      const divider = event.currentTarget;
+      if (divider && divider.setPointerCapture) divider.setPointerCapture(event.pointerId);
+      const onMove = moveEvent => {
+        const bounds = wrap.getBoundingClientRect();
+        if (!bounds.width) return;
+        applySplit(((moveEvent.clientX - bounds.left) / bounds.width) * 100);
+      };
+      const onUp = () => {
+        wrap.classList.remove("dragging");
+        document.body.classList.remove("dragging");
+        if (divider && divider.releasePointerCapture && divider.hasPointerCapture(event.pointerId)) {
+          divider.releasePointerCapture(event.pointerId);
+        }
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        store(STORAGE_SPLIT, String(split));
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    }
 
     function activate(i) {
       tabs.forEach((tab, j) => tab.classList.toggle("active", j === i));
       frames.forEach((f, j) => f.wrap.classList.toggle("active", j === i));
-      const f = frames[i].iframe;
-      if (!f.src && f.dataset.src) f.src = f.dataset.src; // lazy load
+      // lazy load: a pane's src is set the first time its tab is shown
+      frames[i].iframes.forEach(iframe => {
+        if (!iframe.src && iframe.dataset.src) iframe.src = iframe.dataset.src;
+      });
+      store(STORAGE_TAB, targets[i].name);
     }
 
-    // load first frame
-    activate(0);
+    applySplit(split);
+    // by name rather than index: which tabs exist differs between localhost and the
+    // hub, so a stored index could restore a different tab than the one left open
+    const remembered = targets.findIndex(t => t.name === stored(STORAGE_TAB));
+    activate(remembered >= 0 ? remembered : 0);
   </script>
 </body>
 </html>

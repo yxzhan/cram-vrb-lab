@@ -19,13 +19,18 @@ sys.path.insert(0, str(REPO))
 os.environ.setdefault("ISAAC_HEADLESS", "1")
 os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
+# Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
+# executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
+# and "rerun" are the other backends coraplex.visualization knows.
+os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
+
 # os.environ["ISAAC_WINDOW"] = "1920x1080"
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
 # os.environ["ISAAC_WINDOW"] = "854x480"
 # os.environ["ISAAC_WINDOW"] = "768x432"
-# os.environ["ISAAC_WINDOW"] = "640x360"
-os.environ["ISAAC_WINDOW"] = "512x288"
+os.environ["ISAAC_WINDOW"] = "640x360"
+# os.environ["ISAAC_WINDOW"] = "512x288"
 # os.environ["DISPLAY"] = ":0"
 
 
@@ -48,7 +53,7 @@ from launcher import (
 from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
 if not in_notebook:
-    rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
+    # rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
     sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="none",
                             spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
     stream_proc = start_streaming_client() if livestream_enabled() else None
@@ -91,6 +96,7 @@ from coraplex.robot_plans.motions.gripper import (
 )
 from coraplex.robot_plans.motions.robot_body import MoveJointsMotion
 from coraplex.view_manager import ViewManager
+from coraplex.visualization import WorldVisualization
 from giskardpy.data_types.exceptions import GiskardException
 from giskardpy.motion_statechart.exceptions import CollisionViolatedError
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
@@ -124,6 +130,12 @@ threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor").start
 world = fetch_world_from_service(node=node, timeout_seconds=300)
 WorldSynchronizer(_world=world, node=node)
 
+# Started after the world is fetched, so the viewer's first snapshot is the real
+# apartment rather than an empty world. The backend comes from CORAPLEX_VISUALIZATION
+# (set to "cramera" at the top of this file); RViz and the Isaac streaming client are
+# launched separately above and are unaffected by it.
+visualization = WorldVisualization.from_environment(world).start()
+
 robot = world.get_semantic_annotations_by_type(Garmi)
 robot = robot[0] if robot else Garmi.from_world(world)
 
@@ -153,6 +165,11 @@ ARM_PREFIX = {Arms.LEFT: "left", Arms.RIGHT: "right"}
 
 def run_plan(plan, collision_avoidance=True, real_mode=True):
     robot_mode = real_robot if real_mode else simulated_robot
+    # publishes the plan tree to the viewer and lights its nodes up as they run; a
+    # no-op when the backend shows no plan (NONE / RVIZ). execute_single() and
+    # sequential() hand back the node, so the viewer gets the Plan that owns it.
+    if plan.plan is not None:
+        visualization.attach_plan(plan.plan)
     try:
         with robot_mode(collision_avoidance=collision_avoidance):
             plan.perform()
@@ -284,7 +301,12 @@ from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from cram_vrb_lab.paths import CRAM_SUBMODULE_DIR
 
 OBJECT_RESOURCES = CRAM_SUBMODULE_DIR / "coraplex" / "resources" / "objects"
-BOWL_NAME, SPOON_NAME, SPOON2_NAME = "bowl", "spoon", "spoon2"
+# Named after their mesh files on purpose: the live viewer tells a demo object -- one
+# that spawns, moves and gets grasped -- from the scene it stands in by that suffix, and
+# bakes only the scene into the bundle it serves. Without it, every pick and place
+# changes the bundled model and the viewer reloads the page mid-run. The sim spells the
+# suffix with an underscore in its prim names (see cram_vrb_lab.sim.scene_sync).
+BOWL_NAME, SPOON_NAME, SPOON2_NAME = "bowl.stl", "spoon.stl", "spoon2.stl"
 BOWL_STL = str(OBJECT_RESOURCES / "bowl.stl")
 SPOON_STL = str(OBJECT_RESOURCES / "spoon.stl")
 BOWL_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.0, 7.2, 1.0)

@@ -135,6 +135,24 @@ COPY --chown=${NB_USER}:users binder/GARMI-Apartment-autostart.desktop ${HOME}/.
 # Set VSCODE default directory
 ENV CODE_WORKING_DIRECTORY=${REPO_DIR}
 
+#============= cramera (browser viewer for CRAM plans) =============#
+# The visualization front end of CRAM: replays a recorded coraplex run in the
+# browser and, with CORAPLEX_VISUALIZATION=cramera, streams the running one.
+#
+# Cloned here rather than copied from the host checkout (see .dockerignore), and
+# installed LAST on purpose: `uv sync` above prunes everything that is not in
+# uv.lock, so an editable cramera installed before it would be uninstalled again.
+#
+# `git -C cramera` for the submodule: the scenes (cram2/cram-scenes, ~650 MB of
+# recorded bundles) hang off the clone, not off the CRAM repo the RUN sits in.
+# The install goes into the CRAM venv -- the one the demos and the `cram` kernel
+# run on, and the only one that can import coraplex for the live bridge.
+RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
+    git clone --depth 1 https://github.com/yxzhan/cramera.git && \
+    git -C cramera submodule update --init && \
+    .venv/bin/pip install -e cramera
+#===================================================================#
+
 # The entrypoint of the docker image
 COPY --chown=${NB_USER}:users binder/entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]

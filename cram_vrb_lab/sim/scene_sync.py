@@ -37,6 +37,7 @@ PhysX are not thread-safe: see
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from typing import Dict, List, Optional, Sequence
@@ -74,6 +75,22 @@ Its own root, like ``KitchenProps``: these are objects the *twin* asked for, and
 keeping them out of the apartment and out of the load-time prop sets is what makes
 a stage tree readable when something is wrong.
 """
+
+def prim_name(name: str) -> str:
+    """The prim an object of this name is spawned under, below :data:`SYNC_ROOT`.
+
+    An object name doubles as a USD prim name, and prim names are identifiers: a dot
+    starts a property path, so ``bowl.stl`` names no prim at all. The twin's body names
+    carry the mesh suffix on purpose -- the live viewer reads it to tell an object a
+    demo spawns, moves and grasps apart from the scene it stands in, and bakes only the
+    latter into its bundle -- so the suffix crosses to the sim spelled with an
+    underscore.
+
+    :param name: The twin's name for the object.
+    """
+    sanitized = re.sub(r"[^A-Za-z0-9_]", "_", str(name))
+    return sanitized if not sanitized[:1].isdigit() else "_" + sanitized
+
 
 RESEND_INTERVAL = 1.0
 """Seconds between resends of an unacknowledged request.
@@ -140,7 +157,7 @@ def body_to_object(
     on the far side, once, so no caller has to remember which side it is on.
     """
     entry = {
-        "name": str(name),
+        "name": prim_name(name),
         "position": [float(value) for value in position],
         "orientation": [float(value) for value in orientation],
         "track": bool(track),
@@ -193,7 +210,13 @@ class SceneSyncClient:
         it, when :meth:`pull` is called -- and so a caller that stops pulling simply
         stops updating, instead of having the world change under a plan mid-motion.
         """
-        self._poses.update(json.loads(message.data))
+        body_names = {prim_name(name): name for name in self._synced}
+        self._poses.update(
+            {
+                body_names.get(reported, reported): pose
+                for reported, pose in json.loads(message.data).items()
+            }
+        )
 
     def tracked_poses(self) -> Dict[str, Dict]:
         """The newest pose the sim reported for each tracked object, in ``map``.
@@ -312,11 +335,11 @@ class SceneSyncClient:
         motion and whatever it held is left behind. This asserts the carry instead --
         the object goes kinematic and rides the link at the offset it was grasped at.
         """
-        self._attach.append({"name": str(name), "link": str(link)})
+        self._attach.append({"name": prim_name(name), "link": str(link)})
 
     def detach(self, name: str) -> None:
         """Queue "hand ``name`` back to physics". Send it after the gripper opens."""
-        self._detach.append(str(name))
+        self._detach.append(prim_name(name))
 
     def sync_attachments(self, world, prim_root: str) -> List[str]:
         """Queue the attach/detach that makes Isaac agree with what the twin holds.
@@ -362,7 +385,7 @@ class SceneSyncClient:
 
     def remove(self, name: str) -> None:
         """Queue "delete ``name``". Only affects prims under :data:`SYNC_ROOT`."""
-        self._remove.append(str(name))
+        self._remove.append(prim_name(name))
 
     def apply(self, timeout: Optional[float] = None) -> Dict:
         """Send everything queued and block until the sim acknowledges it.

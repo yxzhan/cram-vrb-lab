@@ -25,3 +25,8 @@ ros2_ws
 .claude
 .idea
 .vscode
+
+# cramera and its recorded scene bundles (~650 MB of meshes and trajectories).
+# Both are cloned inside the image by the cramera step at the end of the
+# Dockerfile, so the host clone must stay out of the pinned-submodule COPY layer.
+cognitive_robot_abstract_machine/cramera
