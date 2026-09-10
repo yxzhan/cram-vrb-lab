@@ -16,8 +16,8 @@ in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
 REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-# os.environ.setdefault("ISAAC_HEADLESS", "1")
-# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+os.environ.setdefault("ISAAC_HEADLESS", "1")
+os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # os.environ["ISAAC_WINDOW"] = "1920x1080"
 # os.environ["ISAAC_WINDOW"] = "1280x720"
@@ -35,7 +35,7 @@ os.environ["ISAAC_KITCHEN_PROPS"] = "0"
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
-SPAWN_POSITION = (0, 6.0, 0.0259)
+SPAWN_POSITION = (0, 5.5, 0.0259)
 SPAWN_YAW = math.pi / 2
 
 from launcher import (
@@ -49,7 +49,7 @@ from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
 if not in_notebook:
     rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
-    sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="both",
+    sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="none",
                             spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
     stream_proc = start_streaming_client() if livestream_enabled() else None
     giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
@@ -289,8 +289,8 @@ BOWL_STL = str(OBJECT_RESOURCES / "bowl.stl")
 SPOON_STL = str(OBJECT_RESOURCES / "spoon.stl")
 BOWL_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.0, 7.2, 1.0)
 SPOON_DRAWER_NAME = "drawer_1"
-SPOON_IN_DRAWER_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.00, 0.0, -0.02)
-SPOON2_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.3, 7.2, 1.0)
+SPOON_IN_DRAWER_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.00, 0.0, -0.069)
+SPOON2_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.5, 7.2, 1.0)
 
 # Where the gripper should take hold, in *mesh* coordinates [m].
 #
@@ -307,9 +307,9 @@ SPOON2_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.3, 7.2, 1.0)
 #          the top edge so the fingers straddle the wall instead of the tip.
 #   spoon: the middle of the handle, which is 11 mm wide there; x > 0.03 is the scoop.
 GRASP_POINTS = {
-    BOWL_NAME: (0.0, 0.0677, 0.028),
-    SPOON_NAME: (0.0, 0.0, 0.02),
-    SPOON2_NAME: (0.0, 0.0, 0.02),
+    BOWL_NAME: (0.0677, 0.0, 0.028),
+    SPOON_NAME: (0.0, 0.0, 0.022),
+    SPOON2_NAME: (0.0, 0.0, 0.022),
 }
 
 
@@ -510,25 +510,25 @@ end_effector = context.robot.get_right_arm_if_specified().end_effector
 # bowl = world.get_semantic_annotations_by_type(Bowl)[0]
 # spoon = world.get_semantic_annotations_by_type(Spoon)[1]
 
-BOWL_TARGET_POINT = grasp_target([1.6, 5.2, 0.88], BOWL_NAME)
-SPOON_TARGET_POINT = grasp_target([1.6, 5.3, 0.83], SPOON_NAME)
+BOWL_TARGET_POINT = grasp_target([1.6, 5.1, 0.85], BOWL_NAME)
+SPOON_TARGET_POINT = grasp_target([1.6, 5.3, 0.80], SPOON_NAME)
 
 done = run_plan(sequential([
-    ParkArmsAction(arm=Arms.BOTH),
+    # ParkArmsAction(arm=Arms.BOTH),
     # # Note: always need TorsoState.HIGH or next(iter(self)) of CostmapLocation fails
-    # TransportAction(
-    #     object_designator=world.get_semantic_annotations_by_type(Spoon)[1],
-    #     arm=Arms.RIGHT,
-    #     grasp_description=GraspDescription(
-    #         ApproachDirection.RIGHT,
-    #         VerticalAlignment.TOP,
-    #         rotate_gripper=True,
-    #         end_effector=end_effector,
-    #     ),
-    #     target_location=Pose(
-    #         position=SPOON_TARGET_POINT, reference_frame=world.root
-    #     ),
-    # ),
+    TransportAction(
+        object_designator=world.get_semantic_annotations_by_type(Spoon)[1],
+        arm=Arms.RIGHT,
+        grasp_description=GraspDescription(
+            ApproachDirection.RIGHT,
+            VerticalAlignment.TOP,
+            rotate_gripper=True,
+            end_effector=end_effector,
+        ),
+        target_location=Pose(
+            position=SPOON_TARGET_POINT, reference_frame=world.root
+        ),
+    ),
     TransportAction(
         object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
         arm=Arms.RIGHT,
@@ -536,7 +536,7 @@ done = run_plan(sequential([
             ApproachDirection.RIGHT,
             VerticalAlignment.TOP,
             end_effector,
-            rotate_gripper=True,
+            rotate_gripper=False,
         ),
         target_location=Pose(
             position=BOWL_TARGET_POINT, reference_frame=world.root

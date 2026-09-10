@@ -273,12 +273,72 @@ class SceneSyncROS(SimBridge):
     def _set_kinematic(prim, kinematic: bool) -> None:
         UsdPhysics.RigidBodyAPI(prim).CreateKinematicEnabledAttr().Set(bool(kinematic))
 
+    def _robot_link_paths(self, link_path: str) -> List[str]:
+        """Every link prim of the articulation ``link_path`` belongs to.
+
+        Read off the articulation rather than assumed from the carry link alone: the
+        object hangs from one link, but the ones it is actually in contact with are
+        that link's siblings -- the two fingers -- and while the base drives it can
+        reach the torso as well.
+
+        Falls back to the carry link if the robot is unknown, which filters the pair
+        that matters most rather than nothing at all.
+        """
+        root = link_path.rsplit("/", 1)[0]
+        names = getattr(self.robot, "body_names", None) or []
+        paths = [f"{root}/{str(name).split('/')[-1]}" for name in names]
+        return [path for path in paths if is_prim_path_valid(path)] or [link_path]
+
+    def _filter_collisions(self, path: str, against: List[str]) -> None:
+        """Stop ``path`` colliding with ``against`` for as long as it is carried.
+
+        Without this the weld and the gripper fight each other, and the arm loses.
+        A carried object is kinematic, so it has infinite mass and every contact it
+        has with the hand is resolved entirely on the *robot's* side. Meanwhile the
+        fingers are told to keep pressing -- they are
+        :class:`~cram_vrb_lab.sim.velocity_integrator.StreamedVelocityIntegrator`
+        holding joints, whose leading target *is* the grip force -- and
+        :meth:`_carry_attached` writes the object to the link pose of the step
+        *before* the one about to run, so it trails the hand by one step of its
+        motion. The solver answers the overlap by shoving the articulation, harder
+        the faster the hand moves, which is what the jitter is.
+
+        A weld has no such contact to resolve, and ``physics:filteredPairs`` is how
+        USD says so: the pair never reaches narrow phase, so the hand can hold the
+        mesh exactly where it was grasped without the two pushing at each other. The
+        object goes on colliding with everything else on the stage.
+        """
+        prim = self.world.stage.GetPrimAtPath(path)
+        UsdPhysics.FilteredPairsAPI.Apply(prim).CreateFilteredPairsRel().SetTargets(
+            list(against)
+        )
+
+    def _unfilter_collisions(self, path: str) -> None:
+        """Give ``path`` its collisions with the robot back, on release.
+
+        Cleared wholesale rather than target by target: this bridge authored the prim
+        and is the only thing that filters pairs on it.
+        """
+        prim = self.world.stage.GetPrimAtPath(path)
+        if prim.HasAPI(UsdPhysics.FilteredPairsAPI):
+            UsdPhysics.FilteredPairsAPI(prim).CreateFilteredPairsRel().SetTargets([])
+
     def _attach(self, name: str, link_path: str) -> bool:
-        """Freeze ``name`` onto ``link_path``. The offset is measured on the next step."""
+        """Weld ``name`` onto ``link_path``. The offset is measured on the next step.
+
+        Three writes make the weld: the pair is filtered so the robot and the object
+        cannot push each other, the object turns kinematic so nothing else can move it
+        either, and :meth:`_carry_attached` then carries it on the link from the sim's
+        own measurements. The twin is not consulted again until it says the carry
+        ended -- deliberately, since a pose crossing the boundary every step is a
+        round trip the render cannot afford and a source of disagreement the weld does
+        not need.
+        """
         path = f"{SYNC_ROOT}/{name}"
         if not is_prim_path_valid(path) or not self._link_poses([link_path]):
             return False
         self._attached[name] = {"link": link_path, "link_T_object": None}
+        self._filter_collisions(path, self._robot_link_paths(link_path))
         self._set_kinematic(self.world.stage.GetPrimAtPath(path), True)
         return True
 
@@ -288,6 +348,7 @@ class SceneSyncROS(SimBridge):
         path = f"{SYNC_ROOT}/{name}"
         if is_prim_path_valid(path):
             prim = self.world.stage.GetPrimAtPath(path)
+            self._unfilter_collisions(path)
             self._set_kinematic(prim, False)
             for attribute in ("physics:velocity", "physics:angularVelocity"):
                 if prim.HasAttribute(attribute):
