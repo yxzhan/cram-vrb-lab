@@ -33,13 +33,24 @@ def setup_ros_env():
     os.environ.setdefault("ROS_AUTOMATIC_DISCOVERY_RANGE", "LOCALHOST")
 
 
+# Shared volume layout (/mnt/isaacsim-cache) -> local destination:
+#   cache/                  -> /isaac-sim/kit/cache
+#   semantic_digital_twin/  -> ~/.cache/semantic_digital_twin
+PREBUILT_CACHES = {
+    "cache": "/isaac-sim/kit/cache",
+    "semantic_digital_twin": os.path.expanduser("~/.cache/semantic_digital_twin"),
+}
+
+
 def copy_kit_cache():
-    """Copy the precompiled kit cache if it is not present yet (binder image
-    mounts it at /mnt/isaacsim-cache; drastically shortens the first startup)."""
-    target_dir = "/isaac-sim/kit/cache"
-    source_dir = "/mnt/isaacsim-cache/cache"
-    if os.path.isdir(source_dir) and not os.path.isdir(target_dir):
-        shutil.copytree(source_dir, target_dir)
+    """Copy the prebuilt caches that are not present yet (the binder image
+    mounts them at /mnt/isaacsim-cache; drastically shortens the first startup
+    -- the kit cache skips the shader/extension rebuild, the semantic digital
+    twin cache the mesh parsing of the kitchen scene)."""
+    for name, target_dir in PREBUILT_CACHES.items():
+        source_dir = os.path.join("/mnt/isaacsim-cache", name)
+        if os.path.isdir(source_dir) and not os.path.isdir(target_dir):
+            shutil.copytree(source_dir, target_dir)
 
 
 def parse_scene_args():

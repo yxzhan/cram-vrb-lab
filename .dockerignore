@@ -1,10 +1,3 @@
-# Keep the Docker build context small and reproducible. Everything the image
-# needs is either built inside the image or copied explicitly by the Dockerfile.
-
-# Git metadata. CRAM versions are pinned via the submodule checkout and no
-# package uses setuptools_scm (versions come from `__version__` attrs), so .git
-# is not needed at build time.
-# **/.git
 
 # Python build artifacts / virtualenvs. The image builds its own CRAM .venv via
 # `uv sync`; copying the host one would drag in host-specific paths.
@@ -26,7 +19,3 @@ ros2_ws
 .idea
 .vscode
 
-# cramera and its recorded scene bundles (~650 MB of meshes and trajectories).
-# Both are cloned inside the image by the cramera step at the end of the
-# Dockerfile, so the host clone must stay out of the pinned-submodule COPY layer.
-cognitive_robot_abstract_machine/cramera

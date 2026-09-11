@@ -69,7 +69,6 @@ RUN mkdir -p ${REPO_DIR}
 # NOTE: requires the repo to be cloned with --recurse-submodules so the
 # submodule is present in the build context.
 COPY --chown=${NB_USER}:users cognitive_robot_abstract_machine ${REPO_DIR}/cognitive_robot_abstract_machine
-RUN git config --global --add safe.directory ${REPO_DIR}/cognitive_robot_abstract_machine
 
 # CRAM python environment (uv workspace -> .venv inside the submodule) plus the
 # two packages giskardpy's ROS2 middleware needs that are not in its lockfile.
@@ -121,14 +120,7 @@ COPY --chown=${NB_USER}:users binder/cram_python_wrapper.sh /home/jovyan/.local/
 COPY --chown=${NB_USER}:users binder/cram-kernel.json /opt/conda/share/jupyter/kernels/cram/kernel.json
 
 # Pinned assets (Isaac USD scenes, stretch_urdf submodule) - rarely change.
-COPY --chown=${NB_USER}:users assets ${REPO_DIR}/assets
-
-# Frequently-changing top-level content (package, demos, wrappers).
-# Copied LAST so editing them reuses every cached layer above.
-COPY --chown=${NB_USER}:users cram_vrb_lab ${REPO_DIR}/cram_vrb_lab
-COPY --chown=${NB_USER}:users demos ${REPO_DIR}/demos
-COPY --chown=${NB_USER}:users binder ${REPO_DIR}/binder
-COPY --chown=${NB_USER}:users README.md pyproject.toml ${REPO_DIR}/
+COPY --chown=${NB_USER}:users . ${REPO_DIR}
 RUN git config --global --add safe.directory ${REPO_DIR}
 
 # Set Jupyterlab default directory
