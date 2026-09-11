@@ -16,8 +16,8 @@ in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
 REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-os.environ.setdefault("ISAAC_HEADLESS", "1")
-os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+# os.environ.setdefault("ISAAC_HEADLESS", "1")
+# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
@@ -54,7 +54,7 @@ from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
 if not in_notebook:
     # rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
-    sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="none",
+    sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="rgb",
                             spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
     stream_proc = start_streaming_client() if livestream_enabled() else None
     giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
@@ -179,7 +179,17 @@ def run_plan(plan, collision_avoidance=True, real_mode=True):
     except KeyboardInterrupt:
         from cram_vrb_lab.sim.scene_reset import cancel_motion
         print("  interrupted --", cancel_motion(context))
-        raise
+        return False
+    finally:
+        # A plan moves objects in the twin -- a place leaves one at its target -- and the
+        # render only hears about it here. globals(), because sync_objects belongs to a
+        # later cell, and a failed sync must not be what ends a run.
+        sync = globals().get("sync_objects")
+        if sync is not None:
+            try:
+                sync()
+            except Exception as failure:
+                print(f"  object sync failed -- {type(failure).__name__}: {failure}")
     return True
 
 
@@ -295,106 +305,135 @@ def reset_pos():
 
 # %%
 from semantic_digital_twin.api import BodySpecification, Connection6DoFSpecification
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon
+from semantic_digital_twin.semantic_annotations.semantic_annotations import (
+    Bowl,
+    Bread,
+    Cup,
+    Knife,
+    Milk,
+    Spoon,
+)
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.world_description.geometry import Color
 
 from cram_vrb_lab.paths import CRAM_SUBMODULE_DIR
 
 OBJECT_RESOURCES = CRAM_SUBMODULE_DIR / "coraplex" / "resources" / "objects"
-# Named after their mesh files on purpose: the live viewer tells a demo object -- one
-# that spawns, moves and gets grasped -- from the scene it stands in by that suffix, and
-# bakes only the scene into the bundle it serves. Without it, every pick and place
-# changes the bundled model and the viewer reloads the page mid-run. The sim spells the
-# suffix with an underscore in its prim names (see cram_vrb_lab.sim.scene_sync).
-BOWL_NAME, SPOON_NAME, SPOON2_NAME = "bowl.stl", "spoon.stl", "spoon2.stl"
-BOWL_STL = str(OBJECT_RESOURCES / "bowl.stl")
-SPOON_STL = str(OBJECT_RESOURCES / "spoon.stl")
-BOWL_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.0, 7.2, 1.0)
-SPOON_DRAWER_NAME = "drawer_1"
-SPOON_IN_DRAWER_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.00, 0.0, -0.069)
-SPOON2_POSE = HomogeneousTransformationMatrix.from_xyz_rpy(0.5, 7.2, 1.0)
-
-# Where the gripper should take hold, in *mesh* coordinates [m].
-#
-# The gripper always reaches for the body's own origin: ``PickUpAction`` hands its reach
-# ``Pose(reference_frame=object.root)`` and ``GraspDescription.grasp_pose_sequence``
-# does the same, so nothing downstream offers a grasp offset to pass. Both meshes are
-# centred on their bounding box, which puts that origin in the middle of the bowl's
-# cavity and halfway through the spoon's thickness -- the fingers close on air 3 cm
-# above the table, or into the table. So the *body frame* is what has to move: it is
-# placed on the point below and the mesh is hung off it, and every grasp then aims
-# there.
-#
-#   bowl:  the rim on the +x side (the lip is x 0.065..0.070 at z 0.033), a few mm below
-#          the top edge so the fingers straddle the wall instead of the tip.
-#   spoon: the middle of the handle, which is 11 mm wide there; x > 0.03 is the scoop.
-GRASP_POINTS = {
-    BOWL_NAME: (0.0677, 0.0, 0.028),
-    SPOON_NAME: (0.0, 0.0, 0.022),
-    SPOON2_NAME: (0.0, 0.0, 0.022),
-}
 
 
-def body_T_mesh(name):
-    """The mesh's placement inside the body frame, i.e. ``BodySpecification.mesh``'s
-    ``origin``.
+@dataclass(frozen=True)
+class SceneObject:
+    """One object this demo puts into the twin and into the render."""
 
-    Shifting the mesh by ``-grasp_point`` is the same thing as moving the body origin
-    onto ``grasp_point``, and the second is what we mean.
-    """
-    x, y, z = GRASP_POINTS.get(name, (0.0, 0.0, 0.0))
-    return HomogeneousTransformationMatrix.from_xyz_rpy(-x, -y, -z)
+    name: str
+    mesh: str
+    annotation: type
+    pose: Tuple[float, ...]
+    """Where the *mesh* goes in the parent frame: (x, y, z[, roll, pitch, yaw])."""
+    parent: str | None = None
+    grasp_point: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    """The point of the mesh the body frame is put on, and so the point every grasp
+    aims at -- ``PickUpAction`` always reaches for the body origin."""
+    mass: float = 0.1
+    collider: str = "convexDecomposition"
+    color: Tuple[float, float, float] = (0.80, 0.80, 0.80)
+
+    @property
+    def mesh_path(self) -> str:
+        """Absolute path of the mesh file, the same string both sides load."""
+        return str(OBJECT_RESOURCES / self.mesh)
+
+    @property
+    def parent_T_mesh(self) -> HomogeneousTransformationMatrix:
+        """:attr:`pose` as a matrix."""
+        return HomogeneousTransformationMatrix.from_xyz_rpy(*self.pose)
+
+    @property
+    def self_T_mesh(self) -> HomogeneousTransformationMatrix:
+        """The mesh's placement inside the body frame, i.e. ``BodySpecification.mesh``'s
+        ``origin``: shifting the mesh by ``-grasp_point`` puts the body origin on it."""
+        x, y, z = self.grasp_point
+        return HomogeneousTransformationMatrix.from_xyz_rpy(-x, -y, -z)
 
 
-def grasp_target(point, name):
-    """``point`` -- where the mesh should end up -- as the body-origin target an action
-    takes, since ``PlaceAction`` puts the *origin* at the pose it is given.
+SCENE_OBJECTS = (
+    SceneObject(
+        "bowl", "bowl.stl", Bowl, (0.0, 7.2, 1.0),
+        grasp_point=(0.0677, 0.0, 0.028), mass=0.058, color=(0.20, 0.45, 0.80),
+    ),
+    SceneObject(
+        "spoon", "spoon.stl", Spoon, (0.0, 0.0, -0.069), parent="drawer_1",
+        grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.80, 0.80, 0.0),
+    ),
+    SceneObject(
+        "spoon2", "spoon.stl", Spoon, (0.5, 7.2, 1.0),
+        grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
+    ),
+    SceneObject(
+        "jeroen_cup", "jeroen_cup.stl", Cup, (-0.05, 7.58, 0.9650),
+        mass=0.120, color=(0.90, 0.90, 0.92),
+    ),
+    SceneObject(
+        "milk", "milk.stl", Milk, (0.10, 7.58, 1.0527),
+        mass=1.000, collider="convexHull", color=(0.88, 0.92, 0.96),
+    ),
+    SceneObject(
+        "bread", "bread.stl", Bread, (0.38, 7.58, 0.9943),
+        mass=0.400, collider="convexHull", color=(0.76, 0.55, 0.31),
+    ),
+    SceneObject(
+        "big-knife", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
+        mass=0.100, color=(0.55, 0.57, 0.60),
+    ),
+)
 
-    Only valid for a target with no rotation, which is what the transports below use.
-    """
-    offset = GRASP_POINTS.get(name, (0.0, 0.0, 0.0))
-    return Point3.from_iterable([p + o for p, o in zip(point, offset)])
+OBJECT_BY_NAME = {scene_object.name: scene_object for scene_object in SCENE_OBJECTS}
 
 
-def ensure_object(annotation, name, stl, pose, parent=None):
+def ensure_object(scene_object: SceneObject) -> str:
     """Spawn the object, or put an existing one back where it started.
 
-    Both halves matter after a reset. ``reset_context`` takes a carried object off
-    the gripper with ``move_branch``, which *preserves its world pose* -- so the body
-    is still floating where the hand was, and a spawn guarded on the name alone skips
-    it and then syncs that pose into Isaac. That is the bowl reappearing in the
-    gripper.
-
-    ``pose`` says where the *mesh* goes, as it did before there were grasp points, so
-    the body is placed at ``pose`` composed with the offset that separates the two.
+    The second half matters after a reset: ``reset_context`` takes a carried object off
+    the gripper with ``move_branch``, which preserves its world pose, so the body is
+    left floating where the hand was.
     """
-    self_T_mesh = body_T_mesh(name)
-    parent_T_self = pose @ self_T_mesh.inverse()
+    name = scene_object.name
+    self_T_mesh = scene_object.self_T_mesh
+    parent_T_self = scene_object.parent_T_mesh @ self_T_mesh.inverse()
+    color = Color(*scene_object.color)
+    parent = (
+        None
+        if scene_object.parent is None
+        else world.get_body_by_name(scene_object.parent)
+    )
     if not world.is_kinematic_structure_entity_in_world_by_name(name):
-        annotation.get_annotation_specification(
+        scene_object.annotation.get_annotation_specification(
             name,
             BodySpecification.mesh(
-                name, stl, origin=self_T_mesh, parent_T_self=parent_T_self
+                name, scene_object.mesh_path, color=color, origin=self_T_mesh,
+                parent_T_self=parent_T_self,
             ),
             parent_connection_specification=Connection6DoFSpecification(),
         ).spawn(world, parent=parent)
         return "spawned"
     body = world.get_body_by_name(name)
-    # Re-apply the mesh offset as well: a reset leaves the body in the world, so this is
-    # the only path by which a changed grasp point reaches an object already spawned.
-    # A shape origin is model rather than state, so it goes through modify_world, and
-    # only when it really differs, since that republishes the world. The visual and the
-    # collision shape are one object, so the single write moves both.
+    # A reset leaves the body in the world, so this is the only path by which a changed
+    # grasp point or colour reaches it. Shapes are model rather than state, hence
+    # modify_world, and only when they really differ, since that republishes the world.
     shape = body.collision[0] if len(body.collision) else None
-    if shape is not None and not np.allclose(
-        np.asarray(shape.origin.to_np()), np.asarray(self_T_mesh.to_np())
+    if shape is not None and (
+        not np.allclose(
+            np.asarray(shape.origin.to_np()), np.asarray(self_T_mesh.to_np())
+        )
+        or shape.color != color
     ):
         with world.modify_world():
             shape.origin = self_T_mesh.copy_with_new_reference_frames(body, None)
+            shape.color = color
     target_parent = world.root if parent is None else parent
     world.move_branch(body, target_parent)
-    # ``pose`` is a plain parent-relative matrix, but Connection6DoF.origin now runs it
-    # through ``World.transform``, which refuses a matrix without a reference frame.
+    # Connection6DoF.origin runs the matrix through World.transform, which refuses one
+    # without a reference frame.
     body.parent_connection.origin = parent_T_self.copy_with_new_reference_frames(
         target_parent, body
     )
@@ -402,52 +441,84 @@ def ensure_object(annotation, name, stl, pose, parent=None):
     return "put back"
 
 
-print("bowl:  ", ensure_object(Bowl, BOWL_NAME, BOWL_STL, BOWL_POSE))
-print("spoon: ", ensure_object(
-    Spoon, SPOON_NAME, SPOON_STL, SPOON_IN_DRAWER_POSE,
-    parent=world.get_body_by_name(SPOON_DRAWER_NAME),
-))
-print("spoon2:", ensure_object(Spoon, SPOON2_NAME, SPOON_STL, SPOON2_POSE))
+SPAWN_PUBLISH_PAUSE = 0.5
+"""Seconds between spawns, to keep the world-sync topic from overrunning giskard.
+
+Not politeness -- without it this cell kills the server. Every spawn publishes its whole
+geometry: ``Mesh.to_json`` embeds the vertices rather than the filename, so one object is
+a ~1 MB message (bowl 0.7 MB, spoon 1.0 MB, knife 1.2 MB), and each is followed by a
+state update. Seven objects is 14 messages and ~5 MB in a burst, against a subscription
+whose QoS is ``depth=10`` KEEP_LAST -- so once ten samples sit unread while giskard is
+busy with its control loop, the oldest are *overwritten*, which RELIABLE does not
+protect against because it is a deliberate discard rather than a transport loss.
+
+Lose a **model** block that way and the server dies on the next state update, which
+carries degrees of freedom it has never heard of:
+
+    StateUpdateContainsUnknownDegreesOfFreedomError: Received a WorldStateUpdate
+    containing 7 DOF identifier(s) absent from the world state index
+
+Seven, i.e. exactly the x/y/z/qx/qy/qz/qw of one 6DoF connection: one object's spawn.
+"""
+
+for scene_object in SCENE_OBJECTS:
+    print(f"  {scene_object.name:12s} {ensure_object(scene_object)}")
+    time.sleep(SPAWN_PUBLISH_PAUSE)
 
 # %%
 from cram_vrb_lab.sim.scene_sync import SceneSyncClient, shape_pose_in_world
 
 scene_sync = SceneSyncClient(node)
-for name, stl, collider, mass in (
-    (BOWL_NAME, BOWL_STL, "convexDecomposition", 0.058),
-    (SPOON_NAME, SPOON_STL, "convexDecomposition", 0.05),
-    (SPOON2_NAME, SPOON_STL, "convexDecomposition", 0.05),
-):
-    body = world.get_body_by_name(name)
-    # Isaac spawns the mesh file at the pose it is handed and knows nothing of the twin's
-    # body frames, so what crosses is the mesh's pose, not the body's. ``pull`` undoes
-    # the same offset on the way back.
-    position, orientation = shape_pose_in_world(body)
-    scene_sync.place(
-        name,
-        position,
-        orientation,
-        mesh=stl,
-        collider=collider,
-        mass=mass,
-        track=True,
-    )
-print("sync:", scene_sync.apply())
+_robot_bodies = {id(body) for body in robot.bodies}
 
 
-for name in (BOWL_NAME, SPOON_NAME, SPOON2_NAME):
-    body = world.get_body_by_name(name)
-    print(f"  {name:6s} {np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 4)}")
+def sync_objects(settle=None):
+    """Force the render to the poses the twin holds for :data:`SCENE_OBJECTS`.
+
+    Skips whatever the plan is carrying: the twin parents a grasped object onto the hand
+    and the sim welds it there, so a pose written here would be overridden on the next
+    step.
+
+    :param settle: seconds to let physics settle, after which the settled poses are
+        pulled back into the twin. None to only push.
+    :return: the sim's report, and what ``pull`` moved in the twin.
+    """
+    for scene_object in SCENE_OBJECTS:
+        body = world.get_body_by_name(scene_object.name)
+        if id(body.parent_kinematic_structure_entity) in _robot_bodies:
+            continue
+        # Isaac spawns the mesh file at the pose it is handed and knows nothing of the
+        # twin's body frames, so what crosses is the mesh's pose, not the body's.
+        # ``pull`` undoes the same offset on the way back.
+        position, orientation = shape_pose_in_world(body)
+        scene_sync.place(
+            scene_object.name,
+            position,
+            orientation,
+            mesh=scene_object.mesh_path,
+            collider=scene_object.collider,
+            mass=scene_object.mass,
+            color=scene_object.color,
+            track=True,
+        )
+    report = scene_sync.apply()
+    if settle is None:
+        return report, {}
+    time.sleep(settle)
+    return report, scene_sync.pull(world)
 
 
-from time import sleep
+def print_object_poses(label):
+    print(label)
+    for scene_object in SCENE_OBJECTS:
+        body = world.get_body_by_name(scene_object.name)
+        print(f"  {scene_object.name:15s} "
+              f"{np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 4)}")
 
-sleep(1)
-moved = scene_sync.pull(world)
-print("Object Settled:")
-for name in (BOWL_NAME, SPOON_NAME, SPOON2_NAME):
-    body = world.get_body_by_name(name)
-    print(f"  {name:6s} {np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 4)}")
+
+report, moved = sync_objects(settle=2)
+print("sync:", report)
+print_object_poses("Object Settled:")
 
 
 # %%
@@ -529,11 +600,10 @@ from coraplex.robot_plans.actions.composite.transporting import TransportAction
 
 end_effector = context.robot.get_right_arm_if_specified().end_effector
 
-# bowl = world.get_semantic_annotations_by_type(Bowl)[0]
-# spoon = world.get_semantic_annotations_by_type(Spoon)[1]
-
-BOWL_TARGET_POINT = grasp_target([1.6, 5.1, 0.85], BOWL_NAME)
-SPOON_TARGET_POINT = grasp_target([1.6, 5.3, 0.80], SPOON_NAME)
+# PlaceAction puts the body *origin* here, which grasp_point moved onto the rim / the
+# handle.
+BOWL_TARGET_POINT = Point3.from_iterable([1.6, 5.1, 0.85])
+SPOON_TARGET_POINT = Point3.from_iterable([1.6, 5.3, 0.80])
 
 done = run_plan(sequential([
     # ParkArmsAction(arm=Arms.BOTH),
@@ -591,6 +661,7 @@ done = run_plan(sequential([
 # %%
 time.sleep(10)
 stop()
+sys.exit()
 
 # %% [markdown]
 # ## Reset All

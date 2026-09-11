@@ -119,7 +119,7 @@ def encode_request(
     :param objects: each ``{"name", "position", "orientation"}`` plus, when the sim
         may have to *create* it, either ``"size"`` (x, y, z extents of a box) or
         ``"mesh"`` (an absolute path to a mesh file both sides can read), and
-        optionally ``"mass"`` [kg] and ``"collider"``. An object with neither that
+        optionally ``"mass"`` [kg], ``"collider"`` and ``"color"`` (RGB in 0..1). An object with neither that
         the sim cannot find is reported as missing rather than invented -- silently
         guessing a shape would put geometry in the render that the twin never
         described.
@@ -148,6 +148,7 @@ def body_to_object(
     track: bool = False,
     mesh: Optional[str] = None,
     collider: Optional[str] = None,
+    color: Optional[Sequence[float]] = None,
 ) -> Dict:
     """One entry of :func:`encode_request`'s ``objects``, from plain numbers.
 
@@ -170,6 +171,8 @@ def body_to_object(
         entry["collider"] = str(collider)
     if mass is not None:
         entry["mass"] = float(mass)
+    if color is not None:
+        entry["color"] = [float(value) for value in color][:3]
     return entry
 
 
@@ -286,6 +289,7 @@ class SceneSyncClient:
         track: bool = False,
         mesh: Optional[str] = None,
         collider: Optional[str] = None,
+        color: Optional[Sequence[float]] = None,
     ) -> None:
         """Queue "put ``name`` here". Nothing is sent until :meth:`apply`.
 
@@ -298,6 +302,11 @@ class SceneSyncClient:
             this able to stand in for a hardcoded prop table, because the render and
             the plan are then describing one file rather than two descriptions
             someone has to keep in step.
+        :param color: RGB in 0..1 for an object the sim has to *create*. Only read on
+            creation: it is the look of the geometry, not a pose, so re-placing an
+            object never repaints it. Defaults to
+            :data:`~cram_vrb_lab.sim.scene_sync_bridge.SYNCED_COLOR`. Pass the twin
+            shape's own ``color`` to keep the render and RViz showing one object.
         :param collider: ``physics:approximation`` for a mesh -- ``convexHull``,
             ``convexDecomposition``, ``sdf``. Defaults to ``convexDecomposition``,
             which holds a cavity open where a single hull would fill it in; a thin
@@ -320,7 +329,7 @@ class SceneSyncClient:
         """
         self._pending.append(
             body_to_object(
-                name, position, orientation, size, mass, track, mesh, collider
+                name, position, orientation, size, mass, track, mesh, collider, color
             )
         )
         if name not in self._synced:

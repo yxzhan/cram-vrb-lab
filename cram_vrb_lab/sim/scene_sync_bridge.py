@@ -20,7 +20,7 @@ from isaacsim.core.utils.prims import (
     delete_prim,
     is_prim_path_valid,
 )
-from pxr import Gf, UsdGeom, UsdPhysics
+from pxr import Gf, Sdf, UsdGeom, UsdPhysics, UsdShade
 from std_msgs.msg import String
 
 from cram_vrb_lab.sim.ros_utils import SimBridge, as_np
@@ -32,9 +32,16 @@ from cram_vrb_lab.sim.scene_sync import (
 )
 
 SYNCED_COLOR = (0.9, 0.4, 0.1)
-"""RGB of a body this bridge created. Unlike anything the apartment or the prop
-sets use, so it is obvious in the viewport which geometry came from the twin
-rather than from the scene."""
+"""RGB of a body this bridge created, when the request names no ``color`` of its own.
+Unlike anything the apartment or the prop sets use, so it is obvious in the viewport
+which geometry came from the twin rather than from the scene."""
+
+LOOKS_ROOT = f"{SYNC_ROOT}/Looks"
+"""Where the materials this bridge authors live, one per distinct colour.
+
+Shared rather than one per object: a material is a four-prim subtree, and a demo that
+re-syncs the same handful of objects every run would otherwise grow the stage without
+bound."""
 
 
 class SceneSyncROS(SimBridge):
@@ -79,7 +86,8 @@ class SceneSyncROS(SimBridge):
         self._attached: Dict[str, Dict] = {}
         self._carry_view: Optional[RigidPrim] = None
         self._carry_viewed: List[str] = []
-        define_prim(SYNC_ROOT, "Xform")
+        if not is_prim_path_valid(SYNC_ROOT):
+            define_prim(SYNC_ROOT, "Xform")
 
     def _release_view(self) -> None:
         """Drop the physics view before anything it covers is deleted.
@@ -172,7 +180,17 @@ class SceneSyncROS(SimBridge):
                     # twin never described, so say so instead.
                     report["missing"].append(name)
                     continue
-                self._create(path, entry)
+                try:
+                    self._create(path, entry)
+                except Exception:
+                    # Never leave a half-built prim behind. Creation authors geometry
+                    # first and the rigid body last, so a failure in between leaves a
+                    # path that *exists* -- and the next request would find it valid,
+                    # skip creation, and go on placing a bare mesh with no collider and
+                    # no rigid body for the rest of the session.
+                    if is_prim_path_valid(path):
+                        self._delete(path)
+                    raise
                 report["created"].append(name)
             # Remembered so a reset can put it back where it was asked for; see
             # restore_spawned.
@@ -425,9 +443,12 @@ class SceneSyncROS(SimBridge):
         One stop/play for the whole set rather than one per object, because each is
         a physics restart and each costs the drive tuning a round trip.
         """
+        # Everything under the root except the shared materials, which belong to the
+        # bridge rather than to any one object and outlive all of them.
         names = [
             prim.GetName()
             for prim in self.world.stage.GetPrimAtPath(SYNC_ROOT).GetChildren()
+            if prim.GetPath().pathString != LOOKS_ROOT
         ]
         if not names:
             return []
@@ -517,7 +538,15 @@ class SceneSyncROS(SimBridge):
                 scale=[float(value) for value in entry["size"]],
             )
             prim = self.world.stage.GetPrimAtPath(path)
-        UsdGeom.Gprim(prim).CreateDisplayColorAttr([Gf.Vec3f(*SYNCED_COLOR)])
+        color = tuple(
+            float(value) for value in (entry.get("color") or SYNCED_COLOR)[:3]
+        )
+        UsdGeom.Gprim(prim).CreateDisplayColorAttr([Gf.Vec3f(*color)])
+        # ``displayColor`` alone is a hint: RTX honours it only for geometry that has
+        # no material at all, and anything the object inherits from an ancestor wins
+        # over it -- which is why these came out wearing the apartment's own look. A
+        # material bound on the prim itself is the binding that wins.
+        UsdShade.MaterialBindingAPI.Apply(prim).Bind(self._material(color))
 
         UsdPhysics.CollisionAPI.Apply(prim)
         UsdPhysics.MeshCollisionAPI.Apply(prim).CreateApproximationAttr(
@@ -528,6 +557,42 @@ class SceneSyncROS(SimBridge):
         UsdPhysics.RigidBodyAPI.Apply(prim)
         if "mass" in entry:
             UsdPhysics.MassAPI.Apply(prim).CreateMassAttr(float(entry["mass"]))
+
+    def _material(self, color) -> UsdShade.Material:
+        """A ``UsdPreviewSurface`` of ``color``, authored once and reused.
+
+        Deliberately the preview surface rather than an MDL: it is plain USD, so the
+        stage still opens -- and still looks right -- outside Isaac, which is what the
+        rest of this module assumes of everything it authors.
+        """
+        name = "color_" + "".join(
+            f"{int(round(max(0.0, min(1.0, channel)) * 255)):02x}" for channel in color
+        )
+        path = f"{LOOKS_ROOT}/{name}"
+        if is_prim_path_valid(path):
+            return UsdShade.Material.Get(self.world.stage, path)
+
+        # Guarded, because ``define_prim`` *raises* on a prim that already exists
+        # ("A prim already exists at prim path: ...") rather than returning the one that
+        # is there. The scope is shared by every material, so the second object of a
+        # different colour hit that -- and the exception unwound through ``_apply``,
+        # which abandons the rest of the request: the object whose spawn threw was left
+        # as a bare mesh prim at the stage origin, never placed, and every object behind
+        # it in the request never reached the stage at all.
+        if not is_prim_path_valid(LOOKS_ROOT):
+            define_prim(LOOKS_ROOT, "Scope")
+        material = UsdShade.Material.Define(self.world.stage, path)
+        shader = UsdShade.Shader.Define(self.world.stage, f"{path}/Shader")
+        shader.CreateIdAttr("UsdPreviewSurface")
+        shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
+            Gf.Vec3f(*color)
+        )
+        shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.5)
+        shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(0.0)
+        material.CreateSurfaceOutput().ConnectToSource(
+            shader.ConnectableAPI(), "surface"
+        )
+        return material
 
     def _create_mesh(self, path: str, entry: Dict):
         """Author a ``UsdGeom.Mesh`` from the mesh file the twin loaded.
@@ -553,6 +618,14 @@ class SceneSyncROS(SimBridge):
         )
         geometry.CreateFaceVertexCountsAttr([3] * len(mesh.faces))
         geometry.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
+        # Without normals a mesh whose subdivision scheme is "none" is shaded facet by
+        # facet, which on a curved STL reads as a faceted lump rather than a bowl. One
+        # normal per point, matching the points written above.
+        geometry.CreateNormalsAttr(
+            [Gf.Vec3f(*(float(value) for value in normal))
+             for normal in mesh.vertex_normals]
+        )
+        geometry.SetNormalsInterpolation(UsdGeom.Tokens.vertex)
         prim = geometry.GetPrim()
         # _place writes through whichever ops exist, so give it the pair it expects.
         UsdGeom.Xformable(prim).AddTranslateOp()

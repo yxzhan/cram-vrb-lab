@@ -11,7 +11,7 @@
 # entrypoint execs into, and every failure is a line in the log rather than a pod that
 # does not come up. The wrapper sources the ROS 2 environment, which the live panel's
 # marker overlay needs.
-CRAMERA_PYTHON="${HOME}/cram-vrb-lab/binder/cram_python_wrapper.sh"
+CRAMERA_PYTHON="${PWD}/binder/cram_python_wrapper.sh"
 CRAMERA_LOG="${HOME}/.cramera/viewer.log"
 CRAMERA_PORT=8711
 CRAMERA_RESTART_DELAY=5
