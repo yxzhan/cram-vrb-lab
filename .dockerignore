@@ -4,7 +4,7 @@
 # Git metadata. CRAM versions are pinned via the submodule checkout and no
 # package uses setuptools_scm (versions come from `__version__` attrs), so .git
 # is not needed at build time.
-**/.git
+# **/.git
 
 # Python build artifacts / virtualenvs. The image builds its own CRAM .venv via
 # `uv sync`; copying the host one would drag in host-specific paths.

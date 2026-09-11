@@ -21,10 +21,6 @@ RUN $ISAACSIM_PYTHON_EXE -m pip install \
         jupyter \
         ipywidgets
 
-# Install jupyter kernel of Isaac-sim python
-COPY --chown=${NB_USER}:users binder/isaacsim_python_wrapper.sh /home/jovyan/.local/bin/isaacsim_python_wrapper.sh
-COPY --chown=${NB_USER}:users binder/isaac-kernel.json /opt/conda/share/jupyter/kernels/isaac-sim/kernel.json
-
 # Install UV (builds the giskard venv below)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 #===========================================================#
@@ -32,7 +28,30 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # VSCode extension to view the simulation desktop from code-server
 RUN curl -LO https://github.com/yxzhan/vscode_remote_desktop/releases/download/v0.1.0/vscode-remote-desktop-0.1.0.vsix && \
     code-server --install-extension vscode-remote-desktop-0.1.0.vsix && \
-    rm vscode-remote-desktop-0.1.0.vsix
+    rm vscode-remote-desktop-0.1.0.vsix && \
+    code-server --install-extension lichenxi.sysmonitor
+
+# Isaac Sim WebRTC streaming client: the desktop viewer for the stream a sim
+# started with ISAAC_LIVESTREAM=1 serves on port 49100 (see
+# demos/launcher.py start_streaming_client). apt-get resolves the .deb's own
+# dependencies, which dpkg -i would not.
+ENV ISAACSIM_STREAMING_CLIENT_VERSION="2.0.0"
+RUN cd /tmp && \
+    wget --no-check-certificate https://downloads.isaacsim.nvidia.com/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \
+    sudo apt-get update && \
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        /tmp/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \
+    sudo rm -rf /var/lib/apt/lists/* && \
+    rm /tmp/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb
+
+RUN cd /tmp && \
+    wget https://github.com/VirtualGL/virtualgl/releases/download/3.1.5/virtualgl_3.1.5_amd64.deb && \
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ./virtualgl_3.1.5_amd64.deb && \
+    rm ./virtualgl_3.1.5_amd64.deb
+
+RUN sudo apt-get update && \
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git-lfs && \
+    git lfs install
 
 # Python packages for the jupyter env (rarely changes).
 USER ${NB_USER}
@@ -56,7 +75,8 @@ RUN git config --global --add safe.directory ${REPO_DIR}/cognitive_robot_abstrac
 # two packages giskardpy's ROS2 middleware needs that are not in its lockfile.
 RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
     ~/.local/bin/uv sync && \
-    .venv/bin/pip install nest_asyncio argcomplete usd-core
+    .venv/bin/pip install nest_asyncio argcomplete usd-core && \
+    rm -rf ~/.cache/uv
 
 # Full CRAM ROS 2 workspace (overlay at ${REPO_DIR}/ros2_ws). The setup script
 # lives in the submodule and clones the code-iai / cram2 description and message
@@ -69,40 +89,39 @@ RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
 # (otherwise the mesh files are left as LFS pointer stubs). The host's ros2_ws is
 # excluded via .dockerignore and rebuilt fresh here, so there is no hand-made
 # json_msgs to collide with the one in cram_ros2_packages.
-RUN sudo apt-get update && \
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git-lfs && \
-    git lfs install && \
-    OVERLAY_WS=${REPO_DIR}/ros2_ws \
+RUN  OVERLAY_WS=${REPO_DIR}/ros2_ws \
         bash ${REPO_DIR}/cognitive_robot_abstract_machine/.github/docker/setup_ros_workspace.sh && \
     sudo rm -rf /var/lib/apt/lists/*
+
+#============= cramera (browser viewer for CRAM plans) =============#
+# The visualization front end of CRAM: replays a recorded coraplex run in the
+# browser and, with CORAPLEX_VISUALIZATION=cramera, streams the running one.
+#
+# Cloned here rather than copied from the host checkout (see .dockerignore), and
+# installed LAST on purpose: `uv sync` above prunes everything that is not in
+# uv.lock, so an editable cramera installed before it would be uninstalled again.
+#
+# `git -C cramera` for the submodule: the scenes (cram2/cram-scenes, ~650 MB of
+# recorded bundles) hang off the clone, not off the CRAM repo the RUN sits in.
+# The install goes into the CRAM venv -- the one the demos and the `cram` kernel
+# run on, and the only one that can import coraplex for the live bridge.
+RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
+    git clone --depth 1 https://github.com/yxzhan/cramera.git && \
+    git -C cramera submodule update --init && \
+    .venv/bin/pip install -e cramera
 #===================================================================#
 
 # Install jupyter kernel of the CRAM venv python. The wrapper sources the ROS 2
 # environment and the ros2_ws overlay, so notebooks on this kernel can import
 # rclpy/json_msgs without the jupyter server having sourced anything.
+# Install jupyter kernel of Isaac-sim python
+COPY --chown=${NB_USER}:users binder/isaacsim_python_wrapper.sh /home/jovyan/.local/bin/isaacsim_python_wrapper.sh
+COPY --chown=${NB_USER}:users binder/isaac-kernel.json /opt/conda/share/jupyter/kernels/isaac-sim/kernel.json
 COPY --chown=${NB_USER}:users binder/cram_python_wrapper.sh /home/jovyan/.local/bin/cram_python_wrapper.sh
 COPY --chown=${NB_USER}:users binder/cram-kernel.json /opt/conda/share/jupyter/kernels/cram/kernel.json
 
 # Pinned assets (Isaac USD scenes, stretch_urdf submodule) - rarely change.
 COPY --chown=${NB_USER}:users assets ${REPO_DIR}/assets
-
-# Isaac Sim WebRTC streaming client: the desktop viewer for the stream a sim
-# started with ISAAC_LIVESTREAM=1 serves on port 49100 (see
-# demos/launcher.py start_streaming_client). apt-get resolves the .deb's own
-# dependencies, which dpkg -i would not.
-ENV ISAACSIM_STREAMING_CLIENT_VERSION="2.0.0"
-RUN cd /tmp && \
-    wget --no-check-certificate https://downloads.isaacsim.nvidia.com/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \
-    sudo apt-get update && \
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        /tmp/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb && \
-    sudo rm -rf /var/lib/apt/lists/* && \
-    rm /tmp/isaacsim-webrtc-streaming-client-${ISAACSIM_STREAMING_CLIENT_VERSION}-linux-x86_64.deb
-
-RUN cd /tmp && \
-    wget https://github.com/VirtualGL/virtualgl/releases/download/3.1.5/virtualgl_3.1.5_amd64.deb && \
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ./virtualgl_3.1.5_amd64.deb && \
-    rm ./virtualgl_3.1.5_amd64.deb
 
 # Frequently-changing top-level content (package, demos, wrappers).
 # Copied LAST so editing them reuses every cached layer above.
@@ -111,8 +130,6 @@ COPY --chown=${NB_USER}:users demos ${REPO_DIR}/demos
 COPY --chown=${NB_USER}:users binder ${REPO_DIR}/binder
 COPY --chown=${NB_USER}:users README.md pyproject.toml ${REPO_DIR}/
 RUN git config --global --add safe.directory ${REPO_DIR}
-
-RUN code-server --install-extension lichenxi.sysmonitor
 
 # Set Jupyterlab default directory
 WORKDIR ${REPO_DIR}
@@ -134,23 +151,6 @@ COPY --chown=${NB_USER}:users binder/GARMI-Apartment-autostart.desktop ${HOME}/.
 
 # Set VSCODE default directory
 ENV CODE_WORKING_DIRECTORY=${REPO_DIR}
-
-#============= cramera (browser viewer for CRAM plans) =============#
-# The visualization front end of CRAM: replays a recorded coraplex run in the
-# browser and, with CORAPLEX_VISUALIZATION=cramera, streams the running one.
-#
-# Cloned here rather than copied from the host checkout (see .dockerignore), and
-# installed LAST on purpose: `uv sync` above prunes everything that is not in
-# uv.lock, so an editable cramera installed before it would be uninstalled again.
-#
-# `git -C cramera` for the submodule: the scenes (cram2/cram-scenes, ~650 MB of
-# recorded bundles) hang off the clone, not off the CRAM repo the RUN sits in.
-# The install goes into the CRAM venv -- the one the demos and the `cram` kernel
-# run on, and the only one that can import coraplex for the live bridge.
-RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine && \
-    git clone --depth 1 https://github.com/yxzhan/cramera.git && \
-    git -C cramera submodule update --init && \
-    .venv/bin/pip install -e cramera
 #===================================================================#
 
 # The entrypoint of the docker image
