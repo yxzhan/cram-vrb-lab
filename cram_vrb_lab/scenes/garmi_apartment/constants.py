@@ -227,18 +227,19 @@ The rays come back 0.945 across the whole free run.
    x = 0.56.
 """
 
-DINING_TABLE_TOP = (1.85, 4.78, 0.771)
+DINING_TABLE_TOP = (1.85, 4.78, 0.760)
 """Centre of the dining table, in ``map``, at the height an object rests at.
 
-Raycast like :data:`KITCHEN_WORKTOP`, and 0.771 everywhere on the top: the whole
-surface is usable, 0.85 m across x by 1.35 m along y (rendered bounding box
+The whole surface is usable, 0.85 m across x by 1.35 m along y (rendered bounding box
 x in [1.433, 2.283], y in [4.101, 5.452]).
 
-The 11 mm between this and the top of the *visual* mesh at 0.760 is the table's own
-collider: it ships from ``world.usda`` as a ``convexDecomposition`` approximation,
-which does not follow the mesh exactly. Nothing to correct -- 0.771 is where an object
-comes to rest, and the render shows it resting on the table -- but it is the reason a
-number measured off the geometry is the wrong one to place from.
+**0.760, not the 0.771 this used to say.** Raycast like :data:`KITCHEN_WORKTOP`, the old
+value was where the table's *shipped* collider put an object: ``world.usda`` approximates
+it as a ``convexDecomposition``, which sits 11 mm above the visual mesh and fills the
+space under the top. :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.use_mjcf_collision_boxes`
+replaces that with the boxes ``scene-bodies.xml`` carries -- the same ones giskard plans
+against -- whose top face is the mesh's own 0.760. So the number measured off the
+geometry is now also the number to place from, and both sides agree on it.
 """
 
 # --- Kitchen objects on the cabinet worktop ---------------------------------

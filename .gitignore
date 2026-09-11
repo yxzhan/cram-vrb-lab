@@ -24,3 +24,5 @@ vrb_lab_page.md
 
 # Written at container start-up by binder/entrypoint.sh
 demos/web_ui/version.json
+isaac_sim.log
+giskard_server.log

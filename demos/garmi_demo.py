@@ -54,7 +54,7 @@ from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
 if not in_notebook:
     # rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
-    sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="rgb",
+    sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="none",
                             spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
     stream_proc = start_streaming_client() if livestream_enabled() else None
     giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,

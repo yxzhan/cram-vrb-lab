@@ -612,13 +612,110 @@ def Scope "Root"
 
                     over "Geom"
                     {
+                        # The table's collision geometry is the five boxes below -- the
+                        # top slab and four legs -- not an approximation of its mesh.
+                        # They are the same boxes the digital twin plans against, written
+                        # by hand in
+                        # ros2_ws/src/iai_maps/iai_garmi_apartment/mjcf/scene-bodies.xml
+                        # (body "dining_table_0", class="collision"). The shipped
+                        # convexDecomposition filled the space under the top and rounded
+                        # the legs into it, so giskard refused reaches the render allowed
+                        # and allowed ones it did not have.
+                        #
+                        # physics:collisionEnabled = 0 turns the mesh's own collider off
+                        # while leaving it as the visual; the boxes sit under the same
+                        # rigid body, so they are its collision shapes and its authored
+                        # mass is spread over them. purpose = "guide" keeps them out of
+                        # the render -- enable Show By Type > Guide to see them.
+                        #
+                        # The numbers are the MJCF's own, divided by this asset's
+                        # xformOp:scale = (0.8439577, 1, 1): the MJCF carries real metres
+                        # while children here are pre-scale, so the top's 1.3504 m becomes
+                        # 1.6000802. MuJoCo's box "size" is a half-extent, hence the 2x.
+                        # Static, the same way CoffeeTable above is: the rigid body the
+                        # asset applies is *deleted* rather than disabled, so the five
+                        # boxes below are plain static colliders and there is no mass or
+                        # inertia on this prim at all. The table is furniture and nothing
+                        # here is meant to shove it -- as a dynamic body the base brushing
+                        # a leg moved it, and the twin never heard about it.
+                        #
+                        # Deleting beats disabling for a second reason: a prim that still
+                        # carries PhysicsRigidBodyAPI with rigidBodyEnabled = 0 is counted
+                        # by anything that scans the stage for rigid bodies but is missing
+                        # from PhysX's tensor view, which shifted every index past it and
+                        # took the simulator down on startup (see
+                        # cram_vrb_lab.sim.scene_reset_bridge._is_enabled).
+                        #
+                        # The twin agrees: scene-bodies.xml gives this body a <freejoint/>,
+                        # which MJCFParser turns into a passive Connection6DoF that adds no
+                        # variable to giskard's QP, so no goal can drive the table there
+                        # either.
                         over "body" (
-                            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI", "PhysicsMassAPI", "PhysicsRigidBodyAPI", "PhysxTriangleMeshSimplificationCollisionAPI", "PhysxConvexDecompositionCollisionAPI"]
+                            delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI"]
+                            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsMeshCollisionAPI"]
                         )
                         {
-                            uniform token physics:approximation = "convexDecomposition"
-                            bool physics:kinematicEnabled = 0
-                            float physics:mass = 25
+                            bool physics:collisionEnabled = 0
+
+                            # table top
+                            def Cube "collision_00" (
+                                prepend apiSchemas = ["PhysicsCollisionAPI"]
+                            )
+                            {
+                                double size = 1
+                                token purpose = "guide"
+                                double3 xformOp:translate = (0.0, 0.0, 0.33)
+                                float3 xformOp:scale = (1.6000802, 0.85, 0.1)
+                                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                            }
+
+                            # leg +x +y
+                            def Cube "collision_01" (
+                                prepend apiSchemas = ["PhysicsCollisionAPI"]
+                            )
+                            {
+                                double size = 1
+                                token purpose = "guide"
+                                double3 xformOp:translate = (0.7556066, 0.38, -0.05)
+                                float3 xformOp:scale = (0.088867, 0.09, 0.66)
+                                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                            }
+
+                            # leg +x -y
+                            def Cube "collision_02" (
+                                prepend apiSchemas = ["PhysicsCollisionAPI"]
+                            )
+                            {
+                                double size = 1
+                                token purpose = "guide"
+                                double3 xformOp:translate = (0.7556066, -0.38, -0.05)
+                                float3 xformOp:scale = (0.088867, 0.09, 0.66)
+                                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                            }
+
+                            # leg -x +y
+                            def Cube "collision_03" (
+                                prepend apiSchemas = ["PhysicsCollisionAPI"]
+                            )
+                            {
+                                double size = 1
+                                token purpose = "guide"
+                                double3 xformOp:translate = (-0.7556066, 0.38, -0.05)
+                                float3 xformOp:scale = (0.088867, 0.09, 0.66)
+                                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                            }
+
+                            # leg -x -y
+                            def Cube "collision_04" (
+                                prepend apiSchemas = ["PhysicsCollisionAPI"]
+                            )
+                            {
+                                double size = 1
+                                token purpose = "guide"
+                                double3 xformOp:translate = (-0.7556066, -0.38, -0.05)
+                                float3 xformOp:scale = (0.088867, 0.09, 0.66)
+                                uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+                            }
                         }
                     }
                 }
@@ -1027,75 +1124,2120 @@ def Scope "Root"
                     double3 xformOp:translate = (0.9000000134110451, 7.420769929885864, 1.0000000337955655)
                     uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"]
 
-                    # The handles are colliders of the door/drawer they sit on, not
-                    # bodies of their own, so their overrides live one level down.
-                    over "door_1"
+                    # === collision: the MJCF twin's shapes, not the asset's ===
+                    #
+                    # Every collider below is generated from
+                    # ros2_ws/src/iai_maps/iai_garmi_apartment/mjcf/scene-bodies.xml --
+                    # body "kitchen_cabinet" with its drawers, doors and handles -- by
+                    # composing its class="collision" geoms through their <frame>s into map
+                    # coordinates and back into each USD body's frame. MuJoCo box "size" is
+                    # a half-extent, hence the 2x on the scales; its cylinders run along z,
+                    # as USD's do.
+                    #
+                    # Each mesh keeps its geometry and loses its collider
+                    # (physics:collisionEnabled = 0). The asset approximated every part as
+                    # a convex hull or decomposition while the twin plans against these
+                    # shapes, and the two disagreeing is what this removes. The sink stays
+                    # open: the carcase's boxes are the basin's own walls and rim, their top
+                    # faces at 0.945, which is the height KITCHEN_WORKTOP records.
+                    #
+                    # A handle is a collider of the door or drawer it sits on rather than a
+                    # body of its own, so its cylinder is authored on that body.
+                    #
+                    # purpose = "guide" keeps these out of the render; enable
+                    # Show By Type > Guide in the viewport to see them.
+                    over "Static"
                     {
-                        over "door_1_handle"
+                        over "geom"
                         {
-                            over "geom" (
-                                prepend apiSchemas = ["PhysxConvexDecompositionCollisionAPI"]
-                            )
-                            {
-                                uniform token physics:approximation = "convexDecomposition"
-                            }
+                            bool physics:collisionEnabled = 0
                         }
-                    }
 
-                    over "door_2"
-                    {
-                        over "door_2_handle"
+                        # MJCF body "kitchen_cabinet": 99 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
                         {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.018, 0.56, 0.8)
+                            double3 xformOp:translate = (1.2363, 7.44207, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
-                    }
-
-                    over "door_3"
-                    {
-                        over "door_3_handle"
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
                         {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.018, 0.56, 0.8)
+                            double3 xformOp:translate = (1.6683, 7.44207, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
-                    }
-
-                    over "door_4"
-                    {
-                        over "door_4_handle"
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
                         {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.414, 0.56, 0.018)
+                            double3 xformOp:translate = (1.4523, 7.44207, 0.109)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.404, 0.016, 0.032)
+                            double3 xformOp:translate = (1.4523, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.01, 0.018, 0.032)
+                            double3 xformOp:translate = (1.2478, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.01, 0.018, 0.032)
+                            double3 xformOp:translate = (1.6568, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.414, 0.51, 0.018)
+                            double3 xformOp:translate = (1.4523, 7.44207, 0.409)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.424, 0.01, 0.787)
+                            double3 xformOp:translate = (1.4523, 7.69957, 0.5065)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_08" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.414, 0.018, 0.08)
+                            double3 xformOp:translate = (1.4523, 7.68807, 0.86)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_09" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (1.2823, 7.66107, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_10" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (1.2823, 7.65487, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_11" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (1.2823, 7.65477, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_12" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (1.6223, 7.66107, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_13" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (1.6223, 7.65487, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_14" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (1.6223, 7.65477, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_15" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (1.2823, 7.24807, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_16" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (1.2823, 7.24187, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_17" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (1.2823, 7.24177, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_18" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (1.6223, 7.24807, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_19" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (1.6223, 7.24187, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_20" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (1.6223, 7.24177, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_21" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0572, 0.0978, 0.01)
+                            double3 xformOp:translate = (1.0023, 7.43617, 0.7199)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_22" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0582, 0.0996, 0.0272)
+                            double3 xformOp:translate = (1.0023, 7.43617, 0.7374)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_23" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.4, 0.076, 0.2)
+                            double3 xformOp:translate = (1.0023, 7.63377, 0.856)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_24" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.4, 0.026, 0.2)
+                            double3 xformOp:translate = (1.0023, 7.22477, 0.856)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_25" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.016, 0.46, 0.2)
+                            double3 xformOp:translate = (1.1943, 7.44177, 0.856)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_26" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.016, 0.46, 0.2)
+                            double3 xformOp:translate = (0.8102999, 7.44177, 0.856)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_27" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.4, 0.46, 0.016)
+                            double3 xformOp:translate = (1.0023, 7.44207, 0.76)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_28" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0502, 0.1494, 0.1416)
+                            double3 xformOp:translate = (1.1421, 7.58437, 1.0278)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_29" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.018, 0.56, 0.8)
+                            double3 xformOp:translate = (0.7862999, 7.44207, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_30" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.018, 0.56, 0.8)
+                            double3 xformOp:translate = (1.2183, 7.44207, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_31" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.414, 0.56, 0.018)
+                            double3 xformOp:translate = (1.0023, 7.44207, 0.109)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_32" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.404, 0.016, 0.032)
+                            double3 xformOp:translate = (1.0023, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_33" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.01, 0.018, 0.032)
+                            double3 xformOp:translate = (0.7977999, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_34" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.01, 0.018, 0.032)
+                            double3 xformOp:translate = (1.2068, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_35" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.414, 0.51, 0.018)
+                            double3 xformOp:translate = (1.0023, 7.44207, 0.509)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_36" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.424, 0.01, 0.787)
+                            double3 xformOp:translate = (1.0023, 7.69957, 0.5065)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_37" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.414, 0.018, 0.08)
+                            double3 xformOp:translate = (1.0023, 7.68807, 0.86)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_38" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (0.8322999, 7.66107, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_39" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (0.8322999, 7.65487, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_40" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (0.8322999, 7.65477, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_41" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (1.1723, 7.66107, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_42" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (1.1723, 7.65487, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_43" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (1.1723, 7.65477, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_44" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (0.8322999, 7.24807, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_45" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (0.8322999, 7.24187, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_46" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (0.8322999, 7.24177, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_47" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (1.1723, 7.24807, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_48" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (1.1723, 7.24187, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_49" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (1.1723, 7.24177, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_50" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.018, 0.56, 1.9)
+                            double3 xformOp:translate = (1.6863, 7.44207, 1.05)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_51" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.018, 0.56, 1.9)
+                            double3 xformOp:translate = (2.2683, 7.44207, 1.05)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_52" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.559, 0.018)
+                            double3 xformOp:translate = (1.9773, 7.44257, 1.991)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_53" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.559, 0.018)
+                            double3 xformOp:translate = (1.9773, 7.44257, 0.109)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_54" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.51, 0.018)
+                            double3 xformOp:translate = (1.9773, 7.44207, 0.5795)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_55" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.534, 0.018)
+                            double3 xformOp:translate = (1.9773, 7.43007, 1.05)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_56" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.51, 0.018)
+                            double3 xformOp:translate = (1.9773, 7.44207, 1.2807)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_57" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.51, 0.018)
+                            double3 xformOp:translate = (1.9773, 7.44207, 1.5115)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_58" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.51, 0.018)
+                            double3 xformOp:translate = (1.9773, 7.44207, 1.7422)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_59" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.574, 0.01, 1.874)
+                            double3 xformOp:translate = (1.9773, 7.69957, 1.05)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_60" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.018, 0.08)
+                            double3 xformOp:translate = (1.9773, 7.71107, 0.564)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_61" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.018, 0.08)
+                            double3 xformOp:translate = (1.9773, 7.71107, 1.05)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_62" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.564, 0.018, 0.08)
+                            double3 xformOp:translate = (1.9773, 7.71107, 1.536)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_63" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (1.7323, 7.66107, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_64" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (1.7323, 7.65487, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_65" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (1.7323, 7.65477, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_66" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (2.2223, 7.66107, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_67" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (2.2223, 7.65487, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_68" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (2.2223, 7.65477, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_69" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (1.7323, 7.24807, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_70" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (1.7323, 7.24187, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_71" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (1.7323, 7.24177, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_72" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (2.2223, 7.24807, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_73" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (2.2223, 7.24187, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_74" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (2.2223, 7.24177, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_75" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.018, 0.56, 0.8)
+                            double3 xformOp:translate = (-0.1637001, 7.44207, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_76" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.018, 0.56, 0.8)
+                            double3 xformOp:translate = (0.2682999, 7.44207, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_77" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.414, 0.56, 0.018)
+                            double3 xformOp:translate = (0.05229993, 7.44207, 0.109)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_78" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.404, 0.016, 0.032)
+                            double3 xformOp:translate = (0.05229993, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_79" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.01, 0.018, 0.032)
+                            double3 xformOp:translate = (-0.1522001, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_80" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.01, 0.018, 0.032)
+                            double3 xformOp:translate = (0.2567999, 7.17107, 0.884)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_81" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.424, 0.01, 0.787)
+                            double3 xformOp:translate = (0.05229993, 7.69957, 0.5065)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_82" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.414, 0.018, 0.08)
+                            double3 xformOp:translate = (0.05229993, 7.68807, 0.86)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_83" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (-0.1177001, 7.66107, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_84" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (-0.1177001, 7.65487, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_85" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (-0.1177001, 7.65477, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_86" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (0.2222999, 7.66107, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_87" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (0.2222999, 7.65487, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_88" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (0.2222999, 7.65477, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_89" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (-0.1177001, 7.24807, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_90" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (-0.1177001, 7.24187, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_91" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (-0.1177001, 7.24177, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_92" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.06, 0.072, 0.0208)
+                            double3 xformOp:translate = (0.2222999, 7.24807, 0.0896)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_93" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.028, 0.0282, 0.0764)
+                            double3 xformOp:translate = (0.2222999, 7.24187, 0.0599)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_94" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.0458, 0.046, 0.0538)
+                            double3 xformOp:translate = (0.2222999, 7.24177, 0.0269)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_95" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.995, 0.62, 0.045)
+                            double3 xformOp:translate = (0.3047999, 7.43177, 0.9225)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_96" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.475, 0.62, 0.045)
+                            double3 xformOp:translate = (1.4398, 7.43177, 0.9225)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_97" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.4, 0.09, 0.045)
+                            double3 xformOp:translate = (1.0023, 7.16677, 0.9225)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_98" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 0)
+                            float3 xformOp:scale = (0.4, 0.07, 0.045)
+                            double3 xformOp:translate = (1.0023, 7.70677, 0.9225)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
                     }
 
                     over "drawer_1"
                     {
+                        over "geom"
+                        {
+                            bool physics:collisionEnabled = 0
+                        }
                         over "drawer_1_handle"
                         {
+                            over "geom"
+                            {
+                                bool physics:collisionEnabled = 0
+                            }
+                        }
+
+                        # MJCF body "drawer_1": 10 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.327, 0.018, 0.06)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.868)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.327, 0.018, 0.06)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.732)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.197)
+                            double3 xformOp:translate = (-0.1412001, 7.153045, 0.8)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.197)
+                            double3 xformOp:translate = (0.2457999, 7.153045, 0.8)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.349, 0.01, 0.099)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.8)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.018, 0.5, 0.12)
+                            double3 xformOp:translate = (-0.1322001, 7.412045, 0.765)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.018, 0.5, 0.12)
+                            double3 xformOp:translate = (0.2367999, 7.412045, 0.765)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.351, 0.018, 0.12)
+                            double3 xformOp:translate = (0.05229993, 7.653045, 0.765)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_08" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.351, 0.018, 0.12)
+                            double3 xformOp:translate = (0.05229993, 7.171045, 0.765)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_09" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.361, 0.474, 0.01)
+                            double3 xformOp:translate = (0.05229993, 7.412045, 0.7195)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        # MJCF body "drawer_1_handle": 1 shapes
+                        def Cylinder "collision_10" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            uniform token axis = "Z"
+                            double height = 0.184
+                            double radius = 0.0059
+                            token purpose = "guide"
+                            quatf xformOp:orient = (0.7071068, -7.850462e-17, -0.7071068, 7.850462e-17)
+                            double3 xformOp:translate = (0.05229993, 7.107373, 0.8)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
                         }
                     }
 
                     over "drawer_2"
                     {
+                        over "geom"
+                        {
+                            bool physics:collisionEnabled = 0
+                        }
                         over "drawer_2_handle"
                         {
+                            over "geom"
+                            {
+                                bool physics:collisionEnabled = 0
+                            }
+                        }
+
+                        # MJCF body "drawer_2": 10 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.327, 0.018, 0.06)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.668)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.327, 0.018, 0.06)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.532)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.197)
+                            double3 xformOp:translate = (-0.1412001, 7.153045, 0.6)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.197)
+                            double3 xformOp:translate = (0.2457999, 7.153045, 0.6)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.349, 0.01, 0.099)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.6)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.018, 0.5, 0.12)
+                            double3 xformOp:translate = (-0.1322001, 7.412045, 0.565)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.018, 0.5, 0.12)
+                            double3 xformOp:translate = (0.2367999, 7.412045, 0.565)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.351, 0.018, 0.12)
+                            double3 xformOp:translate = (0.05229993, 7.653045, 0.565)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_08" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.351, 0.018, 0.12)
+                            double3 xformOp:translate = (0.05229993, 7.171045, 0.565)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_09" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.361, 0.474, 0.01)
+                            double3 xformOp:translate = (0.05229993, 7.412045, 0.5195)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        # MJCF body "drawer_2_handle": 1 shapes
+                        def Cylinder "collision_10" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            uniform token axis = "Z"
+                            double height = 0.184
+                            double radius = 0.0059
+                            token purpose = "guide"
+                            quatf xformOp:orient = (0.7071068, -7.850462e-17, -0.7071068, 7.850462e-17)
+                            double3 xformOp:translate = (0.05229993, 7.107373, 0.6)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
                         }
                     }
 
                     over "drawer_3"
                     {
+                        over "geom"
+                        {
+                            bool physics:collisionEnabled = 0
+                        }
                         over "drawer_3_handle"
                         {
+                            over "geom"
+                            {
+                                bool physics:collisionEnabled = 0
+                            }
+                        }
+
+                        # MJCF body "drawer_3": 10 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.327, 0.018, 0.06)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.468)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.327, 0.018, 0.06)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.132)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.397)
+                            double3 xformOp:translate = (-0.1412001, 7.153045, 0.3)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.397)
+                            double3 xformOp:translate = (0.2457999, 7.153045, 0.3)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.349, 0.01, 0.299)
+                            double3 xformOp:translate = (0.05229993, 7.153045, 0.3)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.018, 0.5, 0.34)
+                            double3 xformOp:translate = (-0.1322001, 7.412045, 0.293)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.018, 0.5, 0.34)
+                            double3 xformOp:translate = (0.2367999, 7.412045, 0.293)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.351, 0.018, 0.34)
+                            double3 xformOp:translate = (0.05229993, 7.653045, 0.293)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_08" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.351, 0.018, 0.34)
+                            double3 xformOp:translate = (0.05229993, 7.171045, 0.293)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_09" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.361, 0.474, 0.01)
+                            double3 xformOp:translate = (0.05229993, 7.412045, 0.1375)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        # MJCF body "drawer_3_handle": 1 shapes
+                        def Cylinder "collision_10" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            uniform token axis = "Z"
+                            double height = 0.184
+                            double radius = 0.0059
+                            token purpose = "guide"
+                            quatf xformOp:orient = (0.7071068, -7.850462e-17, -0.7071068, 7.850462e-17)
+                            double3 xformOp:translate = (0.05229993, 7.107373, 0.3)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
                         }
                     }
 
                     over "drawer_4"
                     {
-                        over "geom" (
-                            prepend apiSchemas = ["PhysxTriangleMeshSimplificationCollisionAPI", "PhysxConvexHullCollisionAPI", "PhysxConvexDecompositionCollisionAPI", "PhysxSDFMeshCollisionAPI", "PhysxTriangleMeshCollisionAPI"]
-                        )
+                        over "geom"
                         {
-                            uniform token physics:approximation = "convexDecomposition"
-                            int physxConvexDecompositionCollision:hullVertexLimit = 82
+                            bool physics:collisionEnabled = 0
                         }
-
                         over "drawer_4_handle"
                         {
+                            over "geom"
+                            {
+                                bool physics:collisionEnabled = 0
+                            }
+                        }
+
+                        # MJCF body "drawer_4": 10 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.314, 0.018, 0.06)
+                            double3 xformOp:translate = (1.394188, 7.153045, 0.868)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.314, 0.018, 0.06)
+                            double3 xformOp:translate = (1.394188, 7.153045, 0.732)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.0576, 0.018, 0.197)
+                            double3 xformOp:translate = (1.208488, 7.153045, 0.8)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.0576, 0.018, 0.197)
+                            double3 xformOp:translate = (1.579988, 7.153045, 0.8)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.335, 0.01, 0.099)
+                            double3 xformOp:translate = (1.394188, 7.153045, 0.8)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.0172, 0.5, 0.12)
+                            double3 xformOp:translate = (1.217088, 7.412045, 0.765)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.0172, 0.5, 0.12)
+                            double3 xformOp:translate = (1.571288, 7.412045, 0.765)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.337, 0.018, 0.12)
+                            double3 xformOp:translate = (1.394188, 7.653045, 0.765)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_08" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.337, 0.018, 0.12)
+                            double3 xformOp:translate = (1.394188, 7.171045, 0.765)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_09" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.3466, 0.474, 0.01)
+                            double3 xformOp:translate = (1.394188, 7.412045, 0.7195)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        # MJCF body "drawer_4_handle": 1 shapes
+                        def Cylinder "collision_10" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            uniform token axis = "Z"
+                            double height = 0.184
+                            double radius = 0.0059
+                            token purpose = "guide"
+                            quatf xformOp:orient = (0.7071068, -7.850462e-17, -0.7071068, 7.850462e-17)
+                            double3 xformOp:translate = (1.394188, 7.107373, 0.8)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+                        }
+                    }
+
+                    over "door_1"
+                    {
+                        over "geom"
+                        {
+                            bool physics:collisionEnabled = 0
+                        }
+                        over "door_1_handle"
+                        {
+                            over "geom"
+                            {
+                                bool physics:collisionEnabled = 0
+                            }
+                        }
+
+                        # MJCF body "cabinet_door_1": 7 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.327, 0.018, 0.06)
+                            double3 xformOp:translate = (1.0023, 7.15104, 0.8675)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.327, 0.018, 0.06)
+                            double3 xformOp:translate = (1.0023, 7.15104, 0.1325)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.796)
+                            double3 xformOp:translate = (0.8087999, 7.15104, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.796)
+                            double3 xformOp:translate = (1.1958, 7.15104, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.349, 0.01, 0.698)
+                            double3 xformOp:translate = (1.0023, 7.15104, 0.5)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.01, 0.01, 0.01)
+                            double3 xformOp:translate = (1.2033, 7.16054, 0.212)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.01, 0.01, 0.01)
+                            double3 xformOp:translate = (1.2033, 7.16054, 0.788)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        # MJCF body "cabinet_door_1_handle": 1 shapes
+                        def Cylinder "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            uniform token axis = "Z"
+                            double height = 0.184
+                            double radius = 0.0059
+                            token purpose = "guide"
+                            quatf xformOp:orient = (0.7071068, 0, 0, -0.7071068)
+                            double3 xformOp:translate = (0.8147069, 7.105373, 0.776015)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+                        }
+                    }
+
+                    over "door_2"
+                    {
+                        over "geom"
+                        {
+                            bool physics:collisionEnabled = 0
+                        }
+                        over "door_2_handle"
+                        {
+                            over "geom"
+                            {
+                                bool physics:collisionEnabled = 0
+                            }
+                        }
+
+                        # MJCF body "cabinet_door_2": 7 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.314, 0.018, 0.06)
+                            double3 xformOp:translate = (1.394168, 7.15104, 0.6675)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.314, 0.018, 0.06)
+                            double3 xformOp:translate = (1.394168, 7.15104, 0.1325)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.0576, 0.018, 0.596)
+                            double3 xformOp:translate = (1.208468, 7.15104, 0.4)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.0576, 0.018, 0.596)
+                            double3 xformOp:translate = (1.579968, 7.15104, 0.4)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.335, 0.01, 0.498)
+                            double3 xformOp:translate = (1.394168, 7.15104, 0.4)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.01, 0.01, 0.01)
+                            double3 xformOp:translate = (1.587168, 7.16054, 0.212)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.01, 0.01, 0.01)
+                            double3 xformOp:translate = (1.587168, 7.16054, 0.588)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        # MJCF body "cabinet_door_2_handle": 1 shapes
+                        def Cylinder "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            uniform token axis = "Z"
+                            double height = 0.184
+                            double radius = 0.0059
+                            token purpose = "guide"
+                            quatf xformOp:orient = (0.7071068, 0, 0, -0.7071068)
+                            double3 xformOp:translate = (1.197675, 7.105373, 0.576)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+                        }
+                    }
+
+                    over "door_3"
+                    {
+                        over "geom"
+                        {
+                            bool physics:collisionEnabled = 0
+                        }
+                        over "door_3_handle"
+                        {
+                            over "geom"
+                            {
+                                bool physics:collisionEnabled = 0
+                            }
+                        }
+
+                        # MJCF body "cabinet_door_3": 7 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.477, 0.018, 0.06)
+                            double3 xformOp:translate = (1.9773, 7.15104, 1.9675)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.477, 0.018, 0.06)
+                            double3 xformOp:translate = (1.9773, 7.15104, 1.0825)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.946)
+                            double3 xformOp:translate = (1.7088, 7.15104, 1.525)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.946)
+                            double3 xformOp:translate = (2.2458, 7.15104, 1.525)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.499, 0.01, 0.848)
+                            double3 xformOp:translate = (1.9773, 7.15104, 1.525)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.01, 0.01, 0.01)
+                            double3 xformOp:translate = (2.2533, 7.16054, 1.162)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.01, 0.01, 0.01)
+                            double3 xformOp:translate = (2.2533, 7.16054, 1.888)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        # MJCF body "cabinet_door_3_handle": 1 shapes
+                        def Cylinder "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            uniform token axis = "Z"
+                            double height = 0.184
+                            double radius = 0.0059
+                            token purpose = "guide"
+                            quatf xformOp:orient = (0.7071068, 0, 0, -0.7071068)
+                            double3 xformOp:translate = (1.714707, 7.105373, 1.173985)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+                        }
+                    }
+
+                    over "door_4"
+                    {
+                        over "geom"
+                        {
+                            bool physics:collisionEnabled = 0
+                        }
+                        over "door_4_handle"
+                        {
+                            over "geom"
+                            {
+                                bool physics:collisionEnabled = 0
+                            }
+                        }
+
+                        # MJCF body "cabinet_door_4": 7 shapes
+                        def Cube "collision_00" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.477, 0.018, 0.06)
+                            double3 xformOp:translate = (1.9773, 7.15104, 1.0175)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_01" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.477, 0.018, 0.06)
+                            double3 xformOp:translate = (1.9773, 7.15104, 0.1325)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_02" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.946)
+                            double3 xformOp:translate = (1.7088, 7.15104, 0.575)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_03" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.06, 0.018, 0.946)
+                            double3 xformOp:translate = (2.2458, 7.15104, 0.575)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_04" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.499, 0.01, 0.848)
+                            double3 xformOp:translate = (1.9773, 7.15104, 0.575)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_05" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.01, 0.01, 0.01)
+                            double3 xformOp:translate = (2.2533, 7.16054, 0.212)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+                        def Cube "collision_06" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            double size = 1
+                            token purpose = "guide"
+                            quatf xformOp:orient = (1, 0, 0, 5.473822e-48)
+                            float3 xformOp:scale = (0.01, 0.01, 0.01)
+                            double3 xformOp:translate = (2.2533, 7.16054, 0.938)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
+                        }
+
+                        # MJCF body "cabinet_door_4_handle": 1 shapes
+                        def Cylinder "collision_07" (
+                            prepend apiSchemas = ["PhysicsCollisionAPI"]
+                        )
+                        {
+                            uniform token axis = "Z"
+                            double height = 0.184
+                            double radius = 0.0059
+                            token purpose = "guide"
+                            quatf xformOp:orient = (0.7071068, 0, 0, -0.7071068)
+                            double3 xformOp:translate = (1.714707, 7.105373, 0.926015)
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
                         }
                     }
                 }

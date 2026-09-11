@@ -92,11 +92,36 @@ class SceneResetROS(SimBridge):
         for prim in Usd.PrimRange(self.world.stage.GetPseudoRoot()):
             if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
                 continue
+            if not self._is_enabled(prim):
+                continue
             path = str(prim.GetPath())
             if robot_prefix and path.startswith(robot_prefix):
                 continue
             paths.append(path)
         return paths
+
+    @staticmethod
+    def _is_enabled(prim) -> bool:
+        """Whether PhysX actually made a rigid body out of this prim.
+
+        The API being *applied* is not the same as the body existing: a prim that
+        carries ``PhysicsRigidBodyAPI`` with ``physics:rigidBodyEnabled = 0`` is
+        static geometry, and asking for it by name is how a reset used to take the
+        simulator down::
+
+            Pattern '.../DiningTable/Actor_0000/Geom/body' did not match any rigid bodies
+            IndexError: index 279 is out of bounds for axis 0 with size 279
+
+        ``RigidPrim`` keeps the paths it was handed but the tensor view behind it only
+        has the bodies PhysX built, so one disabled body shifts every index past it.
+
+        Unauthored means enabled, which is the schema's own default.
+        """
+        attribute = UsdPhysics.RigidBodyAPI(prim).GetRigidBodyEnabledAttr()
+        if not attribute:
+            return True
+        value = attribute.Get()
+        return True if value is None else bool(value)
 
     @staticmethod
     def _is_kinematic(prim) -> bool:
