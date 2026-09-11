@@ -326,6 +326,13 @@ class SceneObject:
     """One object this demo puts into the twin and into the render."""
 
     name: str
+    """The twin's body name. Carries the mesh suffix on purpose: cramera's live viewer
+    tells a demo object from the scene it stands in by that suffix, and skips it when
+    computing the bundle signature. Without it, ``PickUpAction`` re-parenting the object
+    changes the signature and the viewer reloads the page on every attach and detach
+    (``live/live_bundle.py`` ``_is_overlay_body``, ``live/bridge.py``
+    ``_refresh_bundle_signature``). The sim spells the suffix with an underscore in its
+    prim names; see ``cram_vrb_lab.sim.scene_sync.prim_name``."""
     mesh: str
     annotation: type
     pose: Tuple[float, ...]
@@ -358,31 +365,31 @@ class SceneObject:
 
 SCENE_OBJECTS = (
     SceneObject(
-        "bowl", "bowl.stl", Bowl, (0.0, 7.2, 1.0),
+        "bowl.stl", "bowl.stl", Bowl, (0.0, 7.2, 1.0),
         grasp_point=(0.0677, 0.0, 0.028), mass=0.058, color=(0.20, 0.45, 0.80),
     ),
     SceneObject(
-        "spoon", "spoon.stl", Spoon, (0.0, 0.0, -0.069), parent="drawer_1",
+        "spoon.stl", "spoon.stl", Spoon, (0.0, 0.0, -0.069), parent="drawer_1",
         grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.80, 0.80, 0.0),
     ),
     SceneObject(
-        "spoon2", "spoon.stl", Spoon, (0.5, 7.2, 1.0),
+        "spoon2.stl", "spoon.stl", Spoon, (0.5, 7.2, 1.0),
         grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
     ),
     SceneObject(
-        "jeroen_cup", "jeroen_cup.stl", Cup, (-0.05, 7.58, 0.9650),
+        "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.05, 7.58, 0.9650),
         mass=0.120, color=(0.90, 0.90, 0.92),
     ),
     SceneObject(
-        "milk", "milk.stl", Milk, (0.10, 7.58, 1.0527),
+        "milk.stl", "milk.stl", Milk, (0.10, 7.58, 1.0527),
         mass=1.000, collider="convexHull", color=(0.88, 0.92, 0.96),
     ),
     SceneObject(
-        "bread", "bread.stl", Bread, (0.38, 7.58, 0.9943),
+        "bread.stl", "bread.stl", Bread, (0.38, 7.58, 0.9943),
         mass=0.400, collider="convexHull", color=(0.76, 0.55, 0.31),
     ),
     SceneObject(
-        "big-knife", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
+        "big-knife.stl", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
         mass=0.100, color=(0.55, 0.57, 0.60),
     ),
 )
@@ -602,8 +609,8 @@ end_effector = context.robot.get_right_arm_if_specified().end_effector
 
 # PlaceAction puts the body *origin* here, which grasp_point moved onto the rim / the
 # handle.
-BOWL_TARGET_POINT = Point3.from_iterable([1.6, 5.1, 0.85])
-SPOON_TARGET_POINT = Point3.from_iterable([1.6, 5.3, 0.80])
+BOWL_TARGET_POINT = Point3.from_iterable([1.6, 5.1, 0.88])
+SPOON_TARGET_POINT = Point3.from_iterable([1.6, 5.3, 0.85])
 
 done = run_plan(sequential([
     # ParkArmsAction(arm=Arms.BOTH),
