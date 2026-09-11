@@ -181,15 +181,18 @@ def run_plan(plan, collision_avoidance=True, real_mode=True):
         print("  interrupted --", cancel_motion(context))
         return False
     finally:
-        # A plan moves objects in the twin -- a place leaves one at its target -- and the
-        # render only hears about it here. globals(), because sync_objects belongs to a
-        # later cell, and a failed sync must not be what ends a run.
-        sync = globals().get("sync_objects")
+        # Physics owns where the objects ended up: a place lets them settle, a knock
+        # moves them. So the twin follows the sim here rather than asserting the poses a
+        # plan last believed. globals(), because scene_sync belongs to a later cell, and
+        # a failed pull must not be what ends a run.
+        sync = globals().get("scene_sync")
         if sync is not None:
             try:
-                sync()
+                moved = sync.pull(world)
+                if moved:
+                    print("  pulled:", {n: round(d, 4) for n, d in moved.items()})
             except Exception as failure:
-                print(f"  object sync failed -- {type(failure).__name__}: {failure}")
+                print(f"  object pull failed -- {type(failure).__name__}: {failure}")
     return True
 
 
