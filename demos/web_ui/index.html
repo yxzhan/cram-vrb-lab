@@ -105,6 +105,29 @@
     /* height, not just stretch: a lone pane sits in a `display: block` wrap, where an
        auto height would leave the iframe's own 100% resolving against nothing */
     .pane { position: relative; overflow: hidden; height: 100%; }
+    /* covers the pane while its service is still being waited for */
+    .pane-status {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: #1e1e2e;
+      color: #a6adc8;
+      font-size: 13px;
+    }
+    .pane-status.shown { display: flex; }
+    .pane-status::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      border: 2px solid #45475a;
+      border-top-color: #89b4fa;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .divider {
       background: #313244;
       cursor: col-resize;
@@ -116,10 +139,19 @@
     .frame-wrap.dragging iframe { pointer-events: none; }
     body.dragging { user-select: none; }
     iframe {
+      display: block;   /* inline-replaced would sit on a baseline, leaving a gap below */
       width: 100%;
       height: 100%;
       border: 0;
       background: #fff;
+    }
+    /* the remote desktop serves its screen under a toolbar of its own: the frame is
+       grown by exactly that bar's height and pulled up by the same amount, so the pane
+       (which clips) shows the desktop alone. One variable, so the two cannot drift. */
+    iframe.hide-top-bar {
+      --top-bar: 36px;
+      height: calc(100% + var(--top-bar));
+      margin-top: calc(-1 * var(--top-bar));
     }
   </style>
 </head>
@@ -161,7 +193,7 @@
     const targets = [
       { panes: [
           { name: "NeemHub", path: "proxy/8711/" },
-          { name: "Desktop", path: "desktop/", skipLocal: true },
+          { name: "Desktop", path: "desktop/", skipLocal: true, hideTopBar: true },
       ] },
       { panes: [{ name: "VS Code", path: "vscode/" }] },
       { panes: [{ name: "JupyterLab", path: "lab" }] },
@@ -169,7 +201,7 @@
      .filter(t => t.panes.length)
      .map(t => ({
        name: t.panes.map(p => p.name).join(" + "),
-       panes: t.panes.map(p => ({ name: p.name, url: resolve(p.path) })),
+       panes: t.panes.map(p => ({ name: p.name, url: resolve(p.path), hideTopBar: p.hideTopBar })),
      }));
 
     const STORAGE_TAB = "cram-workspace.tab";
@@ -228,8 +260,14 @@
         const iframe = document.createElement("iframe");
         iframe.dataset.src = pane.url;
         iframe.title = pane.name;
+        if (pane.hideTopBar) iframe.className = "hide-top-bar";
+        const status = document.createElement("div");
+        status.className = "pane-status";
+        status.textContent = `starting ${pane.name}…`;
         holder.appendChild(iframe);
+        holder.appendChild(status);
         wrap.appendChild(holder);
+        iframe.status = status;
         return iframe;
       });
       main.appendChild(wrap);
@@ -294,12 +332,42 @@
       document.addEventListener("pointerup", onUp);
     }
 
+    // A service behind the proxy may not be listening yet when the workspace is opened:
+    // a pod that just came up is still starting the viewer, and the proxy answers 500
+    // until it is. An iframe cannot report that -- it fires `load` for an error page
+    // just the same -- so the url is polled until it answers before the frame is
+    // pointed at it, and the pane says what it is waiting for meanwhile.
+    const READY_POLL_MS = 1000;
+    const READY_TIMEOUT_MS = 120000;
+
+    function whenReachable(url) {
+      const deadline = Date.now() + READY_TIMEOUT_MS;
+      const attempt = () => fetch(url, { cache: "no-store" })
+        .then(response => {
+          if (response.ok) return true;
+          if (Date.now() > deadline) return false;   // stop waiting, show what it says
+          return new Promise(retry => setTimeout(retry, READY_POLL_MS)).then(attempt);
+        })
+        // the request itself failed rather than the service: a different origin the
+        // browser will not let this page read, offline, no route. Nothing to poll for,
+        // so hand it to the iframe, which is not bound by the same rule.
+        .catch(() => true);
+      return attempt();
+    }
+
     function activate(i) {
       tabs.forEach((tab, j) => tab.classList.toggle("active", j === i));
       frames.forEach((f, j) => f.wrap.classList.toggle("active", j === i));
       // lazy load: a pane's src is set the first time its tab is shown
       frames[i].iframes.forEach(iframe => {
-        if (!iframe.src && iframe.dataset.src) iframe.src = iframe.dataset.src;
+        const url = iframe.dataset.src;
+        if (!url) return;
+        iframe.dataset.src = "";      // claimed: re-activating must not poll again
+        iframe.status.classList.add("shown");
+        whenReachable(url).then(() => {
+          iframe.src = url;
+          iframe.status.classList.remove("shown");
+        });
       });
       store(STORAGE_TAB, targets[i].name);
     }
