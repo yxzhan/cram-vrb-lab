@@ -1,0 +1,855 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Status1
+      Splitter Ratio: 0.5
+    Tree Height: 555
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Expanded:
+      - /2D Goal Pose1
+      - /Publish Point1
+    Name: Tool Properties
+    Splitter Ratio: 0.5886790156364441
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+  - Class: rviz_common/Time
+    Experimental: false
+    Name: Time
+    SyncMode: 0
+    SyncSource: ""
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        __closest_points__: true
+        __closest_points_labels__: true
+        basin_0: true
+        bay_window_platform_0: true
+        bay_window_platform_1: true
+        bed_0: true
+        book_0: true
+        book_1: true
+        book_10: true
+        book_2: true
+        book_3: true
+        book_4: true
+        book_5: true
+        book_6: true
+        book_7: true
+        book_8: true
+        book_9: true
+        bookshelf_0: true
+        bowl: true
+        cabinet_door_1: true
+        cabinet_door_1_handle: true
+        cabinet_door_2: true
+        cabinet_door_2_handle: true
+        cabinet_door_3: true
+        cabinet_door_3_handle: true
+        cabinet_door_4: true
+        cabinet_door_4_handle: true
+        chair_0: true
+        chair_1: true
+        coffee_table_0: true
+        dining_table_0: true
+        door_0: true
+        door_0_handle_inner: true
+        door_0_handle_outer: true
+        door_0_leaf: true
+        door_1: true
+        door_1_handle_inner: true
+        door_1_handle_outer: true
+        door_1_leaf: true
+        door_2: true
+        door_2_handle_inner: true
+        door_2_handle_outer: true
+        door_2_leaf: true
+        drawer_1: true
+        drawer_1_handle: true
+        drawer_2: true
+        drawer_2_handle: true
+        drawer_3: true
+        drawer_3_handle: true
+        drawer_4: true
+        drawer_4_handle: true
+        floor_lamp_0: true
+        flowers_0: true
+        green_plants_0: true
+        hand_sanitizer_0: true
+        handrail_0: true
+        handrail_1: true
+        kitchen_cabinet: true
+        nightstand_0: true
+        pipe_0: true
+        r100-0603/axle_link: true
+        r100-0603/body_link: true
+        r100-0603/chassis_link: true
+        r100-0603/cover_link: true
+        r100-0603/front_cover_link: true
+        r100-0603/front_left_wheel_link: true
+        r100-0603/front_lights_link: true
+        r100-0603/front_right_wheel_link: true
+        r100-0603/front_rocker_link: true
+        r100-0603/head: true
+        r100-0603/imu_1_link: true
+        r100-0603/left_fr3_hand: true
+        r100-0603/left_fr3_leftfinger: true
+        r100-0603/left_fr3_link0: true
+        r100-0603/left_fr3_link1: true
+        r100-0603/left_fr3_link2: true
+        r100-0603/left_fr3_link3: true
+        r100-0603/left_fr3_link4: true
+        r100-0603/left_fr3_link5: true
+        r100-0603/left_fr3_link6: true
+        r100-0603/left_fr3_link7: true
+        r100-0603/left_fr3_rightfinger: true
+        r100-0603/left_side_cover_link: true
+        r100-0603/lidar2d_0_link: true
+        r100-0603/lidar2d_1_link: true
+        r100-0603/lift_0_base_link: true
+        r100-0603/lift_0_lower_link: true
+        r100-0603/lift_0_plate_link: true
+        r100-0603/lift_0_upper_link: true
+        r100-0603/mounting_plate_link: true
+        r100-0603/neck_1: true
+        r100-0603/neck_2: true
+        r100-0603/rear_cover_link: true
+        r100-0603/rear_left_wheel_link: true
+        r100-0603/rear_lights_link: true
+        r100-0603/rear_right_wheel_link: true
+        r100-0603/rear_rocker_link: true
+        r100-0603/right_fr3_hand: true
+        r100-0603/right_fr3_leftfinger: true
+        r100-0603/right_fr3_link0: true
+        r100-0603/right_fr3_link1: true
+        r100-0603/right_fr3_link2: true
+        r100-0603/right_fr3_link3: true
+        r100-0603/right_fr3_link4: true
+        r100-0603/right_fr3_link5: true
+        r100-0603/right_fr3_link6: true
+        r100-0603/right_fr3_link7: true
+        r100-0603/right_fr3_rightfinger: true
+        r100-0603/right_side_cover_link: true
+        r100-0603/riser_link: true
+        radiator_0: true
+        sofa_0: true
+        spoon: true
+        toilet_0: true
+        toilet_paper_holder_0: true
+        trash_can_0: true
+        wall_0: true
+        window_0: true
+        window_1: true
+        window_10: true
+        window_11: true
+        window_12: true
+        window_13: true
+        window_14: true
+        window_2: true
+        window_3: true
+        window_4: true
+        window_5: true
+        window_6: true
+        window_7: true
+        window_8: true
+        window_9: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /semworld/viz_marker
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Filter (blacklist): ""
+      Filter (whitelist): ""
+      Frame Timeout: 15
+      Frames:
+        5807e573-1db0-4843-8508-f60f4c1e6ed2/odom:
+          Value: true
+        All Enabled: true
+        basin_0:
+          Value: true
+        bay_window_platform_0:
+          Value: true
+        bay_window_platform_1:
+          Value: true
+        bed_0:
+          Value: true
+        book_0:
+          Value: true
+        book_1:
+          Value: true
+        book_10:
+          Value: true
+        book_2:
+          Value: true
+        book_3:
+          Value: true
+        book_4:
+          Value: true
+        book_5:
+          Value: true
+        book_6:
+          Value: true
+        book_7:
+          Value: true
+        book_8:
+          Value: true
+        book_9:
+          Value: true
+        bookshelf_0:
+          Value: true
+        bowl:
+          Value: true
+        c3e4eebe-5202-4913-8fed-0bd3f30ce8c2/odom:
+          Value: true
+        cabinet_door_1:
+          Value: true
+        cabinet_door_1_handle:
+          Value: true
+        cabinet_door_1_hinge:
+          Value: true
+        cabinet_door_2:
+          Value: true
+        cabinet_door_2_handle:
+          Value: true
+        cabinet_door_2_hinge:
+          Value: true
+        cabinet_door_3:
+          Value: true
+        cabinet_door_3_handle:
+          Value: true
+        cabinet_door_3_hinge:
+          Value: true
+        cabinet_door_4:
+          Value: true
+        cabinet_door_4_handle:
+          Value: true
+        cabinet_door_4_hinge:
+          Value: true
+        chair_0:
+          Value: true
+        chair_1:
+          Value: true
+        coffee_table_0:
+          Value: true
+        dining_table_0:
+          Value: true
+        door_0:
+          Value: true
+        door_0_handle_inner:
+          Value: true
+        door_0_handle_outer:
+          Value: true
+        door_0_leaf:
+          Value: true
+        door_0_leaf_hinge:
+          Value: true
+        door_1:
+          Value: true
+        door_1_handle_inner:
+          Value: true
+        door_1_handle_outer:
+          Value: true
+        door_1_leaf:
+          Value: true
+        door_1_leaf_hinge:
+          Value: true
+        door_2:
+          Value: true
+        door_2_handle_inner:
+          Value: true
+        door_2_handle_outer:
+          Value: true
+        door_2_leaf:
+          Value: true
+        door_2_leaf_hinge:
+          Value: true
+        drawer_1:
+          Value: true
+        drawer_1_handle:
+          Value: true
+        drawer_1_slider:
+          Value: true
+        drawer_2:
+          Value: true
+        drawer_2_handle:
+          Value: true
+        drawer_2_slider:
+          Value: true
+        drawer_3:
+          Value: true
+        drawer_3_handle:
+          Value: true
+        drawer_3_slider:
+          Value: true
+        drawer_4:
+          Value: true
+        drawer_4_handle:
+          Value: true
+        drawer_4_slider:
+          Value: true
+        floor_lamp_0:
+          Value: true
+        flowers_0:
+          Value: true
+        green_plants_0:
+          Value: true
+        hand_sanitizer_0:
+          Value: true
+        handrail_0:
+          Value: true
+        handrail_1:
+          Value: true
+        kitchen_cabinet:
+          Value: true
+        nightstand_0:
+          Value: true
+        pipe_0:
+          Value: true
+        r100-0603/arm_mount_left_link:
+          Value: true
+        r100-0603/arm_mount_right_link:
+          Value: true
+        r100-0603/axle_link:
+          Value: true
+        r100-0603/base_link:
+          Value: true
+        r100-0603/body_link:
+          Value: true
+        r100-0603/chassis_link:
+          Value: true
+        r100-0603/cover_link:
+          Value: true
+        r100-0603/default_mount:
+          Value: true
+        r100-0603/front_cover_link:
+          Value: true
+        r100-0603/front_left_wheel_link:
+          Value: true
+        r100-0603/front_lights_link:
+          Value: true
+        r100-0603/front_right_wheel_link:
+          Value: true
+        r100-0603/front_rocker_link:
+          Value: true
+        r100-0603/head:
+          Value: true
+        r100-0603/imu_0_link:
+          Value: true
+        r100-0603/imu_1_base_link:
+          Value: true
+        r100-0603/imu_1_link:
+          Value: true
+        r100-0603/left_fr3_hand:
+          Value: true
+        r100-0603/left_fr3_hand_tcp:
+          Value: true
+        r100-0603/left_fr3_leftfinger:
+          Value: true
+        r100-0603/left_fr3_link0:
+          Value: true
+        r100-0603/left_fr3_link1:
+          Value: true
+        r100-0603/left_fr3_link2:
+          Value: true
+        r100-0603/left_fr3_link3:
+          Value: true
+        r100-0603/left_fr3_link4:
+          Value: true
+        r100-0603/left_fr3_link5:
+          Value: true
+        r100-0603/left_fr3_link6:
+          Value: true
+        r100-0603/left_fr3_link7:
+          Value: true
+        r100-0603/left_fr3_link8:
+          Value: true
+        r100-0603/left_fr3_rightfinger:
+          Value: true
+        r100-0603/left_side_cover_link:
+          Value: true
+        r100-0603/lidar2d_0_laser:
+          Value: true
+        r100-0603/lidar2d_0_link:
+          Value: true
+        r100-0603/lidar2d_1_laser:
+          Value: true
+        r100-0603/lidar2d_1_link:
+          Value: true
+        r100-0603/lift_0_base_link:
+          Value: true
+        r100-0603/lift_0_lower_link:
+          Value: true
+        r100-0603/lift_0_mount:
+          Value: true
+        r100-0603/lift_0_mount_rotated_link:
+          Value: true
+        r100-0603/lift_0_plate_link:
+          Value: true
+        r100-0603/lift_0_upper_link:
+          Value: true
+        r100-0603/mounting_plate_link:
+          Value: true
+        r100-0603/neck_1:
+          Value: true
+        r100-0603/neck_2:
+          Value: true
+        r100-0603/rear_cover_link:
+          Value: true
+        r100-0603/rear_left_wheel_link:
+          Value: true
+        r100-0603/rear_lights_link:
+          Value: true
+        r100-0603/rear_right_wheel_link:
+          Value: true
+        r100-0603/rear_rocker_link:
+          Value: true
+        r100-0603/right_fr3_hand:
+          Value: true
+        r100-0603/right_fr3_hand_tcp:
+          Value: true
+        r100-0603/right_fr3_leftfinger:
+          Value: true
+        r100-0603/right_fr3_link0:
+          Value: true
+        r100-0603/right_fr3_link1:
+          Value: true
+        r100-0603/right_fr3_link2:
+          Value: true
+        r100-0603/right_fr3_link3:
+          Value: true
+        r100-0603/right_fr3_link4:
+          Value: true
+        r100-0603/right_fr3_link5:
+          Value: true
+        r100-0603/right_fr3_link6:
+          Value: true
+        r100-0603/right_fr3_link7:
+          Value: true
+        r100-0603/right_fr3_link8:
+          Value: true
+        r100-0603/right_fr3_rightfinger:
+          Value: true
+        r100-0603/right_side_cover_link:
+          Value: true
+        r100-0603/riser_link:
+          Value: true
+        radiator_0:
+          Value: true
+        sofa_0:
+          Value: true
+        spoon:
+          Value: true
+        toilet_0:
+          Value: true
+        toilet_paper_holder_0:
+          Value: true
+        trash_can_0:
+          Value: true
+        wall_0:
+          Value: true
+        window_0:
+          Value: true
+        window_1:
+          Value: true
+        window_10:
+          Value: true
+        window_11:
+          Value: true
+        window_12:
+          Value: true
+        window_13:
+          Value: true
+        window_14:
+          Value: true
+        window_2:
+          Value: true
+        window_3:
+          Value: true
+        window_4:
+          Value: true
+        window_5:
+          Value: true
+        window_6:
+          Value: true
+        window_7:
+          Value: true
+        window_8:
+          Value: true
+        window_9:
+          Value: true
+        world:
+          Value: true
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Tree:
+        world:
+          5807e573-1db0-4843-8508-f60f4c1e6ed2/odom:
+            r100-0603/base_link:
+              r100-0603/chassis_link:
+                r100-0603/axle_link:
+                  r100-0603/front_rocker_link:
+                    r100-0603/front_left_wheel_link:
+                      {}
+                    r100-0603/front_right_wheel_link:
+                      {}
+                  r100-0603/rear_rocker_link:
+                    r100-0603/rear_left_wheel_link:
+                      {}
+                    r100-0603/rear_right_wheel_link:
+                      {}
+                r100-0603/cover_link:
+                  {}
+                r100-0603/front_cover_link:
+                  {}
+                r100-0603/front_lights_link:
+                  {}
+                r100-0603/imu_0_link:
+                  {}
+                r100-0603/left_side_cover_link:
+                  {}
+                r100-0603/lidar2d_0_link:
+                  r100-0603/lidar2d_0_laser:
+                    {}
+                r100-0603/lidar2d_1_link:
+                  r100-0603/lidar2d_1_laser:
+                    {}
+                r100-0603/mounting_plate_link:
+                  {}
+                r100-0603/rear_cover_link:
+                  {}
+                r100-0603/rear_lights_link:
+                  {}
+                r100-0603/right_side_cover_link:
+                  {}
+                r100-0603/riser_link:
+                  r100-0603/default_mount:
+                    r100-0603/imu_1_base_link:
+                      r100-0603/imu_1_link:
+                        {}
+                    r100-0603/lift_0_plate_link:
+                      r100-0603/lift_0_base_link:
+                        r100-0603/lift_0_lower_link:
+                          r100-0603/lift_0_upper_link:
+                            r100-0603/lift_0_mount:
+                              r100-0603/lift_0_mount_rotated_link:
+                                r100-0603/arm_mount_left_link:
+                                  r100-0603/left_fr3_link0:
+                                    r100-0603/left_fr3_link1:
+                                      r100-0603/left_fr3_link2:
+                                        r100-0603/left_fr3_link3:
+                                          r100-0603/left_fr3_link4:
+                                            r100-0603/left_fr3_link5:
+                                              r100-0603/left_fr3_link6:
+                                                r100-0603/left_fr3_link7:
+                                                  r100-0603/left_fr3_link8:
+                                                    r100-0603/left_fr3_hand:
+                                                      r100-0603/left_fr3_hand_tcp:
+                                                        {}
+                                                      r100-0603/left_fr3_leftfinger:
+                                                        {}
+                                                      r100-0603/left_fr3_rightfinger:
+                                                        {}
+                                r100-0603/arm_mount_right_link:
+                                  r100-0603/right_fr3_link0:
+                                    r100-0603/right_fr3_link1:
+                                      r100-0603/right_fr3_link2:
+                                        r100-0603/right_fr3_link3:
+                                          r100-0603/right_fr3_link4:
+                                            r100-0603/right_fr3_link5:
+                                              r100-0603/right_fr3_link6:
+                                                r100-0603/right_fr3_link7:
+                                                  r100-0603/right_fr3_link8:
+                                                    r100-0603/right_fr3_hand:
+                                                      r100-0603/right_fr3_hand_tcp:
+                                                        {}
+                                                      r100-0603/right_fr3_leftfinger:
+                                                        {}
+                                                      r100-0603/right_fr3_rightfinger:
+                                                        {}
+                                r100-0603/body_link:
+                                  {}
+                                r100-0603/neck_1:
+                                  r100-0603/neck_2:
+                                    r100-0603/head:
+                                      {}
+          basin_0:
+            {}
+          bay_window_platform_0:
+            {}
+          bay_window_platform_1:
+            {}
+          bed_0:
+            {}
+          book_0:
+            {}
+          book_1:
+            {}
+          book_10:
+            {}
+          book_2:
+            {}
+          book_3:
+            {}
+          book_4:
+            {}
+          book_5:
+            {}
+          book_6:
+            {}
+          book_7:
+            {}
+          book_8:
+            {}
+          book_9:
+            {}
+          bookshelf_0:
+            {}
+          bowl:
+            {}
+          c3e4eebe-5202-4913-8fed-0bd3f30ce8c2/odom:
+            {}
+          chair_0:
+            {}
+          chair_1:
+            {}
+          coffee_table_0:
+            {}
+          dining_table_0:
+            {}
+          door_0:
+            door_0_leaf_hinge:
+              door_0_leaf:
+                door_0_handle_inner:
+                  {}
+                door_0_handle_outer:
+                  {}
+          door_1:
+            door_1_leaf_hinge:
+              door_1_leaf:
+                door_1_handle_inner:
+                  {}
+                door_1_handle_outer:
+                  {}
+          door_2:
+            door_2_leaf_hinge:
+              door_2_leaf:
+                door_2_handle_inner:
+                  {}
+                door_2_handle_outer:
+                  {}
+          floor_lamp_0:
+            {}
+          flowers_0:
+            {}
+          green_plants_0:
+            {}
+          hand_sanitizer_0:
+            {}
+          handrail_0:
+            {}
+          handrail_1:
+            {}
+          kitchen_cabinet:
+            cabinet_door_1_hinge:
+              cabinet_door_1:
+                cabinet_door_1_handle:
+                  {}
+            cabinet_door_2_hinge:
+              cabinet_door_2:
+                cabinet_door_2_handle:
+                  {}
+            cabinet_door_3_hinge:
+              cabinet_door_3:
+                cabinet_door_3_handle:
+                  {}
+            cabinet_door_4_hinge:
+              cabinet_door_4:
+                cabinet_door_4_handle:
+                  {}
+            drawer_1_slider:
+              drawer_1:
+                drawer_1_handle:
+                  {}
+                spoon:
+                  {}
+            drawer_2_slider:
+              drawer_2:
+                drawer_2_handle:
+                  {}
+            drawer_3_slider:
+              drawer_3:
+                drawer_3_handle:
+                  {}
+            drawer_4_slider:
+              drawer_4:
+                drawer_4_handle:
+                  {}
+          nightstand_0:
+            {}
+          pipe_0:
+            {}
+          radiator_0:
+            {}
+          sofa_0:
+            {}
+          toilet_0:
+            {}
+          toilet_paper_holder_0:
+            {}
+          trash_can_0:
+            {}
+          wall_0:
+            {}
+          window_0:
+            {}
+          window_1:
+            {}
+          window_10:
+            {}
+          window_11:
+            {}
+          window_12:
+            {}
+          window_13:
+            {}
+          window_14:
+            {}
+          window_2:
+            {}
+          window_3:
+            {}
+          window_4:
+            {}
+          window_5:
+            {}
+          window_6:
+            {}
+          window_7:
+            {}
+          window_8:
+            {}
+          window_9:
+            {}
+      Update Interval: 0
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /clicked_point
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 3.7898993492126465
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.05999999865889549
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Focal Point:
+        X: 0.7652764320373535
+        Y: 5.865847110748291
+        Z: 1.071852684020996
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Pitch: 0.5603067874908447
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+      Yaw: 2.7305736541748047
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 846
+  Hide Left Dock: false
+  Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd000000040000000000000156000002b4fc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003b000002b4000000c700fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000010f000002b4fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073000000003b000002b4000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000004380000003efc0100000002fb0000000800540069006d00650100000000000004380000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000002dc000002b400000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Selection:
+    collapsed: false
+  Time:
+    collapsed: false
+  Tool Properties:
+    collapsed: false
+  Views:
+    collapsed: true
+  Width: 1080
+  X: 1407
+  Y: 136

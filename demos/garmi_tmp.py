@@ -24,8 +24,8 @@ os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 # os.environ["ISAAC_WINDOW"] = "960x540"
 # os.environ["ISAAC_WINDOW"] = "854x480"
 # os.environ["ISAAC_WINDOW"] = "768x432"
-os.environ["ISAAC_WINDOW"] = "640x360"
-# os.environ["ISAAC_WINDOW"] = "512x288"
+# os.environ["ISAAC_WINDOW"] = "640x360"
+os.environ["ISAAC_WINDOW"] = "512x288"
 os.environ["DISPLAY"] = ":1"
 
 
@@ -47,7 +47,7 @@ from launcher import (
 )
 from cram_vrb_lab.sim.isaac_app import livestream_enabled
 
-rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
+# rviz_proc = start_rviz(rviz_config=RVIZ_CONFIG)
 sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="none",
                            spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 stream_proc = start_streaming_client() if livestream_enabled() else None

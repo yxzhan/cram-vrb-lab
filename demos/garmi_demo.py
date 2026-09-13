@@ -16,8 +16,8 @@ in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
 REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-os.environ.setdefault("ISAAC_HEADLESS", "1")
-os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+# os.environ.setdefault("ISAAC_HEADLESS", "1")
+# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
@@ -82,8 +82,6 @@ from coraplex.plans.factories import sequential
 from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
 from coraplex.robot_plans.actions.core.navigation import LookAtAction, NavigateAction
 from coraplex.visualization import WorldVisualization
-from giskardpy.data_types.exceptions import GiskardException
-from giskardpy.motion_statechart.exceptions import CollisionViolatedError
 from semantic_digital_twin.adapters.ros.world_fetcher import fetch_world_from_service
 from semantic_digital_twin.adapters.ros.world_synchronizer import WorldSynchronizer
 from semantic_digital_twin.robots.garmi import Garmi
@@ -196,15 +194,20 @@ def run_plan(plan, collision_avoidance=True, real_mode=True):
     try:
         with robot_mode(collision_avoidance=collision_avoidance):
             plan.perform()
-    except (GiskardException, CollisionViolatedError) as failure:
-        print(f"Catch giskard failed -- {type(failure).__name__}: {failure}")
-        return False
     except KeyboardInterrupt:
         # Re-raised, so that ctrl-c reaches the loop below and ends the run rather than
         # only failing the plan that happened to be running.
         from cram_vrb_lab.sim.scene_reset import cancel_motion
         print("  interrupted --", cancel_motion(context))
         raise
+    except Exception as failure:
+        # Everything, not the handful of giskard types this used to name: the failures
+        # that end a plan come from several families that share no base --
+        # GiskardException, the motion statechart's DataclassExceptions
+        # (NoProgressError, CollisionViolatedError), the world's own -- and a loop that
+        # is meant to keep running must not stop at whichever one it has not met yet.
+        print(f"  plan failed -- {type(failure).__name__}: {failure}")
+        return False
     finally:
         # Physics owns where the objects ended up: a place lets them settle, a knock
         # moves them. So the twin follows the sim here rather than asserting the poses a
@@ -524,20 +527,39 @@ drawer_handle = annotate(Drawer, DRAWER)
 BOWL_TARGET_POINT = Point3.from_iterable([1.6, 5.1, 0.88])
 SPOON_TARGET_POINT = Point3.from_iterable([1.6, 5.3, 0.85])
 
+SUCCESS_TOLERANCE = 0.2
+"""How far off its target an object may come to rest, on each axis, and still count."""
+
+TASK_TARGETS = {"bowl.stl": BOWL_TARGET_POINT, "spoon.stl": SPOON_TARGET_POINT}
+
+
+def delivered():
+    """Which of :data:`TASK_TARGETS` the objects actually reached.
+
+    Read off the twin, which ``run_plan`` has just pulled the settled poses into, so
+    this judges where an object came to rest rather than where the plan believed it put
+    it: a place that drops it on the way counts as a miss, and a plan that raised
+    halfway can still have delivered the one it had already put down.
+    """
+    outcome = {}
+    for name, target in TASK_TARGETS.items():
+        position = np.asarray(
+            world.get_body_by_name(name).global_pose.to_np()
+        )[:3, 3].ravel()
+        offset = np.abs(position - np.asarray(target.to_np()).ravel()[:3])
+        outcome[name] = bool(np.all(offset <= SUCCESS_TOLERANCE))
+        print(f"  {name:12s} off by {np.round(offset, 3)} m -> "
+              f"{'delivered' if outcome[name] else 'missed'}")
+    return outcome
+
 
 def run_task():
-    """Carry the bowl and then the spoon to the dining table."""
-    bowl_done = run_plan(sequential([
+    """Carry the bowl and then the spoon to the dining table.
+
+    :return: which object reached its target, by name.
+    """
+    run_plan(sequential([
         ParkArmsAction(arm=Arms.BOTH),
-        # NavigateAction(Pose(
-        #     Point3.from_iterable(
-        #         [0, 5.5, 0]
-        #     ),
-        #     Quaternion.from_iterable(
-        #         [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
-        #     ),
-        #     reference_frame=world.root,
-        # )),
         TransportAction(
             object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
             arm=Arms.RIGHT,
@@ -545,9 +567,11 @@ def run_task():
                 position=BOWL_TARGET_POINT, reference_frame=world.root
             ),
         ),
+    # Enable collision_avoidance will cause CollisionViolatedError: Violated collision constraints: 
+    # ('body_link', 'right_fr3_link3'): -0.005683979535869989 < 0.0
     ], context=context), collision_avoidance=False)
 
-    spoon_done = run_plan(sequential([
+    run_plan(sequential([
         ParkArmsAction(arm=Arms.BOTH),
         NavigateAction(Pose(
             Point3.from_iterable(
@@ -558,15 +582,6 @@ def run_task():
             ),
             reference_frame=world.root,
         )),
-        # NavigateAction(Pose(
-        #     Point3.from_iterable(
-        #         [-1, 7.2, 0]
-        #     ),
-        #     Quaternion.from_iterable(
-        #         [0.0, 0.0, 0.0, 1.0]
-        #     ),
-        #     reference_frame=world.root,
-        # )),
         TransportAction(
             object_designator=world.get_semantic_annotations_by_type(Spoon)[0],
             arm=Arms.RIGHT,
@@ -575,7 +590,7 @@ def run_task():
             ),
         ),
     ], context=context), collision_avoidance=True)
-    return bowl_done and spoon_done
+    return delivered()
 
 
 # %% [markdown]
@@ -608,11 +623,20 @@ RUNS = 10
 """How many times to run the task. 0 repeats until interrupted."""
 
 run = 0
+deliveries = {name: 0 for name in TASK_TARGETS}
+
+
+def success_rate():
+    return {name: f"{count}/{run}" for name, count in deliveries.items()}
+
+
 try:
     while RUNS == 0 or run < RUNS:
         run += 1
         print(f"=== run {run} ===")
-        print("task:", run_task())
+        for name, reached in run_task().items():
+            deliveries[name] += reached
+        print("success rate:", success_rate())
         reset_all()
         spawn_objects()
         print("sync:", sync_objects(settle=2)[0])
@@ -620,4 +644,5 @@ try:
 except KeyboardInterrupt:
     print("stopped after run", run)
 finally:
+    print("success rate:", success_rate())
     quiet_shutdown()
