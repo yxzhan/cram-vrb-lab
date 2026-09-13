@@ -11,7 +11,8 @@ pkill -9 -f ipykernel_launcher
 for pattern in \
     "cognitive_robot_abstract_machine/.venv/bin/python" \
     isaacsim_python_wrapper \
-    isaac-sim/kit/python\
+    isaac-sim/kit/python \
+    isaacsim-webrtc-streaming-client \
     static_transform_publisher \
     rviz2
 do
