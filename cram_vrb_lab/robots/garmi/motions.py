@@ -14,6 +14,13 @@ uses them. The result is a demo that approaches a drawer with the arm alone and
 then pulls it open with the whole robot. :class:`_GarmiContainerMotion` pins the
 base for the pull when the flag is off, so one switch means one thing.
 
+.. note::
+   Turning the flag *on* to help a reach is not an option in this simulation: the
+   base is driven kinematically (``GarmiROS.integrate_base`` teleports ``base_link``
+   along the commanded twist and ``undrive_wheels`` takes the force out of the
+   wheels), so a base that the QP walks into the furniture does not stop -- it
+   pushes the cabinet and everything standing on it out of the way.
+
 **2. Giskard has no timeout of its own.** There is no
 ``max_trajectory_length`` or equivalent in its config, and the client side waits
 on the action result with no deadline either
@@ -77,7 +84,7 @@ Comfortably longer than the 0.8 s an unobstructed close takes, so it only ever
 decides the *obstructed* case.
 """
 
-MOVE_TIMEOUT = 30.0
+MOVE_TIMEOUT = 60.0
 """Seconds to keep driving at a navigation goal before calling the motion done.
 
 **Coupled to how far the base is asked to go and how fast it may go.** The drive
@@ -133,9 +140,14 @@ class WhileHolding(Goal):
     """Tasks constraining what the goal does not. See :func:`hold_base`."""
 
     def expand(self, context: MotionStatechartContext) -> None:
-        self.add_nodes([self.goal, *self.held])
+        # giskard renamed the way a Goal contributes children: it used to be
+        # ``add_nodes``, which no longer exists -- a call to it aborted the goal on the
+        # server with ``'WhileHolding' object has no attribute 'add_nodes'``.
+        self._add_children_to_motion_statechart([self.goal, *self.held])
 
-    def build(self, context: MotionStatechartContext) -> NodeArtifacts:
+    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
+        # build_artifacts rather than build: build() is now the wrapper that calls it,
+        # and an override of build() that does not chain would skip it for every node.
         return NodeArtifacts(observation=self.goal.observation_variable)
 
 

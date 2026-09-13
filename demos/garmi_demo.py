@@ -16,8 +16,8 @@ in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
 REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-# os.environ.setdefault("ISAAC_HEADLESS", "1")
-# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+os.environ.setdefault("ISAAC_HEADLESS", "1")
+os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
@@ -31,7 +31,7 @@ os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
 # os.environ["ISAAC_WINDOW"] = "768x432"
 os.environ["ISAAC_WINDOW"] = "640x360"
 # os.environ["ISAAC_WINDOW"] = "512x288"
-# os.environ["DISPLAY"] = ":0"
+os.environ["DISPLAY"] = ":1"
 
 
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
@@ -76,8 +76,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 
 from coraplex.datastructures.dataclasses import Context
-from coraplex.datastructures.enums import ApproachDirection, Arms, VerticalAlignment
-from coraplex.datastructures.grasp import GraspDescription
+from coraplex.datastructures.enums import Arms
 from coraplex.execution_environment import real_robot, simulated_robot
 from coraplex.plans.factories import execute_single, sequential
 from coraplex.robot_plans.actions.core.navigation import LookAtAction, NavigateAction
@@ -125,7 +124,51 @@ if not rclpy.ok():
 node = rclpy.create_node("cram_garmi_node")
 executor = MultiThreadedExecutor()
 executor.add_node(node)
-threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor").start()
+spin_thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
+spin_thread.start()
+
+
+def quiet_shutdown():
+    """Take everything this script started back down, in the order that stays quiet.
+
+    Called before the interpreter exits rather than from ``atexit``: the thread pool the
+    executor submits callbacks into is torn down through ``threading._register_atexit``,
+    which runs ahead of every ordinary atexit handler, so a spinning daemon thread left
+    to it ends the run with ``RuntimeError: cannot schedule new futures after shutdown``
+    printed on top of whatever the script actually did -- which reads as a crash after a
+    clean run.
+
+    The order is what keeps it silent: the carry timer first, so nothing new is queued
+    onto the executor; then the viewer, whose sockets belong to this process; then the
+    sim and the giskard server, which are other processes; then the executor and its
+    thread; then the node and rclpy.
+
+    Every step is guarded. The functions above run in a notebook too, where this can be
+    reached before the cells that create the timer or the viewer have run, and the whole
+    thing is idempotent so calling it twice -- or after a cell already stopped one piece
+    -- is harmless.
+    """
+    if globals().get("_has_shut_down"):
+        return
+    globals()["_has_shut_down"] = True
+
+    carry_timer = globals().get("carry_timer")
+    if carry_timer is not None:
+        node.destroy_timer(carry_timer)
+        globals()["carry_timer"] = None
+
+    visualization = globals().get("visualization")
+    if visualization is not None:
+        visualization.stop()
+        globals()["visualization"] = None
+
+    stop()  # isaac sim, the giskard server, rviz and the streaming client
+
+    executor.shutdown()
+    spin_thread.join(timeout=2.0)
+    node.destroy_node()
+    if rclpy.ok():
+        rclpy.shutdown()
 
 world = fetch_world_from_service(node=node, timeout_seconds=300)
 WorldSynchronizer(_world=world, node=node)
@@ -201,15 +244,25 @@ def body_position(name):
 
 
 def annotate(view_type, name):
+    """Annotate a container and return its ``Handle`` annotation.
+
+    The annotation rather than the handle body: an action is given a designator that can
+    say where it may be grasped (``HasGraspPoses``), and reads the body off it itself.
+    The motions that pull the container still take the body -- ``handle.root``.
+    """
     body = world.get_body_by_name(name)
-    handle = world.get_body_by_name(f"{name}_handle")
-    if not any(view.root is body
-               for view in world.get_semantic_annotations_by_type(view_type)):
-        with world.modify_world():
-            world.add_semantic_annotation_recursively(
-                view_type(root=body, handle=Handle(root=handle))
-            )
-    return handle
+    handle_body = world.get_body_by_name(f"{name}_handle")
+    existing = next(
+        (view for view in world.get_semantic_annotations_by_type(view_type)
+         if view.root is body),
+        None,
+    )
+    if existing is not None:
+        return existing.handle
+    view = view_type(root=body, handle=Handle(root=handle_body))
+    with world.modify_world():
+        world.add_semantic_annotation_recursively(view)
+    return view.handle
 
 
 def drive_to(handle_name, standoff, lateral, attempts=1):
@@ -247,17 +300,24 @@ def nudge_base(forward=0.0, left=0.0, turn=0.0):
 
 
 def grasp_handle(handle, arm, attempts=3):
-    grasp = GraspDescription(
-        ApproachDirection.FRONT,
-        VerticalAlignment.NoAlignment,
-        ViewManager.get_end_effector_view(arm, robot),
-        manipulation_offset=RETREAT,
-    )
-    _, commanded, _ = grasp.grasp_pose_sequence(handle)
-    goal_frame = np.asarray(handle.global_pose.to_np()) @ np.asarray(commanded.to_np())
-    goal = goal_frame[:3, 3].ravel()
+    """Close on ``handle`` (a ``Handle`` annotation), retrying while the tcp misses.
+
+    The grasp is whatever the annotation offers -- ``grasp_poses()`` yields frames in the
+    handle's own frame, x along the approach, y along the finger axis -- so there is
+    nothing to describe here and nothing to keep in step with the gripper. The first one
+    is what ``GraspingAction`` would pick itself; taking it explicitly is only so the
+    error below is measured against the pose actually commanded.
+    """
+    grasp_pose = next(iter(handle.grasp_poses()))
+    goal = (
+        np.asarray(handle.root.global_pose.to_np())
+        @ np.asarray(grasp_pose.to_np())
+    )[:3, 3].ravel()
     for attempt in range(1, attempts + 1):
-        run_plan(execute_single(GraspingAction(handle, arm, grasp), context=context))
+        run_plan(execute_single(
+            GraspingAction(object_designator=handle, arm=arm, grasp_pose=grasp_pose),
+            context=context,
+        ))
         tool = ViewManager.get_end_effector_view(arm, robot).tool_frame
         error = float(np.linalg.norm(
             np.asarray(tool.global_pose.to_np())[:3, 3].ravel() - goal
@@ -288,8 +348,12 @@ def retreat(arm, distance=RETREAT):
 
 
 def work_container(motion, handle, arm, attempts=3):
+    """Grasp ``handle`` (a ``Handle`` annotation) and pull the container with ``motion``.
+
+    ``OpeningMotion``/``ClosingMotion`` still take the handle *body*, hence ``.root``.
+    """
     grasp_handle(handle, arm, attempts)
-    run_plan(execute_single(motion(handle, arm), context=context))
+    run_plan(execute_single(motion(handle.root, arm), context=context))
     run_plan(execute_single(MoveGripperMotion(GripperState.OPEN, arm), context=context))
     retreat(arm)
 
@@ -375,26 +439,26 @@ SCENE_OBJECTS = (
         "spoon.stl", "spoon.stl", Spoon, (0.0, 0.0, -0.069), parent="drawer_1",
         grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.80, 0.80, 0.0),
     ),
-    SceneObject(
-        "spoon2.stl", "spoon.stl", Spoon, (0.5, 7.2, 1.0),
-        grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
-    ),
-    SceneObject(
-        "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.05, 7.58, 0.9650),
-        mass=0.120, color=(0.90, 0.90, 0.92),
-    ),
-    SceneObject(
-        "milk.stl", "milk.stl", Milk, (0.10, 7.58, 1.0527),
-        mass=1.000, collider="convexHull", color=(0.88, 0.92, 0.96),
-    ),
-    SceneObject(
-        "bread.stl", "bread.stl", Bread, (0.38, 7.58, 0.9943),
-        mass=0.400, collider="convexHull", color=(0.76, 0.55, 0.31),
-    ),
-    SceneObject(
-        "big-knife.stl", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
-        mass=0.100, color=(0.55, 0.57, 0.60),
-    ),
+    # SceneObject(
+    #     "spoon2.stl", "spoon.stl", Spoon, (0.5, 7.2, 1.0),
+    #     grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
+    # ),
+    # SceneObject(
+    #     "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.05, 7.58, 0.9650),
+    #     mass=0.120, color=(0.90, 0.90, 0.92),
+    # ),
+    # SceneObject(
+    #     "milk.stl", "milk.stl", Milk, (0.10, 7.58, 1.0527),
+    #     mass=1.000, collider="convexHull", color=(0.88, 0.92, 0.96),
+    # ),
+    # SceneObject(
+    #     "bread.stl", "bread.stl", Bread, (0.38, 7.58, 0.9943),
+    #     mass=0.400, collider="convexHull", color=(0.76, 0.55, 0.31),
+    # ),
+    # SceneObject(
+    #     "big-knife.stl", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
+    #     mass=0.100, color=(0.55, 0.57, 0.60),
+    # ),
 )
 
 OBJECT_BY_NAME = {scene_object.name: scene_object for scene_object in SCENE_OBJECTS}
@@ -567,101 +631,58 @@ carry_timer = node.create_timer(
 # %%
 DRAWER = "drawer_1"
 DRAWER_ARM = Arms.LEFT
-STANDOFF = {Drawer: (1.0, 0.6), Door: (1.2, 0)}
+STANDOFF = {Drawer: (1.2, 0.4), Door: (1.2, 0)}
 
 robot.mobile_base.full_body_controlled = False
 
 drawer_handle = annotate(Drawer, DRAWER)
-drawer_joint = world.get_connection_by_name(f"{DRAWER}_joint")
-
-# reset_pos()
-# drive_to(f"{DRAWER}_handle", *STANDOFF[Drawer])
-
-# run_plan(sequential([
-#     # LookAtAction(drawer_handle.global_pose),
-#     GraspingAction(drawer_handle, DRAWER_ARM, GraspDescription(
-#         ApproachDirection.FRONT,
-#         VerticalAlignment.NoAlignment,
-#         ViewManager.get_end_effector_view(DRAWER_ARM, robot),
-#         manipulation_offset=0.1,
-#     )),
-#     OpeningMotion(drawer_handle, DRAWER_ARM),
-#     # ClosingMotion(drawer_handle, DRAWER_ARM),
-#     MoveGripperMotion(GripperState.OPEN, DRAWER_ARM)
-# ], context=context), collision_avoidance=False)
-
-
-# run_plan(sequential([
-#     # ClosingMotion(drawer_handle, DRAWER_ARM),
-#     MoveGripperMotion(GripperState.OPEN, DRAWER_ARM)
-# ], context=context), collision_avoidance=False)
-
-# retreat(DRAWER_ARM)
-# reset_pos()
-
-# run_plan(execute_single(LookAtAction(drawer_handle.global_pose), context=context))
-# work_container(OpeningMotion, drawer_handle, DRAWER_ARM)
-# work_container(ClosingMotion, drawer_handle, DRAWER_ARM)
-# print("opened:", drawer_joint.position)
 
 # %%
 # The annotation, not the body: TransportAction reads .root off its object_designator.
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 
-end_effector = context.robot.get_right_arm_if_specified().end_effector
-
-# PlaceAction puts the body *origin* here, which grasp_point moved onto the rim / the
-# handle.
+# PlaceAction puts the body origin here. The grasp itself is whatever the object
+# offers -- Bowl traces its rim wall, Cuttlery reaches down across the piece -- so
+# nothing here says how to take hold of it.
 BOWL_TARGET_POINT = Point3.from_iterable([1.6, 5.1, 0.88])
 SPOON_TARGET_POINT = Point3.from_iterable([1.6, 5.3, 0.85])
 
 done = run_plan(sequential([
-    # ParkArmsAction(arm=Arms.BOTH),
+    ParkArmsAction(arm=Arms.BOTH),
     # # Note: always need TorsoState.HIGH or next(iter(self)) of CostmapLocation fails
-    TransportAction(
-        object_designator=world.get_semantic_annotations_by_type(Spoon)[1],
-        arm=Arms.RIGHT,
-        grasp_description=GraspDescription(
-            ApproachDirection.RIGHT,
-            VerticalAlignment.TOP,
-            rotate_gripper=True,
-            end_effector=end_effector,
-        ),
-        target_location=Pose(
-            position=SPOON_TARGET_POINT, reference_frame=world.root
-        ),
-    ),
     TransportAction(
         object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
         arm=Arms.RIGHT,
-        grasp_description=GraspDescription(
-            ApproachDirection.RIGHT,
-            VerticalAlignment.TOP,
-            end_effector,
-            rotate_gripper=False,
-        ),
         target_location=Pose(
             position=BOWL_TARGET_POINT, reference_frame=world.root
         ),
     ),
     NavigateAction(Pose(
         Point3.from_iterable(
-            [-1, 6.0, 0]
+            [-1, 6.8, 0]
         ),
         Quaternion.from_iterable(
             [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
         ),
         reference_frame=world.root,
     )),
+    # GraspingAction(object_designator=drawer_handle, arm=DRAWER_ARM,
+    #                approach_clearance=0.15),
+    # OpeningMotion(drawer_handle.root, DRAWER_ARM),
+    # MoveGripperMotion(GripperState.OPEN, DRAWER_ARM),
+    # NavigateAction(Pose(
+    #     Point3.from_iterable(
+    #         [0.4, 5.9, 0]
+    #     ),
+    #     Quaternion.from_iterable(
+    #         [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
+    #     ),
+    #     reference_frame=world.root,
+    # )),
+    # ParkArmsAction(arm=Arms.BOTH),
     TransportAction(
         object_designator=world.get_semantic_annotations_by_type(Spoon)[0],
         arm=Arms.RIGHT,
-        grasp_description=GraspDescription(
-            ApproachDirection.RIGHT,
-            VerticalAlignment.TOP,
-            rotate_gripper=True,
-            end_effector=end_effector,
-        ),
         target_location=Pose(
             position=SPOON_TARGET_POINT, reference_frame=world.root
         ),
@@ -670,7 +691,7 @@ done = run_plan(sequential([
 
 # %%
 time.sleep(10)
-stop()
+quiet_shutdown()
 sys.exit()
 
 # %% [markdown]
@@ -974,8 +995,6 @@ for body, c in zip(bodies, canned):
 # The annotation, not the body: TransportAction reads .root off its object_designator.
 from coraplex.robot_plans.actions.composite.transporting import TransportAction
 
-end_effector = context.robot.get_right_arm_if_specified().end_effector
-
 # %%
 
 bowl = world.get_semantic_annotations_by_type(Bowl)[3]
@@ -985,12 +1004,6 @@ done = run_plan(sequential([
     TransportAction(
         object_designator=bowl,
         arm=Arms.RIGHT,
-        grasp_description=GraspDescription(
-            ApproachDirection.RIGHT,
-            VerticalAlignment.TOP,
-            end_effector,
-            rotate_gripper=False,
-        ),
         target_location=Pose(
             position=BOWL_TARGET_POINT, reference_frame=world.root
         ),
@@ -1007,10 +1020,7 @@ PICK_HINT = (0.3, 7.3)
 # PICK_HINT = (0.1, 7.3)
 
 PICK_ARM = Arms.RIGHT
-PICK_APPROACH = ApproachDirection.FRONT
-PICK_ALIGNMENT = VerticalAlignment.TOP
 PICK_CLEARANCE = 0.02
-ROTATE_GRIPPER = True
 PLACE_BODY = world.get_body_by_name(DRAWER)
 LIFT_AFTER_PLACE = 0.15
 
@@ -1033,13 +1043,10 @@ nudge_base(turn=math.pi / 6)
 
 # %%
 
-pick_grasp = GraspDescription(
-    PICK_APPROACH,
-    PICK_ALIGNMENT,
-    ViewManager.get_end_effector_view(PICK_ARM, robot),
-    rotate_gripper=ROTATE_GRIPPER,
-    manipulation_offset=PICK_CLEARANCE,
-)
+# The grasp the annotation offers, in the object's own frame: Bowl traces its rim wall
+# and hands back top-down grasps straddling it. Taken explicitly here only because the
+# waypoints below need the orientation it commands; PickUpAction would pick the same one.
+pick_grasp = next(iter(target_bowl.grasp_poses()))
 
 pick_T = HomogeneousTransformationMatrix(
     data=np.asarray(target_body.global_pose.to_np())
@@ -1058,7 +1065,7 @@ carry_waypoints = [
     # (place_xyz[0], place_xyz[1], place_xyz[2] + 0.2),
 ]
 carry_quaternion = (
-    pick_T.to_rotation_matrix() @ pick_grasp.grasp_orientation().to_rotation_matrix()
+    pick_T.to_rotation_matrix() @ pick_grasp.to_rotation_matrix()
 ).to_quaternion()
 
 done = run_plan(sequential([
@@ -1066,7 +1073,8 @@ done = run_plan(sequential([
     PickUpAction(
         object_designator=target_bowl,
         arm=PICK_ARM,
-        grasp_description=pick_grasp,
+        grasp_pose=pick_grasp,
+        approach_clearance=PICK_CLEARANCE,
     ),
     LookAtAction(
         Pose(Point3.from_iterable(carry_waypoints[2]), reference_frame=world.root)
@@ -1129,7 +1137,7 @@ door_joint = world.get_connection_by_name(f"{DOOR}_joint")
 
 drive_to(f"{DOOR}_handle", *STANDOFF[Door])
 reset_pos()
-run_plan(execute_single(LookAtAction(door_handle.global_pose), context=context))
+run_plan(execute_single(LookAtAction(door_handle.root.global_pose), context=context))
 
 work_container(OpeningMotion, door_handle, DOOR_ARM)
 print("opened:", door_joint.position)
@@ -1146,4 +1154,4 @@ reset_pos()
 
 # %%
 time.sleep(10)
-stop()
+quiet_shutdown()

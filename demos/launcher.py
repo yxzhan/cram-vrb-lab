@@ -39,7 +39,7 @@ os.environ.setdefault("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
 os.environ.setdefault("ROS_AUTOMATIC_DISCOVERY_RANGE", "LOCALHOST")
 
 ISAAC_SIM_LOG = f"{REPO}/isaac_sim.log"
-GISKARD_SERVER_LOG = f"/{REPO}/giskard_server.log"
+GISKARD_SERVER_LOG = f"{REPO}/giskard_server.log"
 RVIZ_LOG = "/tmp/rviz.log"
 STREAMING_CLIENT_LOG = "/tmp/streaming_client.log"
 

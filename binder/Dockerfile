@@ -141,6 +141,8 @@ RUN chmod +x ${REPO_DIR}/binder/autostart-garmi.sh && \
     mkdir -p ${HOME}/.config/autostart
 COPY --chown=${NB_USER}:users binder/GARMI-Apartment-autostart.desktop ${HOME}/.config/autostart/
 
+RUN code-server --install-extension mhutchie.git-graph
+
 # Set VSCODE default directory
 ENV CODE_WORKING_DIRECTORY=${REPO_DIR}
 #===================================================================#
