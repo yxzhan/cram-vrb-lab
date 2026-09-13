@@ -29,8 +29,8 @@ os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
 # os.environ["ISAAC_WINDOW"] = "960x540"
 # os.environ["ISAAC_WINDOW"] = "854x480"
 # os.environ["ISAAC_WINDOW"] = "768x432"
-os.environ["ISAAC_WINDOW"] = "640x360"
-# os.environ["ISAAC_WINDOW"] = "512x288"
+# os.environ["ISAAC_WINDOW"] = "640x360"
+os.environ["ISAAC_WINDOW"] = "512x288"
 os.environ["DISPLAY"] = ":1"
 
 
@@ -308,7 +308,7 @@ class SceneObject:
 
 SCENE_OBJECTS = (
     SceneObject(
-        "bowl.stl", "bowl.stl", Bowl, (0.0, 7.2, 1.0),
+        "bowl.stl", "bowl.stl", Bowl, (0.5, 7.2, 1.0),
         grasp_point=(0.0677, 0.0, 0.028), mass=0.058, color=(0.20, 0.45, 0.80),
     ),
     SceneObject(
