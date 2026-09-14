@@ -38,7 +38,7 @@ os.environ["DISPLAY"] = ":1"
 # server configures its QP with it, and the sim compares its own cycle rate against it
 # and warns when the margin is gone. Telling only start_giskard_server leaves the sim
 # on the default, and its warning then reports a rate nothing is running at.
-os.environ["GISKARD_CONTROL_HZ"] = "20"
+os.environ["GISKARD_CONTROL_HZ"] = "15"
 
 
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
