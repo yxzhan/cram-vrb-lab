@@ -16,13 +16,13 @@ in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
 REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-# os.environ.setdefault("ISAAC_HEADLESS", "1")
-# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+os.environ.setdefault("ISAAC_HEADLESS", "1")
+os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
 # and "rerun" are the other backends coraplex.visualization knows.
-# os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
+os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
 
 # os.environ["ISAAC_WINDOW"] = "1920x1080"
 # os.environ["ISAAC_WINDOW"] = "1280x720"
@@ -31,7 +31,7 @@ sys.path.insert(0, str(REPO))
 # os.environ["ISAAC_WINDOW"] = "768x432"
 os.environ["ISAAC_WINDOW"] = "640x360"
 # os.environ["ISAAC_WINDOW"] = "512x288"
-os.environ["DISPLAY"] = ":1"
+# os.environ["DISPLAY"] = ":1"
 
 # The rate giskard closes its QP loop at. Set here rather than passed to one of the
 # launchers, because both subprocesses need it (cram_vrb_lab/control/rate.py): the
@@ -576,6 +576,9 @@ def run_task():
         ),
     # Enable collision_avoidance will cause CollisionViolatedError: Violated collision constraints: 
     # ('body_link', 'right_fr3_link3'): -0.005683979535869989 < 0.0
+
+    # NoProgressError: SequentialNode#None stopped approaching a goal for 0:00:05.
+# Suggestion: Check whether the goal is reachable, whether another task of equal or higher weight is opposing it, or whether the robot is at a joint limit.
     ], context=context), collision_avoidance=False)
 
     run_plan(sequential([
@@ -626,8 +629,36 @@ def reset_all():
 # ## Loop
 
 # %%
+import signal
+
 RUNS = 10
 """How many times to run the task. 0 repeats until interrupted."""
+
+TASK_TIMEOUT = 600.0
+"""Seconds a run may take before it is given up on and the loop moves on.
+
+A plan that stops making progress does not always fail: it can sit in a giskard goal
+that never ends, or in a location search probing candidate after candidate, and
+nothing below has a deadline of its own.
+"""
+
+
+class TaskTimeout(BaseException):
+    """Raised in the main thread when a run outstays :data:`TASK_TIMEOUT`.
+
+    Off ``BaseException`` rather than ``Exception`` on purpose: ``run_plan`` swallows
+    every ``Exception`` to keep the loop going, which would turn the deadline into a
+    single failed plan and let the run carry on into the next one.
+    """
+
+
+def give_up(signal_number, frame):
+    raise TaskTimeout(f"run exceeded {TASK_TIMEOUT:.0f}s")
+
+
+# Delivered by SIGALRM, which is why this interrupts a blocked call at all; it is also
+# why the timeout only works from the main thread.
+signal.signal(signal.SIGALRM, give_up)
 
 run = 0
 deliveries = {name: 0 for name in TASK_TARGETS}
@@ -641,7 +672,18 @@ try:
     while RUNS == 0 or run < RUNS:
         run += 1
         print(f"=== run {run} ===")
-        for name, reached in run_task().items():
+        signal.setitimer(signal.ITIMER_REAL, TASK_TIMEOUT)
+        try:
+            outcome = run_task()
+        except TaskTimeout as expired:
+            # Judged anyway: a run that was cut short still put the objects somewhere,
+            # and every run has to contribute one verdict or the rate means nothing.
+            # reset_all() below cancels the goal that was still executing.
+            print(f"  {expired}")
+            outcome = delivered()
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+        for name, reached in outcome.items():
             deliveries[name] += reached
         print("success rate:", success_rate())
         reset_all()
