@@ -20,12 +20,19 @@ from cram_vrb_lab.control.rate import CONTROL_HZ_ENV, control_hz
 from cram_vrb_lab.setups import get_setup, spawn_pose_from_args
 from cram_vrb_lab.sim.isaac_app import READY_MARKER
 
-SPINS_PER_STEP = 16
+SPINS_PER_STEP = 1
 """How many callbacks to drain per sim step.
 
 ``spin_once`` handles exactly ONE message per call, and with giskard streaming two
 topics at ~20 Hz each, a single spin per sim tick falls behind and commands arrive
-stale.
+stale. Four leaves a margin of about 2.5x over what a 25 Hz cycle has to drain.
+
+Not larger, because an empty ``spin_once`` is not free: it builds a wait set per
+call, ~1.1 ms of it on the GARMI apartment, so the sixteen this used to do cost
+18 ms of a 40 ms cycle *with no traffic at all* -- more than the physics and the
+frame together, and the reason the loop ran at 20 Hz with RTF 0.8 while neither
+the GPU nor any core was near its limit. At four the same scene holds 24.9 Hz,
+RTF 1.00, without touching ``physics_dt``.
 """
 
 RATE_REPORT_PERIOD = 5.0

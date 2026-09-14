@@ -22,16 +22,23 @@ sys.path.insert(0, str(REPO))
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
 # and "rerun" are the other backends coraplex.visualization knows.
-os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
+# os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
 
 # os.environ["ISAAC_WINDOW"] = "1920x1080"
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
 # os.environ["ISAAC_WINDOW"] = "854x480"
 # os.environ["ISAAC_WINDOW"] = "768x432"
-# os.environ["ISAAC_WINDOW"] = "640x360"
-os.environ["ISAAC_WINDOW"] = "512x288"
+os.environ["ISAAC_WINDOW"] = "640x360"
+# os.environ["ISAAC_WINDOW"] = "512x288"
 os.environ["DISPLAY"] = ":1"
+
+# The rate giskard closes its QP loop at. Set here rather than passed to one of the
+# launchers, because both subprocesses need it (cram_vrb_lab/control/rate.py): the
+# server configures its QP with it, and the sim compares its own cycle rate against it
+# and warns when the margin is gone. Telling only start_giskard_server leaves the sim
+# on the default, and its warning then reports a rate nothing is running at.
+os.environ["GISKARD_CONTROL_HZ"] = "20"
 
 
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
@@ -57,7 +64,7 @@ if not in_notebook:
     sim_proc = start_isaac_sim(robot=ROBOT, scene=SCENE, camera="none",
                             spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
     stream_proc = start_streaming_client() if livestream_enabled() else None
-    giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE, control_hz=15,
+    giskard_proc = start_giskard_server(robot=ROBOT, scene=SCENE,
                                         spawn_position=SPAWN_POSITION, spawn_yaw=SPAWN_YAW)
 
 # %% [markdown]
