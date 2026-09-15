@@ -16,8 +16,8 @@ in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
 REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
-# os.environ.setdefault("ISAAC_HEADLESS", "1")
-# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+os.environ.setdefault("ISAAC_HEADLESS", "1")
+os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
