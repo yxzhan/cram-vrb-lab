@@ -594,7 +594,7 @@ def run_task():
                 position=SPOON_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    ], context=context), collision_avoidance=True)
+    ], context=context), collision_avoidance=False)
     return delivered()
 
 
