@@ -1,3 +1,6 @@
+# syntax=docker/dockerfile:1.7-labs
+# ^ parser directive, must stay the very first line: the COPY --exclude below is
+#   a labs feature and only BuildKit reads it.
 # Dockerfile of the base image: https://github.com/IntEL4CoRo/jupyter-ros2
 FROM intel4coro/jupyter-ros2:jazzy-py3.12
 
@@ -119,8 +122,22 @@ COPY --chown=${NB_USER}:users binder/isaac-kernel.json /opt/conda/share/jupyter/
 COPY --chown=${NB_USER}:users binder/cram_python_wrapper.sh /home/jovyan/.local/bin/cram_python_wrapper.sh
 COPY --chown=${NB_USER}:users binder/cram-kernel.json /opt/conda/share/jupyter/kernels/cram/kernel.json
 
-# Pinned assets (Isaac USD scenes, stretch_urdf submodule) - rarely change.
-COPY --chown=${NB_USER}:users . ${REPO_DIR}
+# Pinned assets (Isaac USD scenes, stretch_urdf submodule) - rarely change, so they
+# get a layer of their own that survives every edit to the demos.
+COPY --chown=${NB_USER}:users assets/ ${REPO_DIR}/assets
+
+# The rest of the repo: what actually changes from build to build. The excludes are
+# what makes the layer above pay off -- without them this one would carry a second
+# copy of the assets (~900 MB) and of the submodule (~6 GB), and rewrite both
+# whenever any file in the repo changed. Both are already in the image by now, from
+# the COPY above and from the pinned-stack stage further up; perception_env is a
+# host-side venv that has no business in the image at all.
+COPY --chown=${NB_USER}:users \
+  --exclude=assets \
+  --exclude=cognitive_robot_abstract_machine \
+  --exclude=perception_env \
+  . ${REPO_DIR}
+
 RUN git config --global --add safe.directory ${REPO_DIR}
 
 # Set Jupyterlab default directory
