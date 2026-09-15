@@ -574,11 +574,6 @@ def run_task():
                 position=BOWL_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    # Enable collision_avoidance will cause CollisionViolatedError: Violated collision constraints: 
-    # ('body_link', 'right_fr3_link3'): -0.005683979535869989 < 0.0
-
-    # NoProgressError: SequentialNode#None stopped approaching a goal for 0:00:05.
-# Suggestion: Check whether the goal is reachable, whether another task of equal or higher weight is opposing it, or whether the robot is at a joint limit.
     ], context=context), collision_avoidance=False)
 
     run_plan(sequential([
@@ -686,6 +681,8 @@ try:
         for name, reached in outcome.items():
             deliveries[name] += reached
         print("success rate:", success_rate())
+        pritn("Reset in 5 seconds...")
+        time.sleep(5)
         reset_all()
         spawn_objects()
         print("sync:", sync_objects(settle=2)[0])

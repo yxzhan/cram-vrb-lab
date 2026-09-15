@@ -30,31 +30,44 @@ repository, Isaac Sim, the CRAM venv and the `ros2_ws` overlay already set up.
 
 ### Run the latest pre-built docker image locally
 
-> Note: Needs Ubuntu 20.04+, an NVIDIA RTX 3070 (or better) with the drivers installed (`nvidia-smi`), ~16 GB RAM and ~50 GB
-of free disk, plus [Docker](https://docs.docker.com/engine/install/) and the
-[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
+0. **Preparation.**
+
+    | What | Needed | Check with | Install guide |
+    |---|---|---|---|
+    | OS | Ubuntu 20.04 or newer, x86_64 | `lsb_release -d` | — |
+    | Hardware | NVIDIA RTX 2070 or better, ~16 GB RAM, ~50 GB free disk | `free -g`, `df -h ~` | — |
+    | NVIDIA driver | 580.65.06 or newer | `nvidia-smi` | [Isaac Sim requirements](https://docs.isaacsim.omniverse.nvidia.com/latest/installation/requirements.html) |
+    | Docker Engine | any current release | `docker run --rm hello-world` | [Install Docker Engine](https://docs.docker.com/engine/install/) |
+    | NVIDIA Container Toolkit | needed for `--gpus all` | `docker run --rm --gpus all ubuntu nvidia-smi` | [Installing the NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) |
 
 1. Run in Terminal:
 
     ```bash
-    curl -fsSL https://raw.githubusercontent.com/yxzhan/cram-vrb-lab/dev/install.sh | bash
+    bash <(curl -fsSL https://raw.githubusercontent.com/yxzhan/cram-vrb-lab/dev/install.sh)
     ```
 
     > The image is about 16 GB to download and ~50 GB unpacked, so the first
     > run takes a while. Docker caches it afterwards, and later runs start
     > straight away.
 
-1. Open web VSCODE: [http://localhost:8888/vscode](http://localhost:8888/vscode)
+    The script pulls the image and drops you into a shell inside the container,
+    at the repo root.
 
-1. Run Garmi Demo in VSCODE Terminal (not Terminal on host system):
+1. Run the Garmi demo **in that container shell**:
 
-    ```
-    /home/jovyan/cram-vrb-lab/binder/cram_python_wrapper.sh /home/jovyan/cram-vrb-lab/demos/garmi_demo.py
+    ```bash
+    binder/cram_python_wrapper.sh demos/garmi_demo.py
     ```
 
     > The first Isaac Sim start compiles shaders and can take **10 minutes or
     > more**. The compiled cache is written to `~/isaac_cache` on the host, so
     > later runs start in a few tens of seconds.
+
+1. Open the NeemHub web UI: [http://localhost:8711](http://localhost:8711)
+
+    > NeemHub shows the running demo in the browser: the live 3D scene, the plan
+    > tree as it executes, and a question console that answers questions about
+    > the episode.
 
 ## Architecture
 ```
