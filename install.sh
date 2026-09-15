@@ -14,11 +14,16 @@ GITHUB_REPO="${GITHUB_REPO:-yxzhan/cram-vrb-lab}"
 IMAGE_REPO="${IMAGE_REPO:-intel4coro/yxzhan-2dcram-2dvrb-2dlab-eb909a}"
 REF="${REF:-dev}"
 IMAGE_TAG="${IMAGE_TAG:-}"
-PORT="${PORT:-8888}"
-CRAMERA_PORT="${CRAMERA_PORT:-8711}"
-BRIDGE_PORT="${BRIDGE_PORT:-8765}"
 CACHE_DIR="${CACHE_DIR:-$HOME/isaac_cache}"
 PULL=1
+
+# The container runs with --network host, so these are not host-side choices: they
+# are the ports the services inside the image bind, and they bind them on the host
+# directly. Host networking is what makes the viewer reachable at all -- it listens
+# on 127.0.0.1 (cramera's server.py), which a published port can never reach.
+JUPYTER_PORT=8888
+CRAMERA_PORT=8711
+BRIDGE_PORT=8765
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
 warn() { printf '\033[1;33m warn:\033[0m %s\n' "$*" >&2; }
@@ -30,17 +35,14 @@ Usage: install.sh [options]
 
   --ref <branch>   branch to track (default: $REF)
   --tag <sha>      pin an exact image tag, skipping resolution
-  --port <port>    host port for JupyterLab, for when you start one inside
-                   the container (default: $PORT)
-  --cramera-port <port>
-                   host port for the cramera viewer (default: $CRAMERA_PORT)
-  --bridge-port <port>
-                   host port for the live demo bridge (default: $BRIDGE_PORT)
   --no-pull        skip 'docker pull' (use an already-downloaded image)
   -h, --help       show this help
 
-Every option also has an env var: REF, IMAGE_TAG, PORT, CRAMERA_PORT,
-BRIDGE_PORT, CACHE_DIR, IMAGE_REPO.
+Every option also has an env var: REF, IMAGE_TAG, CACHE_DIR, IMAGE_REPO.
+
+The container shares the host network, so its ports are fixed: ${CRAMERA_PORT}
+(NeemHub viewer), ${BRIDGE_PORT} (live demo bridge) and ${JUPYTER_PORT}
+(JupyterLab, if you start one inside the container).
 USAGE
 }
 
@@ -48,9 +50,6 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --ref)     REF="${2:?--ref needs a value}"; shift 2 ;;
     --tag)     IMAGE_TAG="${2:?--tag needs a value}"; shift 2 ;;
-    --port)    PORT="${2:?--port needs a value}"; shift 2 ;;
-    --cramera-port) CRAMERA_PORT="${2:?--cramera-port needs a value}"; shift 2 ;;
-    --bridge-port)  BRIDGE_PORT="${2:?--bridge-port needs a value}"; shift 2 ;;
     --no-pull) PULL=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *)         usage; die "unknown option: $1" ;;
@@ -98,10 +97,10 @@ resolve_tag() {
 
 # --- ports -------------------------------------------------------------------
 
-# 8888 JupyterLab, 8711 the cramera viewer the image's entrypoint starts, 8765 the
-# bridge a live demo opens. All three are published, so a port already taken on the
-# host would only surface as an obscure 'docker run' failure -- say which one it is,
-# and how to move it, before pulling 50 GB.
+# With host networking the services inside the container bind the host's ports
+# themselves, so a port already taken here means the service silently fails to come
+# up inside -- the viewer's port most of all, since nothing watches its restart loop
+# for a bind error. Check before pulling 50 GB, and say which port it is.
 port_in_use() {
   local port="$1"
   if command -v ss >/dev/null 2>&1; then
@@ -128,24 +127,22 @@ port_holder() {
   printf '%s' "$holder"
 }
 
+# The port cannot be moved -- it is hard-coded inside the image -- so the only fix is
+# to free it on the host.
 check_port() {
-  local port="$1" what="$2" flag="$3" holder
-  case "$port" in
-    ''|*[!0-9]*) die "invalid ${what} port: '${port}'" ;;
-  esac
+  local port="$1" what="$2" fatal="$3" holder message
   port_in_use "$port" || return 0
   holder="$(port_holder "$port")"
-  die "port ${port} (${what}) is already in use${holder:+ by ${holder}} -- \
-free it, or pick another one with '${flag} <port>'."
+  message="port ${port} (${what}) is already in use on this host${holder:+ by ${holder}}"
+  if [ "$fatal" = fatal ]; then
+    die "${message} -- the container shares the host network and the port is fixed, so free it first."
+  fi
+  warn "${message} -- starting JupyterLab inside the container will fail until it is freed."
 }
 
-[ "$PORT" != "$CRAMERA_PORT" ] && [ "$PORT" != "$BRIDGE_PORT" ] \
-  && [ "$CRAMERA_PORT" != "$BRIDGE_PORT" ] \
-  || die "the three host ports must differ: JupyterLab ${PORT}, cramera ${CRAMERA_PORT}, bridge ${BRIDGE_PORT}"
-
-check_port "$PORT" "JupyterLab" --port
-check_port "$CRAMERA_PORT" "cramera viewer" --cramera-port
-check_port "$BRIDGE_PORT" "live demo bridge" --bridge-port
+check_port "$CRAMERA_PORT" "NeemHub viewer" fatal
+check_port "$BRIDGE_PORT" "live demo bridge" fatal
+check_port "$JUPYTER_PORT" "JupyterLab" warn
 
 # --- preflight ---------------------------------------------------------------
 
@@ -183,7 +180,8 @@ if [ -n "${DISPLAY:-}" ]; then
     warn "xhost not found -- the GUI windows may not open."
   fi
 else
-  warn "DISPLAY is not set -- running without a GUI; use the JupyterLab desktop instead."
+  warn "DISPLAY is not set -- the demo falls back to headless Isaac with a WebRTC
+livestream, which host networking makes reachable from this machine."
 fi
 
 if [ "$PULL" -eq 1 ]; then
@@ -193,7 +191,7 @@ fi
 
 # --- run ---------------------------------------------------------------------
 
-log "Web UI: http://localhost:${CRAMERA_PORT}/  (live bridge on :${BRIDGE_PORT})"
+log "Web UI: http://localhost:${CRAMERA_PORT}/  (live bridge on :${BRIDGE_PORT}; host network)"
 log "Starting a shell in the container. Run a demo with:"
 log "  binder/cram_python_wrapper.sh demos/garmi_demo.py"
 log "Ctrl-D to leave (the container is removed)."
@@ -219,9 +217,7 @@ run_args=(
   -v /tmp/.X11-unix:/tmp/.X11-unix
   -v /usr/share/vulkan/icd.d/:/etc/vulkan/icd.d
   -v "${CACHE_DIR}:/isaac-sim/kit/cache"
-  -p "${PORT}:8888"
-  -p "${CRAMERA_PORT}:8711"
-  -p "${BRIDGE_PORT}:8765"
+  --network host
 )
 
 # An interactive shell, not a server: the image's WORKDIR is the repo root and its
