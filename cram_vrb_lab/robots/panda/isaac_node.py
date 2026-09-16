@@ -23,6 +23,7 @@ from isaacsim.core.prims import Articulation, XFormPrim
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64, Float64MultiArray
 
+from cram_vrb_lab.sim.numpy_bridge import numpy_view
 from cram_vrb_lab.sim.urdf_import import import_urdf_robot
 from cram_vrb_lab.sim.ros_utils import SimBridge
 from cram_vrb_lab.sim.velocity_integrator import (
@@ -152,7 +153,9 @@ def spawn_panda(
     for _ in range(5):
         world.step(render=render)
 
-    panda = Articulation(prim_paths_expr=articulation_root, name="panda")
+    panda = numpy_view(
+        Articulation(prim_paths_expr=articulation_root, name="panda")
+    )
     world.reset()
     for _ in range(10):
         world.step(render=render)

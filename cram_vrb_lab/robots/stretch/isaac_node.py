@@ -23,6 +23,7 @@ from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import Float64, Float64MultiArray
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
+from cram_vrb_lab.sim.numpy_bridge import numpy_view
 from cram_vrb_lab.sim.urdf_import import (
     collapsed_link_frames,
     import_urdf_robot,
@@ -143,7 +144,9 @@ def spawn_stretch(world, render, position=(0.0, 0.0, 0.0), yaw=0.0):
     for _ in range(5):
         world.step(render=render)
 
-    stretch = Articulation(prim_paths_expr=articulation_root, name="stretch")
+    stretch = numpy_view(
+        Articulation(prim_paths_expr=articulation_root, name="stretch")
+    )
     world.reset()
     for _ in range(10):
         world.step(render=render)

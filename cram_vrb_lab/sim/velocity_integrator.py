@@ -31,6 +31,13 @@ def dof_indices(robot, joint_names):
     Getting this wrong writes each joint's command into some other joint, which
     looks like a wildly mistuned robot rather than an indexing bug.
     """
+    if robot.dof_names is None:
+        # The view went stale. Isaac reads the joint names off the physics view,
+        # and on Newton that view stops answering once the stage has grown another
+        # articulation (the kitchen the scene loads after the robot) -- dof_names
+        # then comes back as None rather than raising. Re-acquiring it is cheap and
+        # a no-op when nothing is wrong.
+        robot.initialize()
     order = {name: index for index, name in enumerate(robot.dof_names)}
     return np.array([order[name] for name in joint_names])
 

@@ -23,6 +23,7 @@ from isaacsim.core.utils.prims import (
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 from std_msgs.msg import String
 
+from cram_vrb_lab.sim.numpy_bridge import numpy_view
 from cram_vrb_lab.sim.ros_utils import SimBridge, as_np
 from cram_vrb_lab.sim.scene_sync import (
     SCENE_SYNC_ACK_TOPIC,
@@ -277,7 +278,9 @@ class SceneSyncROS(SimBridge):
         if self._carry_viewed != paths:
             self._carry_view = None
             self._carry_viewed = []
-            view = RigidPrim(paths, name="scene_sync_carry", reset_xform_properties=False)
+            view = numpy_view(
+                RigidPrim(paths, name="scene_sync_carry", reset_xform_properties=False)
+            )
             # else get_world_poses silently falls back to the stale stage
             view.initialize()
             self._carry_view, self._carry_viewed = view, paths
@@ -517,7 +520,7 @@ class SceneSyncROS(SimBridge):
             restored.append(name)
         if restored:
             self._release_view()
-            bodies = RigidPrim([f"{SYNC_ROOT}/{n}" for n in restored])
+            bodies = numpy_view(RigidPrim([f"{SYNC_ROOT}/{n}" for n in restored]))
             bodies.set_velocities(np.zeros((len(restored), 6)))
         return restored
 
@@ -716,7 +719,7 @@ class SceneSyncROS(SimBridge):
         # every step is not merely wasteful but unsafe.
         if paths != self._viewed:
             self._release_view()
-            self._view = RigidPrim(paths)
+            self._view = numpy_view(RigidPrim(paths))
             self._viewed = paths
         positions, orientations = self._view.get_world_poses()
         report = {}

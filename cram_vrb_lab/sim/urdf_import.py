@@ -33,7 +33,7 @@ import omni.usd
 from isaacsim.core.utils.stage import add_reference_to_stage
 from pxr import Usd, UsdPhysics
 
-from cram_vrb_lab.sim.isaac_app import ensure_urdf_importer
+from cram_vrb_lab.sim.isaac_app import ensure_urdf_importer, use_newton
 
 
 def import_urdf_robot(
@@ -89,8 +89,14 @@ def import_urdf_robot(
     ).import_urdf()
 
     prim = add_reference_to_stage(usd_path, prim_path)
-    prim.GetVariantSet("Physics").SetVariantSelection("physx")
-    print(f"{name} converted to {usd_path} and referenced at {prim_path}")
+    # The asset carries a physics variant per engine: "physx" hangs PhysxJointAPI
+    # off every joint, "mujoco" replaces the USD drives with MjcJointAPI and an
+    # MjcActuator each, which is what Newton's MuJoCo solver reads. Picking the
+    # wrong one is a robot with no drives at all.
+    variant = "mujoco" if use_newton() else "physx"
+    prim.GetVariantSet("Physics").SetVariantSelection(variant)
+    print(f"{name} converted to {usd_path} and referenced at {prim_path} "
+          f"(physics variant: {variant})")
 
     return articulation_root_path(prim_path)
 

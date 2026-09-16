@@ -18,7 +18,7 @@ import rclpy
 
 from cram_vrb_lab.control.rate import CONTROL_HZ_ENV, control_hz
 from cram_vrb_lab.setups import get_setup, spawn_pose_from_args
-from cram_vrb_lab.sim.isaac_app import READY_MARKER
+from cram_vrb_lab.sim.isaac_app import READY_MARKER, use_newton
 
 SPINS_PER_STEP = 1
 """How many callbacks to drain per sim step.
@@ -172,6 +172,15 @@ def build(world, render, setup, spawn_pose, args):
         camera_eye=view.eye if view else None,
         camera_target=view.target if view else None,
     )
+
+    if use_newton():
+        # The scenes are authored for PhysX, which simulates a loose joint quite
+        # happily; Newton refuses the whole stage over one. See newton_scene.
+        from cram_vrb_lab.sim.newton_scene import prepare_scene
+
+        articulated, staticized = prepare_scene(world.stage)
+        print(f"[sim] Newton: {len(articulated)} asset(s) given an articulation root, "
+              f"{len(staticized)} kinematic body/bodies made static scenery")
 
     robot = setup.robot.spawn(world, render, spawn_pose)
 

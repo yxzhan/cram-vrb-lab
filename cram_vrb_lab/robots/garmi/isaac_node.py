@@ -36,6 +36,7 @@ from cram_vrb_lab.sim.ros_utils import (
     qmul,
     qrot,
 )
+from cram_vrb_lab.sim.numpy_bridge import numpy_view
 from cram_vrb_lab.sim.urdf_import import (
     collapsed_link_frames,
     import_urdf_robot,
@@ -262,7 +263,9 @@ def spawn_garmi(
     for _ in range(5):
         world.step(render=render)
 
-    garmi = Articulation(prim_paths_expr=articulation_root, name=ROBOT_NAME)
+    garmi = numpy_view(
+        Articulation(prim_paths_expr=articulation_root, name=ROBOT_NAME)
+    )
     world.reset()
     for _ in range(10):
         world.step(render=render)
@@ -290,7 +293,14 @@ def undrive_wheels(garmi):
     wheel_dof = dof_indices(garmi, WHEEL_JOINTS)
     zeros = np.zeros((1, len(wheel_dof)))
     garmi.set_gains(kps=zeros, kds=zeros, joint_indices=wheel_dof)
-    garmi.set_friction_coefficients(zeros, joint_indices=wheel_dof)
+    try:
+        garmi.set_friction_coefficients(zeros, joint_indices=wheel_dof)
+    except Exception as error:
+        # Newton has no joint friction to read back ("Failed to get DOF friction
+        # coefficients from backend"), and Isaac's setter reads before it writes.
+        # The gains above are what actually takes the force out of the wheels;
+        # joint friction only stops them freewheeling, which nothing here needs.
+        print(f"wheel joint friction left as imported ({error})")
 
 
 def tune_drives(garmi):

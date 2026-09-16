@@ -166,6 +166,24 @@ def ensure_urdf_importer():
     enable_extension("isaacsim.asset.importer.urdf")
 
 
+def physics_engine():
+    """Which physics backend to run, from ``ISAAC_PHYSICS`` (default ``physx``).
+
+    6.1 ships Newton beside PhysX and lets one process register both, so the
+    choice is a runtime flag rather than a different build. ``newton`` is
+    experimental here: :func:`~cram_vrb_lab.sim.urdf_import.import_urdf_robot`
+    picks the matching physics variant out of the imported asset, and the robot
+    bridges have to find their link poses elsewhere -- Newton's articulation view
+    has no ``get_link_transforms``.
+    """
+    return os.environ.get("ISAAC_PHYSICS", "physx").lower()
+
+
+def use_newton():
+    """Whether this run is on Newton rather than PhysX."""
+    return physics_engine() == "newton"
+
+
 def render_enabled():
     """Rendering can be disabled with ISAAC_RENDER=0 to run headless physics
     only, e.g. on a machine whose GPU/display cannot do RTX rendering. The

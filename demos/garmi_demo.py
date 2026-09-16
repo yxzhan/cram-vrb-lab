@@ -16,6 +16,9 @@ in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
 REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
+
+os.environ.setdefault("ISAAC_PHYSICS", "newton")
+
 os.environ.setdefault("ISAAC_HEADLESS", "1")
 os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
@@ -487,30 +490,30 @@ print_object_poses("Object Settled:")
 # Weld a grasped object to the hand in Isaac for as long as the twin says it is held.
 # A timer rather than a call after the pick, because TransportAction picks up, drives
 # and puts down inside one perform().
-# GARMI_PRIM_ROOT = "/garmi"
-# _carry_lock = threading.Lock()
+GARMI_PRIM_ROOT = "/garmi"
+_carry_lock = threading.Lock()
 
 
-# def _carry_tick():
-#     if not _carry_lock.acquire(blocking=False):
-#         return
-#     try:
-#         if scene_sync.sync_attachments(world, GARMI_PRIM_ROOT):
-#             print("carry:", scene_sync.apply())
-#     except Exception as failure:
-#         print(f"  carry sync failed -- {type(failure).__name__}: {failure}")
-#     finally:
-#         _carry_lock.release()
+def _carry_tick():
+    if not _carry_lock.acquire(blocking=False):
+        return
+    try:
+        if scene_sync.sync_attachments(world, GARMI_PRIM_ROOT):
+            print("carry:", scene_sync.apply())
+    except Exception as failure:
+        print(f"  carry sync failed -- {type(failure).__name__}: {failure}")
+    finally:
+        _carry_lock.release()
 
 
-# _previous = globals().get("carry_timer")
-# if _previous is not None:
-#     node.destroy_timer(_previous)
-# # Its own callback group: apply() blocks on an ack that arrives on this node, and
-# # rclpy puts a node's callbacks in one mutually exclusive group by default.
-# carry_timer = node.create_timer(
-#     0.1, _carry_tick, callback_group=ReentrantCallbackGroup()
-# )
+_previous = globals().get("carry_timer")
+if _previous is not None:
+    node.destroy_timer(_previous)
+# Its own callback group: apply() blocks on an ack that arrives on this node, and
+# rclpy puts a node's callbacks in one mutually exclusive group by default.
+carry_timer = node.create_timer(
+    0.1, _carry_tick, callback_group=ReentrantCallbackGroup()
+)
 
 # %% [markdown]
 # ## Transport task

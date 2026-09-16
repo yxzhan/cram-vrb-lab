@@ -14,6 +14,7 @@ from isaacsim.core.prims import RigidPrim
 from pxr import Usd, UsdPhysics
 from std_srvs.srv import Trigger
 
+from cram_vrb_lab.sim.numpy_bridge import numpy_view
 from cram_vrb_lab.sim.ros_utils import SimBridge
 from cram_vrb_lab.sim.scene_reset import RESET_SERVICE
 
@@ -142,7 +143,9 @@ class SceneResetROS(SimBridge):
 
     def _take_snapshot(self) -> None:
         paths = self._rigid_body_paths()
-        bodies = RigidPrim(paths) if paths else None
+        # numpy_view, because on the GPU backend a view answers cuda tensors and
+        # everything below this is numpy (see cram_vrb_lab.sim.numpy_bridge).
+        bodies = numpy_view(RigidPrim(paths)) if paths else None
         positions, orientations = (
             bodies.get_world_poses() if bodies is not None else (None, None)
         )
