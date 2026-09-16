@@ -15,11 +15,9 @@ Two robots' worth of pattern, both already in this repo:
 """
 
 import math
-import tempfile
 import time
 
 import numpy as np
-import omni.kit.commands
 from geometry_msgs.msg import Twist
 from isaacsim.core.prims import Articulation, XFormPrim
 from nav_msgs.msg import Odometry
@@ -37,6 +35,12 @@ from cram_vrb_lab.sim.ros_utils import (
     qconj,
     qmul,
     qrot,
+)
+from cram_vrb_lab.sim.urdf_import import (
+    collapsed_link_frames,
+    import_urdf_robot,
+    link_prim_path,
+    urdf_link_names,
 )
 from cram_vrb_lab.sim.velocity_integrator import (
     MAX_LEAD,
@@ -75,16 +79,15 @@ from .joints import (
 )
 
 GARMI_PRIM_PATH = f"/{ROBOT_NAME}"
-"""Where the importer puts the robot: ``/`` plus the URDF's ``<robot name=...>``,
-which :func:`~cram_vrb_lab.robots.garmi.joints.load_patched_urdf` rewrites to a
-name that survives the importer's prim-path sanitising."""
+"""Where the robot is referenced into the stage: ``/`` plus the URDF's
+``<robot name=...>``, which
+:func:`~cram_vrb_lab.robots.garmi.joints.load_patched_urdf` rewrites to a name
+that survives the importer's prim-path sanitising."""
 
-HEAD_LINK_PRIM = f"{GARMI_PRIM_PATH}/{CAMERA_PARENT_LINK}"
-"""The head link's prim. The importer lays the links out flat under the robot prim
-rather than nested as the link tree is, so this is a direct child."""
-
-HEAD_CAM_PRIM = f"{HEAD_LINK_PRIM}/head_camera"
-"""The camera sensor, parented to the head so it pans and tilts with it."""
+HEAD_CAM_PRIM_NAME = "head_camera"
+"""The camera sensor's prim, created under the head link so it pans and tilts with
+it. A name rather than a path: the importer nests the links as the link tree is
+nested, so where the head sits is a lookup -- see :func:`create_head_camera`."""
 
 CAMERA_RESOLUTION = (640, 360)
 """Same as the Stretch's head camera, and the same reason: enough to see a worktop
@@ -228,42 +231,24 @@ def spawn_garmi(
 
     :param orientation: quaternion in Isaac's ``(w, x, y, z)`` order.
     """
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".urdf", prefix="garmi_patched_", delete=False
-    ) as urdf_file:
-        urdf_file.write(load_patched_urdf())
-        urdf_path = urdf_file.name
-
-    _, import_config = omni.kit.commands.execute("URDFCreateImportConfig")
-    # The base drives, so it is not welded to the world. It is still not moved by
-    # its wheels: integrate_base teleports it, see undrive_wheels.
-    import_config.fix_base = False
-    import_config.import_inertia_tensor = True
-    import_config.distance_scale = 1.0
-    # Keep the fixed joints: the hands, the TCP frames and the mount frames the
-    # semantic model looks bodies up by would otherwise be merged away, and the
-    # twin and the render would no longer describe the same link tree.
-    import_config.merge_fixed_joints = False
-    import_config.convex_decomp = False
-    # The fingers' collision hulls overlap the hand they are mounted on, and the
-    # two arms are mounted close together on the torso; with self-collision on,
-    # the solver spends every step pushing overlapping hulls apart. Giskard plans
-    # the motions, against the garmi.srdf self-collision matrix the upstream
-    # model loads.
-    import_config.self_collision = False
-
-    # Run from wherever the demo was launched: the importer copies the textures
-    # the .obj meshes reference (body.mtl wants fabric.jpg, head.mtl wants
-    # face.jpg) into `materials/textures` relative to the working directory AND
-    # records them relative too, so write and lookup only agree as long as the
-    # cwd is left alone. The drop is gitignored -- see /materials/ in .gitignore.
-    articulation_root = omni.kit.commands.execute(
-        "URDFParseAndImportFile",
-        urdf_path=urdf_path,
-        import_config=import_config,
-        get_articulation_root=True,
-    )[1]
-    print(f"GARMI imported from {urdf_path} to {articulation_root}")
+    articulation_root = import_urdf_robot(
+        load_patched_urdf(),
+        GARMI_PRIM_PATH,
+        name=ROBOT_NAME,
+        # The base drives, so it is not welded to the world. It is still not moved
+        # by its wheels: integrate_base teleports it, see undrive_wheels.
+        fix_base=False,
+        # Keep the fixed joints: the hands, the TCP frames and the mount frames the
+        # semantic model looks bodies up by would otherwise be merged away, and the
+        # twin and the render would no longer describe the same link tree.
+        merge_fixed_joints=False,
+        # The fingers' collision hulls overlap the hand they are mounted on, and
+        # the two arms are mounted close together on the torso; with self-collision
+        # on, the solver spends every step pushing overlapping hulls apart. Giskard
+        # plans the motions, against the garmi.srdf self-collision matrix the
+        # upstream model loads.
+        self_collision=False,
+    )
 
     XFormPrim(GARMI_PRIM_PATH).set_world_poses(
         np.array([position], dtype=float), np.array([orientation], dtype=float)
@@ -424,16 +409,17 @@ def create_head_camera(world, render, want_depth=False):
     from isaacsim.sensors.camera import Camera
 
     stage = omni.usd.get_context().get_stage()
-    if not stage.GetPrimAtPath(HEAD_LINK_PRIM):
-        raise RuntimeError(f"no {HEAD_LINK_PRIM} to mount the head camera on")
+    head_cam_prim = (
+        f"{link_prim_path(GARMI_PRIM_PATH, CAMERA_PARENT_LINK)}/{HEAD_CAM_PRIM_NAME}"
+    )
 
-    UsdGeom.Camera.Define(stage, HEAD_CAM_PRIM)
+    UsdGeom.Camera.Define(stage, head_cam_prim)
     head_cam = Camera(
-        prim_path=HEAD_CAM_PRIM,
+        prim_path=head_cam_prim,
         frequency=30,
         resolution=CAMERA_RESOLUTION,
     )
-    XFormPrim(HEAD_CAM_PRIM).set_local_poses(
+    XFormPrim(head_cam_prim).set_local_poses(
         translations=np.array([CAMERA_IN_HEAD]),
         orientations=np.array([[0.5, 0.5, -0.5, -0.5]]),  # (w, x, y, z)
     )
@@ -517,10 +503,20 @@ class GarmiROS(SimBridge):
 
         self.wheel_dof = dof_indices(robot, WHEEL_JOINTS)
         self.body_names = list(robot.body_names)
+        # Exactly ``base_link``, never a name that merely contains it: the 6.1
+        # importer makes no body out of GARMI's massless root, so a substring match
+        # falls through to ``lift_0_base_link`` -- the bottom of the lift column,
+        # 29 cm up and turned 135 degrees -- and every frame published relative to
+        # it lands somewhere the robot is not. Failing that, body 0: the physics
+        # view orders links from the root, which is the link ``base_link`` is
+        # welded to at an identity origin.
         self.base_idx = next(
-            (i for i, name in enumerate(self.body_names) if "base_link" in name), 0
+            (i for i, name in enumerate(self.body_names)
+             if str(name).split("/")[-1] == "base_link"),
+            0,
         )
         self._odom_prev = None
+        self.publish_link_static_tf()
 
     # --- commands ----------------------------------------------------------
 
@@ -725,6 +721,29 @@ class GarmiROS(SimBridge):
                 msg.twist.twist.angular.z = dyaw / dt
         self._odom_prev = (stamp, float(position[0]), float(position[1]), yaw)
         self.pub_odom.publish(msg)
+
+    def publish_link_static_tf(self):
+        """TF for the link frames that are not bodies of the articulation.
+
+        :meth:`publish_tf` reads the physics view, which only knows the
+        articulation's bodies, and the 6.1 importer does not make one out of a
+        massless link on a fixed joint -- which here is both hand TCP frames, both
+        arm mounts and both ``fr3_link8``. Those are exactly the frames the
+        semantic model looks its tool poses up by, so they are published here
+        instead, once: a fixed joint's offset from the body above it cannot change.
+        """
+        frames = collapsed_link_frames(
+            GARMI_PRIM_PATH, urdf_link_names(load_patched_urdf()), self.body_names
+        )
+        if not frames:
+            return
+        now = self.get_clock().now().to_msg()
+        self.static_tf_broadcaster.sendTransform([
+            make_tf(now, parent, name, translation, quaternion)
+            for parent, name, translation, quaternion in frames
+        ])
+        print("GARMI static TF for the non-body link frames: "
+              f"{', '.join(name for _, name, _, _ in frames)}")
 
     def publish_tf(self):
         """``odom -> base_link -> every other link``, from the physics view.

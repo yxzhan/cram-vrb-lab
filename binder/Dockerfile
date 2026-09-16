@@ -6,16 +6,16 @@ FROM intel4coro/jupyter-ros2:jazzy-py3.12
 
 USER ${NB_USER}
 #============= Install IsaacSim =============#
-ENV ISAACSIM_VERSION="5.1"
+ENV ISAACSIM_VERSION="6.1.0"
 ENV ISAACSIM_PATH="/isaac-sim"
 ENV ISAACSIM_PYTHON_EXE="${ISAACSIM_PATH}/python.sh"
 
 # Download IsaacSim
 RUN cd /tmp && \
-    wget https://download.isaacsim.omniverse.nvidia.com/isaac-sim-standalone-${ISAACSIM_VERSION}.0-linux-x86_64.zip && \
-    sudo unzip /tmp/isaac-sim-standalone-${ISAACSIM_VERSION}.0-linux-x86_64.zip -d ${ISAACSIM_PATH} && \
+    wget --no-check-certificate https://downloads.isaacsim.nvidia.com/isaac-sim-standalone-${ISAACSIM_VERSION}-linux-x86_64.zip && \
+    sudo unzip /tmp/isaac-sim-standalone-${ISAACSIM_VERSION}-linux-x86_64.zip -d ${ISAACSIM_PATH} && \
     sudo chown ${NB_USER}:users -R ${ISAACSIM_PATH} && \
-    rm /tmp/isaac-sim-standalone-${ISAACSIM_VERSION}.0-linux-x86_64.zip
+    rm /tmp/isaac-sim-standalone-${ISAACSIM_VERSION}-linux-x86_64.zip
 
 # Extra packages for the isaacsim python env (jupyter/ipywidgets for the
 # Isaac Sim jupyter kernel, tqdm for scripts)

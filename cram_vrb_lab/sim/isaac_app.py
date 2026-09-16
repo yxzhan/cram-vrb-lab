@@ -33,11 +33,25 @@ def setup_ros_env():
     os.environ.setdefault("ROS_AUTOMATIC_DISCOVERY_RANGE", "LOCALHOST")
 
 
+KIT_CACHE_SOURCE = (
+    f"cache-{os.environ['ISAACSIM_VERSION']}"
+    if os.environ.get("ISAACSIM_VERSION")
+    else "cache"
+)
+"""Which prebuilt kit cache on the shared volume belongs to this Isaac Sim.
+
+A shader and extension cache is only valid for the version that built it, and the
+volume now holds one per version, so the version the image exports picks the
+directory. Plain ``cache`` is the pre-versioning layout, kept for an image that
+sets no ``ISAACSIM_VERSION``; a name that is not on the volume simply means no
+cache, and :func:`copy_kit_cache` skips it.
+"""
+
 # Shared volume layout (/mnt/isaacsim-cache) -> local destination:
-#   cache/                  -> /isaac-sim/kit/cache
+#   cache-<version>/        -> /isaac-sim/kit/cache
 #   semantic_digital_twin/  -> ~/.cache/semantic_digital_twin
 PREBUILT_CACHES = {
-    "cache": "/isaac-sim/kit/cache",
+    KIT_CACHE_SOURCE: "/isaac-sim/kit/cache",
     "semantic_digital_twin": os.path.expanduser("~/.cache/semantic_digital_twin"),
 }
 
@@ -132,6 +146,24 @@ def create_simulation_app():
     })
     print("SimulationApp Ready!")
     return simulation_app
+
+
+def ensure_urdf_importer():
+    """Load the URDF importer extension the SimulationApp's experience leaves out.
+
+    The GUI experience (``isaacsim.exp.base.kit``) lists
+    ``isaacsim.asset.importer.urdf``; the one a SimulationApp loads
+    (``isaacsim.exp.base.python.kit``) does not, so neither the extension's python
+    package nor -- before 6.1 dropped them -- its kit commands are there to be
+    had until it is asked for by name.
+
+    Called from :func:`~cram_vrb_lab.sim.urdf_import.import_urdf_robot` rather
+    than once at startup, so importing a robot never depends on which entry script
+    opened the app; enabling an already-enabled extension is a no-op.
+    """
+    from isaacsim.core.utils.extensions import enable_extension
+
+    enable_extension("isaacsim.asset.importer.urdf")
 
 
 def render_enabled():

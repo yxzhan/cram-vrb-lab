@@ -84,9 +84,12 @@ class SceneResetROS(SimBridge):
         plan spawns, anything dropped in by hand -- is covered without this module
         being told about it.
         """
+        # The robot's own prim, not its articulation root's parent: the importer
+        # nests the links as the link tree is nested, so how far down the root sits
+        # is the robot's business, while everything of it is under this one prim.
         robot_prefix = None
         if self.robot is not None and len(self.robot.prim_paths) > 0:
-            robot_prefix = str(self.robot.prim_paths[0]).rsplit("/", 1)[0]
+            robot_prefix = "/" + str(self.robot.prim_paths[0]).strip("/").split("/")[0]
 
         paths = []
         for prim in Usd.PrimRange(self.world.stage.GetPseudoRoot()):

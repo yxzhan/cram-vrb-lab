@@ -20,7 +20,7 @@ from isaacsim.core.utils.prims import (
     delete_prim,
     is_prim_path_valid,
 )
-from pxr import Gf, Sdf, UsdGeom, UsdPhysics, UsdShade
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 from std_msgs.msg import String
 
 from cram_vrb_lab.sim.ros_utils import SimBridge, as_np
@@ -299,13 +299,24 @@ class SceneSyncROS(SimBridge):
         that link's siblings -- the two fingers -- and while the base drives it can
         reach the torso as well.
 
+        Walked for, not spelled out from a name: the URDF importer nests the link
+        prims as the link tree is nested, so a link's siblings are not its prim's
+        siblings, and ``link_path`` -- which the twin builds by name, flat under the
+        robot prim -- may name no prim at all.
+
         Falls back to the carry link if the robot is unknown, which filters the pair
         that matters most rather than nothing at all.
         """
-        root = link_path.rsplit("/", 1)[0]
-        names = getattr(self.robot, "body_names", None) or []
-        paths = [f"{root}/{str(name).split('/')[-1]}" for name in names]
-        return [path for path in paths if is_prim_path_valid(path)] or [link_path]
+        prim_paths = getattr(self.robot, "prim_paths", None) or []
+        if not prim_paths:
+            return [link_path]
+        robot_root = "/" + str(prim_paths[0]).strip("/").split("/")[0]
+        paths = [
+            str(prim.GetPath())
+            for prim in Usd.PrimRange(self.world.stage.GetPrimAtPath(robot_root))
+            if prim.HasAPI(UsdPhysics.RigidBodyAPI)
+        ]
+        return paths or [link_path]
 
     def _filter_collisions(self, path: str, against: List[str]) -> None:
         """Stop ``path`` colliding with ``against`` for as long as it is carried.

@@ -13,11 +13,9 @@
 """
 
 import math
-import tempfile
 import time
 
 import numpy as np
-import omni.kit.commands
 from geometry_msgs.msg import Twist
 from isaacsim.core.prims import Articulation, XFormPrim
 from nav_msgs.msg import Odometry
@@ -25,6 +23,12 @@ from sensor_msgs.msg import CameraInfo, Image, JointState
 from std_msgs.msg import Float64, Float64MultiArray
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
+from cram_vrb_lab.sim.urdf_import import (
+    collapsed_link_frames,
+    import_urdf_robot,
+    link_prim_path,
+    urdf_link_names,
+)
 from cram_vrb_lab.sim.velocity_integrator import (
     StreamedVelocityIntegrator,
     dof_indices,
@@ -86,14 +90,14 @@ STRETCH_PRIM_PATH = "/stretch"
 """Where the importer puts the robot: ``/`` plus the URDF's ``<robot name=...>``."""
 
 # The camera sensor hangs off the very frame its images are stamped in, so it
-# needs no pose maths of its own. The importer lays the links out flat under the
-# robot prim rather than nested as the link tree is, but the frame is a real part
-# of the articulation: measured across a head_pan/head_tilt move, it travels with
-# link_head_tilt and keeps a constant 5.46 cm offset from it -- the same offset
-# the URDF's fixed chain gives. It only exists because merge_fixed_joints is off,
-# which is also what keeps joints.head_camera_static_transforms() a valid chain.
-HEAD_CAM_FRAME_PRIM = f"{STRETCH_PRIM_PATH}/{CAMERA_FRAME_ID}"
-HEAD_CAM_PRIM = f"{HEAD_CAM_FRAME_PRIM}/head_camera"
+# needs no pose maths of its own. The frame is a real part of the articulation:
+# measured across a head_pan/head_tilt move, it travels with link_head_tilt and
+# keeps a constant 5.46 cm offset from it -- the same offset the URDF's fixed
+# chain gives. It only exists because merge_fixed_joints is off, which is also
+# what keeps joints.head_camera_static_transforms() a valid chain. Its prim is
+# looked up rather than spelled out: the importer nests the links as the link tree
+# is nested, so the frame is not a child of the robot prim but a descendant.
+HEAD_CAM_PRIM_NAME = "head_camera"
 CAMERA_RESOLUTION = (640, 360)
 
 
@@ -111,32 +115,19 @@ def spawn_stretch(world, render, position=(0.0, 0.0, 0.0), yaw=0.0):
     robot up -- see :data:`JOINT_DRIVE_STIFFNESS` for what replaces them and why
     the numbers look the way they do.
     """
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".urdf", prefix="stretch_patched_", delete=False
-    ) as urdf_file:
-        urdf_file.write(load_patched_urdf())
-        urdf_path = urdf_file.name
-
-    _, import_config = omni.kit.commands.execute("URDFCreateImportConfig")
-    # A mobile robot: the base is free, and StretchROS.integrate_base teleports it.
-    import_config.fix_base = False
-    import_config.import_inertia_tensor = True
-    import_config.distance_scale = 1.0
-    # Keep the fixed joints: the head-camera frame chain hangs off them, and the
-    # semantic model looks bodies up by the names they carry.
-    import_config.merge_fixed_joints = False
-    import_config.convex_decomp = False
-    # Nothing here needs the robot to avoid itself -- giskard plans the motions --
-    # and the gripper's hulls overlap the wrist they are mounted on.
-    import_config.self_collision = False
-
-    articulation_root = omni.kit.commands.execute(
-        "URDFParseAndImportFile",
-        urdf_path=urdf_path,
-        import_config=import_config,
-        get_articulation_root=True,
-    )[1]
-    print(f"Stretch imported from {urdf_path} to {articulation_root}")
+    articulation_root = import_urdf_robot(
+        load_patched_urdf(),
+        STRETCH_PRIM_PATH,
+        name="stretch",
+        # A mobile robot: the base is free, and StretchROS.integrate_base teleports it.
+        fix_base=False,
+        # Keep the fixed joints: the head-camera frame chain hangs off them, and the
+        # semantic model looks bodies up by the names they carry.
+        merge_fixed_joints=False,
+        # Nothing here needs the robot to avoid itself -- giskard plans the motions --
+        # and the gripper's hulls overlap the wrist they are mounted on.
+        self_collision=False,
+    )
 
     # On the prim, before physics runs: this is the pose a later world.reset()
     # restores, and where the base starts dead-reckoning from.
@@ -214,12 +205,13 @@ def create_head_camera(world, render, want_depth=False):
     import isaacsim.core.utils.numpy.rotations as rot_utils 
 
     stage = omni.usd.get_context().get_stage()
-    if not stage.GetPrimAtPath(HEAD_CAM_FRAME_PRIM):
-        raise RuntimeError(f"no {HEAD_CAM_FRAME_PRIM} to mount the head camera on")
+    head_cam_prim = (
+        f"{link_prim_path(STRETCH_PRIM_PATH, CAMERA_FRAME_ID)}/{HEAD_CAM_PRIM_NAME}"
+    )
 
-    UsdGeom.Camera.Define(stage, HEAD_CAM_PRIM)
+    UsdGeom.Camera.Define(stage, head_cam_prim)
     head_cam = Camera(
-        prim_path=HEAD_CAM_PRIM,
+        prim_path=head_cam_prim,
         frequency=30,
         resolution=CAMERA_RESOLUTION,
     )
@@ -231,7 +223,7 @@ def create_head_camera(world, render, want_depth=False):
     # frame's). Here the parent is a REP-103 optical frame -- +z is the view
     # direction, +y is down -- and a USD camera looks down its own -z with +y up,
     # so half a turn about x is what aligns them.
-    XFormPrim(HEAD_CAM_PRIM).set_local_poses(
+    XFormPrim(head_cam_prim).set_local_poses(
         translations=np.zeros((1, 3)),
         orientations=np.array([[0.0, 1.0, 0.0, 0.0]]),  # (w, x, y, z)
     )
@@ -285,8 +277,15 @@ class StretchROS(SimBridge):
 
         # TF: link names and the base link index
         self.body_names = list(robot.body_names)
+        # Exactly ``base_link``, never a name that merely contains it: a substring
+        # match is one massless root link away from picking some other link's own
+        # base (it is what put every GARMI frame in the wrong place), and the
+        # importer only makes bodies out of links that have mass. Failing that,
+        # body 0: the physics view orders links from the root.
         self.base_idx = next(
-            (i for i, n in enumerate(self.body_names) if "base_link" in n), 0
+            (i for i, n in enumerate(self.body_names)
+             if str(n).split("/")[-1] == "base_link"),
+            0,
         )
         self._odom_prev = None          # (t, x, y, yaw) for finite-difference twist
 
@@ -316,6 +315,7 @@ class StretchROS(SimBridge):
         self.tf_broadcaster = TransformBroadcaster(self)
         self.static_tf_broadcaster = StaticTransformBroadcaster(self)
         self.publish_camera_static_tf()
+        self.publish_link_static_tf()
 
     def cmd_vel_cb(self, msg):
         # Just latch the twist; integrate_base (called every sim step) applies it.
@@ -445,6 +445,34 @@ class StretchROS(SimBridge):
                 msg.twist.twist.angular.z = dyaw / dt
         self._odom_prev = (t, float(p[0]), float(p[1]), yaw)
         self.pub_odom.publish(msg)
+
+    def publish_link_static_tf(self):
+        """TF for the link frames that are not bodies of the articulation.
+
+        :meth:`publish_tf` reads the physics view, which only knows the
+        articulation's bodies, and the 6.1 importer makes no body out of a massless
+        link on a fixed joint -- the frames the semantic model looks tool poses up
+        by are exactly that. Published once, since a fixed joint's offset from the
+        body above it cannot change. The head-camera chain is published separately
+        and from the URDF instead, for the reason
+        :meth:`publish_camera_static_tf` gives.
+        """
+        camera_frames = {child for _, child, _, _ in head_camera_static_transforms()}
+        frames = [
+            frame for frame in collapsed_link_frames(
+                STRETCH_PRIM_PATH, urdf_link_names(load_patched_urdf()), self.body_names
+            )
+            if frame[1] not in camera_frames
+        ]
+        if not frames:
+            return
+        now = self.get_clock().now().to_msg()
+        self.static_tf_broadcaster.sendTransform([
+            make_tf(now, parent, name, translation, quaternion)
+            for parent, name, translation, quaternion in frames
+        ])
+        print("Stretch static TF for the non-body link frames: "
+              f"{', '.join(name for _, name, _, _ in frames)}")
 
     def publish_camera_static_tf(self):
         """Publish the fixed head-camera frame chain as static tf.

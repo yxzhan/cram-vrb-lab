@@ -17,14 +17,13 @@ knows where the arm stands.
    has run -- this module imports ``isaacsim.core`` and ``omni`` at module scope.
 """
 
-import tempfile
 
 import numpy as np
-import omni.kit.commands
 from isaacsim.core.prims import Articulation, XFormPrim
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64, Float64MultiArray
 
+from cram_vrb_lab.sim.urdf_import import import_urdf_robot
 from cram_vrb_lab.sim.ros_utils import SimBridge
 from cram_vrb_lab.sim.velocity_integrator import (
     StreamedVelocityIntegrator,
@@ -120,37 +119,22 @@ def spawn_panda(
 
     :param orientation: quaternion in Isaac's ``(w, x, y, z)`` order.
     """
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".urdf", prefix="panda_patched_", delete=False
-    ) as urdf_file:
-        urdf_file.write(load_patched_urdf())
-        urdf_path = urdf_file.name
-
-    _, import_config = omni.kit.commands.execute("URDFCreateImportConfig")
-    import_config.fix_base = True
-    import_config.import_inertia_tensor = True
-    import_config.distance_scale = 1.0
-    # Keep the fixed joints: panda_hand and the tool/fingertip frames the
-    # semantic model looks bodies up by would otherwise be merged away, and the
-    # twin and the render would no longer describe the same link tree.
-    import_config.merge_fixed_joints = False
-    # The collision meshes that ship with the description are already convex
-    # hulls per link, so nothing needs decomposing.
-    import_config.convex_decomp = False
-    # A finger's collision hull overlaps the hand it is mounted on, so with
-    # self-collision enabled the solver spends every step pushing the two apart
-    # and the fingers sit in a spring-like tremor. Nothing here needs the robot
-    # to avoid itself: giskard plans the motions, and the demos' collision
-    # avoidance runs against the environment.
-    import_config.self_collision = False
-
-    articulation_root = omni.kit.commands.execute(
-        "URDFParseAndImportFile",
-        urdf_path=urdf_path,
-        import_config=import_config,
-        get_articulation_root=True,
-    )[1]
-    print(f"Panda imported from {urdf_path} to {articulation_root}")
+    articulation_root = import_urdf_robot(
+        load_patched_urdf(),
+        PANDA_PRIM_PATH,
+        name="panda",
+        fix_base=True,
+        # Keep the fixed joints: panda_hand and the tool/fingertip frames the
+        # semantic model looks bodies up by would otherwise be merged away, and the
+        # twin and the render would no longer describe the same link tree.
+        merge_fixed_joints=False,
+        # A finger's collision hull overlaps the hand it is mounted on, so with
+        # self-collision enabled the solver spends every step pushing the two apart
+        # and the fingers sit in a spring-like tremor. Nothing here needs the robot
+        # to avoid itself: giskard plans the motions, and the demos' collision
+        # avoidance runs against the environment.
+        self_collision=False,
+    )
 
     # Placed on the prim rather than through the physics view: the base is fixed
     # to the world where the prim stands when physics starts, and that is also
