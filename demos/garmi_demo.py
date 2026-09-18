@@ -19,8 +19,8 @@ sys.path.insert(0, str(REPO))
 
 # os.environ.setdefault("ISAAC_PHYSICS", "newton")
 
-# os.environ.setdefault("ISAAC_HEADLESS", "1")
-# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+os.environ.setdefault("ISAAC_HEADLESS", "1")
+os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
@@ -32,9 +32,9 @@ os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
 # os.environ["ISAAC_WINDOW"] = "960x540"
 # os.environ["ISAAC_WINDOW"] = "854x480"
 # os.environ["ISAAC_WINDOW"] = "768x432"
-os.environ["ISAAC_WINDOW"] = "640x360"
+os.environ["ISAAC_WINDOW"] = "224x224"
 # os.environ["ISAAC_WINDOW"] = "512x288"
-# os.environ["DISPLAY"] = ":1"
+os.environ["DISPLAY"] = ":1"
 
 # The rate giskard closes its QP loop at. Set here rather than passed to one of the
 # launchers, because both subprocesses need it (cram_vrb_lab/control/rate.py): the
@@ -48,12 +48,18 @@ os.environ["ISAAC_WINDOW"] = "640x360"
 # sim (33.3 > 30) but only by 1.11x, so a hitch leaves giskard closing its loop on a
 # joint state that was not republished since it last looked. Watch the [sim] line: it
 # has to read ~33 Hz at RTF ~1.00 with no WARNING.
-os.environ["GISKARD_CONTROL_HZ"] = "20"
+os.environ["GISKARD_CONTROL_HZ"] = "15"
 
 
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
 # os.environ["ISAAC_KITCHEN_PROPS"] = "1"
 os.environ["ISAAC_KITCHEN_PROPS"] = "0"
+
+# Three room-fixed 224x224 cameras framing the worktop workspace (front, left and
+# right of (0, 7, 1) -- see cram_vrb_lab.scenes.garmi_apartment.constants.FIXED_CAMERAS).
+# They render every cycle once they exist, so the other demos in this scene leave them
+# off; set this to "0" if the [sim] line starts reporting a rate near GISKARD_CONTROL_HZ.
+os.environ["ISAAC_FIXED_CAMERAS"] = "1"
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
@@ -645,7 +651,7 @@ def run_task(arm=Arms.RIGHT):
                 position=SPOON_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    ], context=context), collision_avoidance=True)
+    ], context=context), collision_avoidance=False)
 
 
 # %% [markdown]

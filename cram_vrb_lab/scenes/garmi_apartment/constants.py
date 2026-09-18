@@ -17,6 +17,7 @@ and giskard's collision world stay aligned by construction.
    ``(-1.4967, 4.8020, 1.5)``.
 """
 
+import math
 import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -382,3 +383,134 @@ so a perception run has to separate two instances of the same object.
    without a collider, and gets one at load time (see
    :func:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.load_garmi_apartment_scene`).
 """
+
+
+# --- Fixed camera rig over the worktop ------------------------------------------
+#
+# Three cameras bolted to the room rather than to the robot, framing the same
+# workspace from three sides. The head camera moves with the head and therefore
+# shows a different view of the task on every attempt; these do not, which is what
+# a recorded demonstration wants -- see docs/vla-data-collection-assessment.md,
+# where this is piece A.
+
+FIXED_CAMERA_TARGET = (0.0, 7.0, 1.0)
+"""Point in ``map`` all three cameras aim at.
+
+Just in front of the kitchen worktop (:data:`KITCHEN_WORKTOP` is at y = 7.42) at
+1.0 m, i.e. where the hands work rather than where the surface is: the robot stands
+off the run at y ~ 5.5 facing +y, so a target on the worktop itself would put every
+camera's centre behind whatever is being manipulated.
+"""
+
+FIXED_CAMERA_RESOLUTION = (224, 224)
+"""Render-product size, in pixels.
+
+Square and small because these exist to feed a policy, not a person: 224x224 is the
+input size of essentially every vision backbone a VLA is built on, so rendering at
+it avoids a resize -- and the resize is not free at the rate this records. It is
+also a fifth of the head camera's 640x360 pixel count, which matters because RTX
+raytracing three more cameras is paid out of the control cycle (see
+:data:`~cram_vrb_lab.sim.runner.FEEDBACK_MARGIN`).
+"""
+
+FIXED_CAMERA_FOCAL_LENGTH = 2.0
+"""Focal length of every camera in the rig, in the units Isaac's ``Camera`` speaks.
+
+**A tenth of the number the property panel shows**, which is the trap in this one
+value: ``Camera.set_focal_length`` and ``get_focal_length`` divide the USD
+``focalLength`` attribute by ten, so the 20 typed into Isaac Sim's camera properties
+is 2.0 here. Get it wrong by that factor and nothing errors -- the framing is simply
+ten times too wide or too narrow.
+
+20 it is because that is the value tuned by eye in the property panel against this
+scene. Against the USD default horizontal aperture of 20.955, which is what these
+cameras keep (see :func:`fixed_camera_field_of_view`), that is a **55.3 deg** field
+of view -- 1.48 m across at the 1.41 m the front camera stands off
+:data:`FIXED_CAMERA_TARGET`, and 1.89 m at the flanking pair's 1.80 m. Enough to hold
+the worktop and the robot working at it, which 224x224 can still resolve.
+
+Stored as the focal length rather than as the angle so that this is the number
+checkable against the property panel, and because for a non-square
+:data:`FIXED_CAMERA_RESOLUTION` a fixed focal length is the one that behaves like a
+lens: Isaac rewrites the *vertical* aperture to keep pixels square, so the horizontal
+field of view stays put and the vertical follows the frame.
+"""
+
+FIXED_CAMERA_CLIPPING = (0.05, 20.0)
+"""Near and far clipping distances [m], the head camera's."""
+
+
+def fixed_camera_field_of_view(horizontal_aperture: float) -> float:
+    """Horizontal field of view [deg] of a rig camera with ``horizontal_aperture``.
+
+    Reported rather than configured -- :data:`FIXED_CAMERA_FOCAL_LENGTH` is what is
+    set -- because a focal length only means an angle next to the aperture it is
+    measured against, and the spawn print is the one place that can state the angle
+    with the aperture the camera actually ended up with. Same units as
+    :data:`FIXED_CAMERA_FOCAL_LENGTH`, i.e. a tenth of the USD attribute's.
+    """
+    return math.degrees(
+        2.0 * math.atan(horizontal_aperture / (2.0 * FIXED_CAMERA_FOCAL_LENGTH))
+    )
+
+
+@dataclass(frozen=True)
+class FixedCamera:
+    """One camera of the rig: a name and where it stands relative to the target."""
+
+    name: str
+    """Prim name under
+    :data:`~cram_vrb_lab.scenes.garmi_apartment.isaac_scene.FIXED_CAMERAS_ROOT`, and
+    the key it is returned under. Unique across :data:`FIXED_CAMERAS`, for the reason
+    :attr:`KitchenProp.name` spells out: a prim path identifies exactly one prim."""
+
+    offset: Tuple[float, float, float]
+    """(dx, dy, dz) from :data:`FIXED_CAMERA_TARGET`, in ``map`` [m].
+
+    An offset rather than an absolute position so that moving the rig to another
+    workspace is one edit to the target. Which way the camera then points is not a
+    field at all -- every camera looks at the target, which is what makes three of
+    them one rig."""
+
+    def position_in(self, target=FIXED_CAMERA_TARGET) -> Tuple[float, float, float]:
+        """Where this camera stands in ``map``: ``target`` plus :attr:`offset`."""
+        return tuple(t + d for t, d in zip(target, self.offset))
+
+
+FIXED_CAMERAS = (
+    # Named from the robot's point of view: it stands at y ~ 5.5 facing +y, so its
+    # left hand is towards -x and its right towards +x.
+    #
+    # All three are a metre above the target and look down on it at 45 deg (the
+    # front camera) or 34 deg (the flanking pair). "front" is the one that is not a
+    # mirror of another: it sits a metre beyond the target, over the worktop, and
+    # looks back down at the workspace with the robot behind it -- the view of the
+    # hands an over-the-counter camera gives. The other two flank it at plus and
+    # minus 1.5 m, level with the target in y, and stand 1.80 m off it against the
+    # front camera's 1.41, so they frame 1.89 m across against its 1.48.
+    FixedCamera("front", (0.0, 1.0, 0.8)),
+    FixedCamera("left", (-1.5, 0.0, 0.8)),
+    FixedCamera("right", (1.5, 0.0, 0.8)),
+)
+"""The rig the Isaac side builds when :func:`fixed_cameras_enabled`."""
+
+FIXED_CAMERAS_ENV = "ISAAC_FIXED_CAMERAS"
+"""Environment variable that opts the rig in; see :func:`fixed_cameras_enabled`."""
+
+
+def fixed_cameras_enabled() -> bool:
+    """Whether to build the fixed camera rig. Off unless asked.
+
+    An environment variable for the same reason as :func:`kitchen_props_enabled`: it
+    is how the notebooks already steer the Isaac process, and a scene flag would have
+    to be threaded through the launcher, the entry script and the runner to reach the
+    one place that reads it.
+
+    Off by default because these cost **render time, every cycle, forever** -- three
+    RTX-raytraced render products that the control loop pays for whether or not
+    anything reads a frame, and the sim's cycle is what feeds giskard (see
+    :data:`~cram_vrb_lab.sim.runner.FEEDBACK_MARGIN`). Every other demo in this scene
+    would pay that for nothing: measured on an RTX 3080, this rig takes the control
+    cycle from 22.2 Hz to 20.0 Hz.
+    """
+    return os.environ.get(FIXED_CAMERAS_ENV, "0") == "1"
