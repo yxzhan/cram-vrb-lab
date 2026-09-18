@@ -425,8 +425,8 @@ ten times too wide or too narrow.
 20 it is because that is the value tuned by eye in the property panel against this
 scene. Against the USD default horizontal aperture of 20.955, which is what these
 cameras keep (see :func:`fixed_camera_field_of_view`), that is a **55.3 deg** field
-of view -- 1.48 m across at the 1.41 m the front camera stands off
-:data:`FIXED_CAMERA_TARGET`, and 1.89 m at the flanking pair's 1.80 m. Enough to hold
+of view -- 1.34 m across at the 1.28 m the front camera stands off
+:data:`FIXED_CAMERA_TARGET`, and 1.78 m at the flanking pair's 1.70 m. Enough to hold
 the worktop and the robot working at it, which 224x224 can still resolve.
 
 Stored as the focal length rather than as the angle so that this is the number
@@ -481,13 +481,13 @@ FIXED_CAMERAS = (
     # Named from the robot's point of view: it stands at y ~ 5.5 facing +y, so its
     # left hand is towards -x and its right towards +x.
     #
-    # All three are a metre above the target and look down on it at 45 deg (the
-    # front camera) or 34 deg (the flanking pair). "front" is the one that is not a
-    # mirror of another: it sits a metre beyond the target, over the worktop, and
-    # looks back down at the workspace with the robot behind it -- the view of the
-    # hands an over-the-counter camera gives. The other two flank it at plus and
-    # minus 1.5 m, level with the target in y, and stand 1.80 m off it against the
-    # front camera's 1.41, so they frame 1.89 m across against its 1.48.
+    # All three are 0.8 m above the target and look down on it at 39 deg (the front
+    # camera) or 28 deg (the flanking pair). "front" is the one that is not a mirror
+    # of another: it sits a metre beyond the target, over the worktop, and looks back
+    # down at the workspace with the robot behind it -- the view of the hands an
+    # over-the-counter camera gives. The other two flank it at plus and minus 1.5 m,
+    # level with the target in y, and stand 1.70 m off it against the front camera's
+    # 1.28, so they frame 1.78 m across against its 1.34.
     FixedCamera("front", (0.0, 1.0, 0.8)),
     FixedCamera("left", (-1.5, 0.0, 0.8)),
     FixedCamera("right", (1.5, 0.0, 0.8)),
