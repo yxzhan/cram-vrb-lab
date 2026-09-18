@@ -198,6 +198,7 @@
       ] },
       { panes: [{ name: "VS Code", path: "vscode/" }] },
       { panes: [{ name: "JupyterLab", path: "lab" }] },
+      { panes: [{ name: "LeRobot Data", path: "proxy/absolute/3000/" }] },
     ].map(t => ({ panes: t.panes.filter(p => !(isLocalhost && p.skipLocal)) }))
      .filter(t => t.panes.length)
      .map(t => ({

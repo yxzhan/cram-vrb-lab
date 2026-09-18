@@ -1,6 +1,54 @@
 # syntax=docker/dockerfile:1.7-labs
 # ^ parser directive, must stay the very first line: the COPY --exclude below is
 #   a labs feature and only BuildKit reads it.
+
+#============= LeRobot dataset visualizer (build stage) =============#
+# Built here and thrown away: only the compiled output is copied into the runtime
+# image below, so none of bun, the 430-package install or the TypeScript sources
+# survive into it. Started by binder/entrypoint.sh on port 3000.
+#
+# bun and not npm. The project ships only bun.lock, and npm resolving that tree
+# fresh picks react 19.3.0 while @react-three/fiber@9.7.0 declares
+# `react >=19 <19.3`, so `npm install` fails outright with ERESOLVE and
+# --legacy-peer-deps would install the combination the project says does not work.
+FROM oven/bun:1.4 AS viz-builder
+
+ARG LEROBOT_VISUALIZER_REPO=https://github.com/huggingface/lerobot-dataset-visualizer.git
+ARG LEROBOT_VISUALIZER_REF=main
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git python3 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+RUN git clone --depth 1 --branch ${LEROBOT_VISUALIZER_REF} \
+        ${LEROBOT_VISUALIZER_REPO} .
+
+COPY binder/patch_dataset_visualizer.py /tmp/patch_dataset_visualizer.py
+RUN python3 /tmp/patch_dataset_visualizer.py next.config.ts
+
+RUN bun install --frozen-lockfile
+
+# basePath and DATASET_URL are compiled into the client bundle, and neither is
+# known at image-build time -- both contain the JupyterHub username. So the build
+# is done against placeholders and binder/entrypoint.sh substitutes the real
+# values into the output when the pod starts. Keep these two strings in step with
+# the ones there.
+ENV NEXT_BASE_PATH=/CRAMVRBLAB_BASEPATH
+ENV DATASET_URL=https://CRAMVRBLAB_DATASET/datasets
+RUN bun run build
+
+# The runtime tree, assembled the way `output: "standalone"` documents: the
+# server and its node_modules, plus .next/static and public, which standalone
+# deliberately does not copy because a real deployment usually serves them from a
+# CDN. Here the same node process serves them.
+RUN mkdir -p /out && \
+    cp -r .next/standalone/. /out/ && \
+    mkdir -p /out/.next && \
+    cp -r .next/static /out/.next/static && \
+    if [ -d public ]; then cp -r public /out/public; fi
+#===================================================================#
+
 # Dockerfile of the base image: https://github.com/IntEL4CoRo/jupyter-ros2
 FROM intel4coro/jupyter-ros2:jazzy-py3.12
 
@@ -55,6 +103,19 @@ RUN cd /tmp && \
 RUN sudo apt-get update && \
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git-lfs && \
     git lfs install
+
+
+#============= LeRobot dataset visualizer (runtime) =============#
+# Only the build output from the stage at the top. Kept read-only under /opt and
+# copied to a writable directory by binder/entrypoint.sh, which substitutes the
+# placeholders it was built with -- so a pod restart, or the same image run by a
+# different JupyterHub user, always starts from a pristine tree rather than one
+# already rewritten for somebody else.
+#
+# Runs on the base image's node (/opt/conda/bin/node, v22); the standalone output
+# brings its own node_modules and needs nothing else installed.
+COPY --from=viz-builder --chown=${NB_USER}:users /out /opt/lerobot-visualizer
+#===================================================================#
 
 # Python packages for the jupyter env (rarely changes).
 USER ${NB_USER}
