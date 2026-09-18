@@ -25,3 +25,7 @@ vrb_lab_page.md
 # Written at container start-up by binder/entrypoint.sh
 demos/web_ui/version.json
 **.log
+docs/
+# Recorded demonstration episodes (cram_vrb_lab.sim.episode_recording): a run
+# produces hundreds of MB of PNGs, and they are results rather than source.
+/datasets/

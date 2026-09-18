@@ -12,6 +12,12 @@ def _load(world, render, camera_eye=None, camera_target=None):
     )
 
 
+def _fixed_cameras():
+    from .isaac_scene import FIXED_CAMERA_SENSORS
+
+    return dict(FIXED_CAMERA_SENSORS)
+
+
 def _environment():
     from .giskard_world import garmi_apartment_environment
 
@@ -19,5 +25,8 @@ def _environment():
 
 
 GARMI_APARTMENT = SceneSpec(
-    name="garmi_apartment", load=_load, environment=_environment
+    name="garmi_apartment",
+    load=_load,
+    environment=_environment,
+    fixed_cameras=_fixed_cameras,
 )

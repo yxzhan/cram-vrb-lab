@@ -254,6 +254,24 @@ def build(world, render, setup, spawn_pose, args):
             sync_bridge=sync,
         )
     )
+
+    # Demonstration recording, for the same reason the two above are unconditional:
+    # idle it is one subscription and a rate check per cycle, and the alternative is
+    # remembering which demos are allowed to record before the one that needed it
+    # runs without the bridge and loses the data. The cameras come from the scene
+    # rather than from the robot -- these are the room-fixed ones a recorded episode
+    # wants, not the head camera, which moves with the head and so frames the task
+    # differently on every attempt.
+    from cram_vrb_lab.sim.episode_recorder_bridge import EpisodeRecorderROS
+
+    nodes.append(
+        EpisodeRecorderROS(
+            world,
+            robot=robot,
+            integrator=getattr(nodes[0], "integrator", None),
+            cameras=setup.scene.fixed_cameras() if setup.scene.fixed_cameras else {},
+        )
+    )
     return nodes
 
 

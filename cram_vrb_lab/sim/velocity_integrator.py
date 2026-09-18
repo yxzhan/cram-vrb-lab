@@ -92,6 +92,25 @@ class StreamedVelocityIntegrator:
         self._last_tick = None
         self._stale = False
 
+    @property
+    def targets(self):
+        """The position targets the drives were last given, or ``None``.
+
+        A copy, in :attr:`joint_names` order. Public because it is what a recorded
+        demonstration's *action* is: this class does not integrate the commanded
+        velocity, it clamps the result to the measured position plus or minus
+        :data:`MAX_LEAD` and snaps it on the transition into zero velocity, so the
+        applied target is not recoverable from the velocity command. Recording that
+        command instead would mean a policy had to learn this class before it could
+        reproduce the motion. See
+        :data:`~cram_vrb_lab.sim.episode_recording.EPISODE_LAYOUT`.
+
+        A copy rather than the array itself because :meth:`step` writes it in place
+        every cycle, and a caller that queued the reference would hand its writer
+        whatever the robot was doing some milliseconds later.
+        """
+        return None if self._targets is None else self._targets.copy()
+
     def forget_targets(self) -> None:
         """Drop the held position targets and the latched command.
 

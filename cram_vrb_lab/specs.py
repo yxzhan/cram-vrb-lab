@@ -167,6 +167,19 @@ class SceneSpec:
     ``None`` when the scene is only scenery to look at (an empty stage), in which
     case giskard plans against the robot alone."""
 
+    fixed_cameras: Optional[Callable[[], dict]] = None
+    """``() -> {name: Camera}``: the room-fixed cameras :attr:`load` built, if any.
+
+    Called **after** :attr:`load`, and only on the Isaac side. A callable for the
+    same reason every field here is one -- it answers with Isaac sensor objects, and
+    the giskard process that imports this registry has no Isaac in it -- and a
+    separate field rather than :attr:`load`'s return value because what a scene
+    loader returns is not part of how :func:`cram_vrb_lab.sim.runner.build` uses it,
+    and a scene without cameras should not have to return an empty dict to say so.
+
+    ``None`` when the scene has no such rig, which is every scene but the
+    garmi-apartment. The recorder then records state and action alone."""
+
 
 @dataclass(frozen=True)
 class PropsSpec:

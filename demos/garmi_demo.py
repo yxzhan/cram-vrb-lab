@@ -20,7 +20,7 @@ sys.path.insert(0, str(REPO))
 # os.environ.setdefault("ISAAC_PHYSICS", "newton")
 
 os.environ.setdefault("ISAAC_HEADLESS", "1")
-os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
@@ -34,7 +34,7 @@ os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
 # os.environ["ISAAC_WINDOW"] = "768x432"
 os.environ["ISAAC_WINDOW"] = "224x224"
 # os.environ["ISAAC_WINDOW"] = "512x288"
-os.environ["DISPLAY"] = ":1"
+# os.environ["DISPLAY"] = ":1"
 
 # The rate giskard closes its QP loop at. Set here rather than passed to one of the
 # launchers, because both subprocesses need it (cram_vrb_lab/control/rate.py): the
@@ -677,6 +677,52 @@ def reset_all():
 
 
 # %% [markdown]
+# ## Recording
+
+# %%
+from cram_vrb_lab.sim.episode_recording import EpisodeRecorderClient, describe
+
+RECORD_EPISODES = True
+"""Whether to record each run as a demonstration episode.
+
+Costs disk, not control rate: the capture is 10 Hz against the sim's ~20 Hz cycle
+and the PNG encoding happens on the sim's writer thread, so what this pays for is
+disk rather than a slower robot. Measured over three five-minute runs: ~120 MB of
+PNGs per minute of run, 0 frames dropped, which
+:mod:`cram_vrb_lab.datasets.lerobot_export` then turns into ~7 MB/min of dataset.
+Set it to False for a run that is only being watched.
+"""
+
+TASK_INSTRUCTION = "put the bowl and the spoon on the dining table"
+"""What the recorded episodes demonstrate, in the words a policy is conditioned on.
+
+Recorded per episode rather than derived from the plan, because it is the one field
+nothing can reconstruct afterwards: the plan is a TransportAction over two object
+designators, and no amount of replaying it produces the sentence a VLA is asked to
+follow.
+"""
+
+recorder = EpisodeRecorderClient(node) if RECORD_EPISODES else None
+
+
+def episode_outcome(failure, outcome):
+    """One word for how a run ended, for the episode's ``meta.json``.
+
+    The plan's verdict and the twin's disagree in both directions -- a plan can
+    complete and still have put the spoon down out of tolerance, and a plan that
+    raised halfway can still have delivered the bowl it had already placed (see
+    :func:`print_run_report`) -- so the label is built from both, and the one that
+    decides is the twin: an episode is a demonstration of objects ending up
+    somewhere, not of a plan returning cleanly.
+    """
+    if all(delivery.reached for delivery in outcome.values()):
+        return "success"
+    if any(delivery.reached for delivery in outcome.values()):
+        return "partial"
+    return "timeout" if failure and "exceeded" in str(failure) else "failed"
+
+
+# %% [markdown]
 # ## Loop
 
 # %%
@@ -778,6 +824,12 @@ try:
     while RUNS == 0 or run < RUNS:
         run += 1
         print(f"=== run {run} ===")
+        # Started before the timer, so the episode covers the whole attempt including
+        # whatever the plan does in its first second. A start while an episode is
+        # somehow still open closes that one as "superseded" rather than refusing, so
+        # a run that died without stopping costs one episode and not the rest.
+        if recorder is not None:
+            recorder.start(task=TASK_INSTRUCTION, episode=f"run_{run:03d}")
         signal.setitimer(signal.ITIMER_REAL, TASK_TIMEOUT)
         # Monotonic, not wall clock: this is a duration, and a run long enough to matter
         # is long enough for an NTP step to land in the middle of it.
@@ -801,6 +853,22 @@ try:
         outcome = delivered()
         for name, delivery in outcome.items():
             deliveries[name] += delivery.reached
+        # Stopped after the verdict rather than after the plan, for two reasons: the
+        # label the episode is filed under is only known here, and the extra second
+        # of frames is the objects at rest -- the state the attempt actually ended in,
+        # which a policy trained on this has to recognise as done.
+        if recorder is not None:
+            print("record: ", describe(recorder.stop(
+                outcome=episode_outcome(failure, outcome),
+                notes={
+                    "failure": None if failure is None else str(failure),
+                    "seconds": round(duration, 2),
+                    "offsets": {
+                        name: [round(float(axis), 4) for axis in delivery.offset]
+                        for name, delivery in outcome.items()
+                    },
+                },
+            )))
         print_run_report(run, duration, failure, outcome)
         print("Reset in 5 seconds...")
         time.sleep(5)
