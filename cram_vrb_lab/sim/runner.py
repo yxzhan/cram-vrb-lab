@@ -23,16 +23,29 @@ from cram_vrb_lab.sim.isaac_app import READY_MARKER, use_newton
 SPINS_PER_STEP = 1
 """How many callbacks to drain per sim step.
 
-``spin_once`` handles exactly ONE message per call, and with giskard streaming two
-topics at ~20 Hz each, a single spin per sim tick falls behind and commands arrive
-stale. Four leaves a margin of about 2.5x over what a 25 Hz cycle has to drain.
+``spin_once`` handles exactly ONE message per call -- ``rclpy``'s
+``Executor._spin_once_impl`` takes a single handler from
+``wait_for_ready_callbacks`` and calls it -- so this is not "drain the queue", it is
+"drain N messages". Consecutive calls are cheaper than the first, because they
+consume the ready list that first call's wait set produced, but each still runs one
+callback.
 
-Not larger, because an empty ``spin_once`` is not free: it builds a wait set per
-call, ~1.1 ms of it on the GARMI apartment, so the sixteen this used to do cost
-18 ms of a 40 ms cycle *with no traffic at all* -- more than the physics and the
-frame together, and the reason the loop ran at 20 Hz with RTF 0.8 while neither
-the GPU nor any core was near its limit. At four the same scene holds 24.9 Hz,
-RTF 1.00, without touching ``physics_dt``.
+One is enough **for this robot as the demos drive it**, and measured: with
+``SPINS_PER_STEP = 3`` the ``[sim]`` report read ``spin 3 ms``, with one it reads
+``spin 1 ms`` -- an empty ``spin_once`` still builds a wait set, ~1.1 ms of it on the
+GARMI apartment, which is why the sixteen this once did cost 18 ms of a 40 ms cycle
+*with no traffic at all* and held the loop at 20 Hz while neither the GPU nor any
+core was near its limit.
+
+Enough because only one command topic is usually live: giskard streams
+``joint_velocity_cmd`` and ``cmd_vel``, but the demos set
+``mobile_base.full_body_controlled = False``, so ``cmd_vel`` carries traffic only
+during a ``NavigateAction``. **That is also where one spin is not enough**: with both
+topics publishing, one callback per cycle makes them take turns, and the queues are
+depth 1 (``robots/garmi/isaac_node.py``), so the turn a topic misses is a command
+dropped rather than delayed -- each topic effectively applied at half the cycle rate.
+Raise this if base motion looks coarse; the ``spin`` figure in the ``[sim]`` line
+says what the extra call costs.
 """
 
 RATE_REPORT_PERIOD = 5.0
@@ -120,14 +133,20 @@ def probe_costs(world, render, frames=3):
     )
 
 
-def report_rate(fps, nominal_fps, work_seconds, render=True, giskard_hz=None):
+def report_rate(fps, nominal_fps, work_seconds, render=True, giskard_hz=None,
+                costs=None):
     """Print the control-cycle rate, the real-time factor, and the work per cycle.
 
-    ``work_seconds`` is what ``world.step`` costs; the rest of the cycle is the
-    ROS work and, when there is time left, the sleep that holds the loop to real
-    time. Measured on an RTX 3080 with the GARMI apartment: 18 ms headless or
-    livestreaming, 45 ms with a native Isaac window on the VNC desktop -- which
-    is the whole difference between a controller that tracks and one that shakes.
+    ``work_seconds`` is what ``world.step`` costs; ``costs`` is the rest of the
+    cycle, broken down -- the command application, the ROS spins and the
+    publishing -- and what is left after all of them is the sleep that holds the
+    loop to real time, when there is time left to sleep.
+
+    That breakdown is printed because the remainder turned out to be the size of
+    the frame rather than a rounding error: on an RTX 3080 with the GARMI
+    apartment, a 36 ms cycle was 25 ms of ``world.step`` and 11 ms of this. A
+    cycle is only ever as fast as its slowest section, and until it is split
+    there is no way to tell which one to attack.
 
     The RTF is printed for scale but no longer decides the warning; see
     :data:`FEEDBACK_MARGIN`. ``giskard_hz`` is resolved once by :func:`run` rather
@@ -143,16 +162,22 @@ def report_rate(fps, nominal_fps, work_seconds, render=True, giskard_hz=None):
     slow = fps < giskard_hz * FEEDBACK_MARGIN
     hint = (
         f"  -- giskard closes its loop at {giskard_hz:g} Hz on this feedback"
-        " (lower it with ${}); a native window on a remote desktop is the usual"
+        " (lower it with ${});"
         " cause".format(CONTROL_HZ_ENV)
         if render
         else f"  -- giskard closes its loop at {giskard_hz:g} Hz on this feedback"
         " (lower it with ${}); ISAAC_RENDER=0 hand-steps physics and is slower"
         " here than rendering, not faster".format(CONTROL_HZ_ENV)
     )
+    breakdown = (
+        "".join(f", {name} {seconds * 1e3:.0f} ms" for name, seconds in costs.items())
+        if costs
+        else ""
+    )
     print(
         f"{'WARNING: ' if slow else ''}[sim] {fps:.1f} Hz  RTF {rtf:.2f}"
-        f"  (work {work_seconds * 1e3:.0f} ms/cycle)" + (hint if slow else ""),
+        f"  (work {work_seconds * 1e3:.0f} ms/cycle{breakdown})"
+        + (hint if slow else ""),
         flush=True,
     )
 
@@ -290,12 +315,19 @@ def run(simulation_app, world, render, args):
     steps_per_cycle = 1 if render else max(round(rendering_dt / physics_dt), 1)
     cycle_dt = rendering_dt if render else steps_per_cycle * physics_dt
     work_seconds = 0.0
+    # The three sections outside world.step, timed separately: together they were
+    # a third of the cycle on the GARMI apartment, and a single number for "the
+    # rest" cannot say which of the three it is. Four extra time.time() calls per
+    # cycle, which is tens of nanoseconds against the milliseconds they measure.
+    command_seconds = spin_seconds = publish_seconds = 0.0
     cycles = 0
     window_start = deadline = time.time()
     try:
         while simulation_app.is_running():
+            started = time.time()
             for node in nodes:
                 node.apply_commands(cycle_dt)
+            command_seconds = smooth(command_seconds, time.time() - started)
 
             started = time.time()
             # One fused call when rendering (physics substeps included), else a
@@ -305,11 +337,16 @@ def run(simulation_app, world, render, args):
                 world.step(render=render)
             work_seconds = smooth(work_seconds, time.time() - started)
 
+            started = time.time()
             for _ in range(SPINS_PER_STEP):
                 for node in commanded:
                     rclpy.spin_once(node, timeout_sec=0.0)
+            spin_seconds = smooth(spin_seconds, time.time() - started)
+
+            started = time.time()
             for node in nodes:
                 node.publish()
+            publish_seconds = smooth(publish_seconds, time.time() - started)
 
             # Hold the cycle to real time. Nothing else does, and a machine that
             # can step this scene faster than real time -- which is every machine
@@ -331,7 +368,9 @@ def run(simulation_app, world, render, args):
             elapsed = time.time() - window_start
             if elapsed >= RATE_REPORT_PERIOD:
                 report_rate(cycles / elapsed, 1.0 / cycle_dt, work_seconds,
-                            render, giskard_hz)
+                            render, giskard_hz,
+                            costs={"cmd": command_seconds, "spin": spin_seconds,
+                                   "pub": publish_seconds})
                 cycles, window_start = 0, time.time()
     except KeyboardInterrupt:
         pass

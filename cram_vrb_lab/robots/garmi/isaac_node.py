@@ -94,6 +94,30 @@ CAMERA_RESOLUTION = (640, 360)
 """Same as the Stretch's head camera, and the same reason: enough to see a worktop
 across a room, cheap enough that RTX raytracing it does not cost the control rate."""
 
+TF_PUBLISH_HZ = 10.0
+"""Rate [Hz] the per-link ``/tf`` frames go out at, independently of the control rate.
+
+Decoupled because :meth:`GarmiROS.publish_tf` is the second most expensive thing in
+the sim's control cycle and **nothing in the control loop reads it**. It fills one
+``TransformStamped`` per link -- 65 of them on GARMI, ~20 us each from Python, plus
+the serialisation -- which measured 6-7 ms of a 32 ms cycle on an RTX 3080. Giskard
+closes its loop on ``/garmi/joint_states`` and ``/odom`` and derives link poses from
+its own model; the only code in this repo that ever looks a link frame up is
+:mod:`cram_vrb_lab.perception.pipeline`, to put a point cloud into ``map``.
+
+A rate rather than a subscription count, which is what this first tried. The count
+reads 0 with only the sim running, which is what made the cost so easy to spot -- but
+giskard holds a ``tf2_ros.TransformListener``, and that subscribes to ``/tf``
+wholesale whether or not anything will query the frames. So the count is 2 in every
+real configuration and the check never fires; the traffic is unwanted rather than
+unsubscribed, and only a rate can say so.
+
+10 Hz because tf2 interpolates between the two frames bracketing a lookup's stamp,
+and the pipelines that do look up are run with the robot holding still. Raise it if a
+frame is ever queried during fast motion -- at 6 ms a publish, the cycle pays
+``6 * TF_PUBLISH_HZ / cycle_hz`` ms on average.
+"""
+
 WHEEL_RADIUS = 0.0759
 """[m], from the wheels' collision cylinders. Only used for the cosmetic spin."""
 
@@ -526,6 +550,9 @@ class GarmiROS(SimBridge):
             0,
         )
         self._odom_prev = None
+        # 0.0 so the first cycle publishes: a robot whose frames appear only after
+        # the first TF_PUBLISH_HZ interval would be missing from RViz at startup.
+        self._tf_next_publish = 0.0
         self.publish_link_static_tf()
 
     # --- commands ----------------------------------------------------------
@@ -760,7 +787,23 @@ class GarmiROS(SimBridge):
 
         ``_physics_view`` is private but the only non-OmniGraph way to read every
         link pose at once.
+
+        Rate-limited to :data:`TF_PUBLISH_HZ` rather than run at the control rate,
+        and skipped altogether while nothing subscribes: at the control rate this
+        was 6-7 ms of a 32 ms cycle, spent on frames the control loop never reads.
+        See :data:`TF_PUBLISH_HZ` for why a rate and not just the subscriber check.
+
+        ``/tf_static`` is unaffected: it is latched and published once.
         """
+        if self.tf_broadcaster.pub_tf.get_subscription_count() == 0:
+            return
+        # Monotonic: this is an interval, and the deadline must not move when the
+        # wall clock does.
+        now_monotonic = time.monotonic()
+        if now_monotonic < self._tf_next_publish:
+            return
+        self._tf_next_publish = now_monotonic + 1.0 / TF_PUBLISH_HZ
+
         transforms = as_np(
             self.robot._physics_view.get_link_transforms()
         ).reshape(-1, 7)

@@ -160,6 +160,11 @@ COPY --chown=${NB_USER}:users binder/GARMI-Apartment-autostart.desktop ${HOME}/.
 
 RUN code-server --install-extension mhutchie.git-graph
 
+RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine/cramera && \
+    git pull && \
+    cd ../ && \
+    .venv/bin/pip install -e cramera
+
 # Set VSCODE default directory
 ENV CODE_WORKING_DIRECTORY=${REPO_DIR}
 #===================================================================#

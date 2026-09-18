@@ -118,7 +118,25 @@ if livestream_enabled():
     simulation_app.set_setting("/app/window/drawMouse", True)
     enable_extension("omni.kit.livestream.app")
 
-my_world = World(stage_units_in_meters=1.0, physics_dt=1 / 200, rendering_dt=8 / 200)
+# rendering_dt is the control cycle: cram_vrb_lab.sim.runner holds the loop to it, and
+# that loop is what consumes giskard's commands and republishes the state giskard closes
+# its loop on. So this, not the GPU, is the ceiling on the feedback rate -- 8/200 = 40 ms
+# capped it at 25 Hz however fast the machine was, whatever GISKARD_CONTROL_HZ said.
+#
+# 6/200 = 30 ms -> 33.3 Hz, which is the rate this machine actually sustains rather than
+# an aspiration. Measured on an RTX 3080 with the GARMI apartment, headless: a cycle is
+# ~25 ms of world.step alone (frame ~11 ms, Kit's own app.update ~11 ms, physics only
+# ~3.5 ms), plus ~2 ms of ROS work. 5/200 = 40 Hz was tried and the loop held 28 Hz --
+# RTF 0.70, i.e. sim time running at 0.70x the wall clock giskard plans in, which is
+# worse than a lower rate that keeps up. Do not raise this without reading the [sim]
+# line: it has to report ~33 Hz at RTF ~1.00.
+#
+# Taken out of the substep count rather than out of physics_dt: the step stays 5 ms, so
+# the drive tuning and the grasp contacts keep the fidelity they were tuned at, and only
+# the number of steps between frames changes. Cheap either way -- a fused substep costs
+# ~0.7 ms here, so 8 -> 6 buys back only ~1.4 ms; the budget came from the cycle, not
+# from physics.
+my_world = World(stage_units_in_meters=1.0, physics_dt=1 / 100, rendering_dt=4 / 100)
 my_world.reset()
 
 if use_newton():

@@ -329,7 +329,7 @@ class GarmiMoveMotion(MoveMotion, AlternativeMotion[Garmi]):
 
     A deadline is the right answer to what remains rather than a workaround:
     ``drive_to`` already retries up to ten times and checks the distance itself, and
-    ``run_plan`` already turns a ``GiskardException`` into ``False``. That retry loop
+    ``run_plan`` already catches a ``GiskardException`` and reports it. That retry loop
     was simply never reached, because a motion that hangs never fails. Ending the
     motion hands control back to a caller that knows what to do with it.
 

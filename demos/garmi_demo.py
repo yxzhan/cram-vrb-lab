@@ -8,7 +8,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
+from typing import NamedTuple, Tuple
 
 from IPython import get_ipython
 in_notebook = get_ipython().__class__.__name__ == "ZMQInteractiveShell"
@@ -17,10 +17,10 @@ REPO =  Path.cwd().resolve().parent if in_notebook else Path.cwd().resolve()
 sys.path.insert(0, str(REPO))
 
 
-os.environ.setdefault("ISAAC_PHYSICS", "newton")
+# os.environ.setdefault("ISAAC_PHYSICS", "newton")
 
-os.environ.setdefault("ISAAC_HEADLESS", "1")
-os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+# os.environ.setdefault("ISAAC_HEADLESS", "1")
+# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
@@ -41,7 +41,14 @@ os.environ["ISAAC_WINDOW"] = "640x360"
 # server configures its QP with it, and the sim compares its own cycle rate against it
 # and warns when the margin is gone. Telling only start_giskard_server leaves the sim
 # on the default, and its warning then reports a rate nothing is running at.
-os.environ["GISKARD_CONTROL_HZ"] = "15"
+#
+# The two numbers move together: demos/sim.py steps at 33.3 Hz (rendering_dt = 6/200),
+# which is what this machine sustains, and runner.FEEDBACK_MARGIN wants the sim 1.3x
+# above the controller -- 25 * 1.3 = 32.5, just under it. 30 Hz would fit through the
+# sim (33.3 > 30) but only by 1.11x, so a hitch leaves giskard closing its loop on a
+# joint state that was not republished since it last looked. Watch the [sim] line: it
+# has to read ~33 Hz at RTF ~1.00 with no WARNING.
+os.environ["GISKARD_CONTROL_HZ"] = "20"
 
 
 # Put the four kitchen objects -- cup, bowl, cereal box, milk box -- on the cabinet worktop
@@ -195,6 +202,18 @@ robot.mobile_base.full_body_controlled = False
 
 # %%
 def run_plan(plan, collision_avoidance=True, real_mode=True):
+    """Perform a CRAM plan, and report what ended it.
+
+    :return: ``None`` if the plan ran to completion, otherwise
+        ``"<ExceptionType>: <message>"`` -- the failure itself rather than the bare
+        ``False`` this used to return. A run that misses its target misses it for a
+        reason, and the reason is only knowable here: by the time the loop judges the
+        settled poses the exception is gone, so "missed" and "missed because the base
+        never arrived" would read the same. Returned as text rather than as the
+        exception object because that is what the run report prints, and because the
+        exception's traceback holds references into a world the reset is about to
+        rebuild.
+    """
     robot_mode = real_robot if real_mode else simulated_robot
     # publishes the plan tree to the viewer and lights its nodes up as they run; a
     # no-op when the backend shows no plan (NONE / RVIZ). execute_single() and
@@ -216,8 +235,13 @@ def run_plan(plan, collision_avoidance=True, real_mode=True):
         # GiskardException, the motion statechart's DataclassExceptions
         # (NoProgressError, CollisionViolatedError), the world's own -- and a loop that
         # is meant to keep running must not stop at whichever one it has not met yet.
+        #
+        # Printed here as well as returned, and deliberately: this line lands the moment
+        # the plan gives up, in among the chatter of the run it belongs to, whereas the
+        # report prints it once the run is over and judged. The rules the report draws
+        # around itself are what keep the two readable as the separate things they are.
         print(f"  plan failed -- {type(failure).__name__}: {failure}")
-        return False
+        return f"{type(failure).__name__}: {failure}"
     finally:
         # Physics owns where the objects ended up: a place lets them settle, a knock
         # moves them. So the twin follows the sim here rather than asserting the poses a
@@ -231,7 +255,7 @@ def run_plan(plan, collision_avoidance=True, real_mode=True):
                     print("  pulled:", {n: round(d, 4) for n, d in moved.items()})
             except Exception as failure:
                 print(f"  object pull failed -- {type(failure).__name__}: {failure}")
-    return True
+    return None
 
 
 def annotate(view_type, name):
@@ -543,6 +567,21 @@ SUCCESS_TOLERANCE = 0.2
 TASK_TARGETS = {"bowl.stl": BOWL_TARGET_POINT, "spoon.stl": SPOON_TARGET_POINT}
 
 
+class Delivery(NamedTuple):
+    """One object's verdict, and the distance behind it.
+
+    The distance travels with the verdict because a bare ``True``/``False`` cannot be
+    read: 0.21 m out on one axis and 2 m across the room both print as "missed", and
+    only the first says the tolerance is what the run fell foul of.
+    """
+
+    reached: bool
+    """Whether the object came to rest within :data:`SUCCESS_TOLERANCE` of its target."""
+
+    offset: np.ndarray
+    """Per-axis distance [m] from the target it was asked to reach."""
+
+
 def delivered():
     """Which of :data:`TASK_TARGETS` the objects actually reached.
 
@@ -550,6 +589,13 @@ def delivered():
     this judges where an object came to rest rather than where the plan believed it put
     it: a place that drops it on the way counts as a miss, and a plan that raised
     halfway can still have delivered the one it had already put down.
+
+    Called once per run, from the loop below rather than from ``run_task``, so that the
+    runs ``run_task`` never returns from -- the ones :data:`TASK_TIMEOUT` cuts short --
+    are judged by the same call as the rest. It prints nothing itself; the loop prints
+    every verdict of a run together, in one table.
+
+    :return: a :class:`Delivery` per object in :data:`TASK_TARGETS`, by name.
     """
     outcome = {}
     for name, target in TASK_TARGETS.items():
@@ -557,48 +603,49 @@ def delivered():
             world.get_body_by_name(name).global_pose.to_np()
         )[:3, 3].ravel()
         offset = np.abs(position - np.asarray(target.to_np()).ravel()[:3])
-        outcome[name] = bool(np.all(offset <= SUCCESS_TOLERANCE))
-        print(f"  {name:12s} off by {np.round(offset, 3)} m -> "
-              f"{'delivered' if outcome[name] else 'missed'}")
+        outcome[name] = Delivery(
+            reached=bool(np.all(offset <= SUCCESS_TOLERANCE)), offset=offset
+        )
     return outcome
 
 
-def run_task():
+def run_task(arm=Arms.RIGHT):
     """Carry the bowl and then the spoon to the dining table.
 
-    :return: which object reached its target, by name.
+    :return: what ``run_plan`` returned -- ``None`` if the plan ran to completion, the
+        failure that ended it otherwise. Where the objects ended up is a separate
+        question, answered by :func:`delivered` once the loop has the run back.
     """
-    run_plan(sequential([
-        ParkArmsAction(arm=Arms.BOTH),
+    return run_plan(sequential([
+        # ParkArmsAction(arm=Arms.BOTH),
         TransportAction(
             object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
-            arm=Arms.RIGHT,
+            arm=arm,
             target_location=Pose(
                 position=BOWL_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    ], context=context), collision_avoidance=False)
+    # ], context=context), collision_avoidance=True)
 
-    run_plan(sequential([
-        ParkArmsAction(arm=Arms.BOTH),
-        NavigateAction(Pose(
-            Point3.from_iterable(
-                [0, 5.5, 0]
-            ),
-            Quaternion.from_iterable(
-                [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
-            ),
-            reference_frame=world.root,
-        )),
+    # run_plan(sequential([
+        # ParkArmsAction(arm=Arms.BOTH),
+        # NavigateAction(Pose(
+        #     Point3.from_iterable(
+        #         [0, 5.5, 0]
+        #     ),
+        #     Quaternion.from_iterable(
+        #         [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
+        #     ),
+        #     reference_frame=world.root,
+        # )),
         TransportAction(
             object_designator=world.get_semantic_annotations_by_type(Spoon)[0],
-            arm=Arms.RIGHT,
+            arm=arm,
             target_location=Pose(
                 position=SPOON_TARGET_POINT, reference_frame=world.root
             ),
         ),
     ], context=context), collision_avoidance=True)
-    return delivered()
 
 
 # %% [markdown]
@@ -666,24 +713,89 @@ def success_rate():
     return {name: f"{count}/{run}" for name, count in deliveries.items()}
 
 
+REPORT_ROW = "  {name:<{width}}  {offset:<23}  {result:<9}  {rate:<5}"
+"""One line of the per-run table; see :func:`print_run_report`."""
+
+
+def print_run_report(index, duration, failure, outcome):
+    """Print one run as a table: how long it took, what ended it, what each object did,
+    and the rate.
+
+    Everything a run is judged on in one block, rather than the three prints from three
+    places this replaces (``delivered``'s own per-object lines, the timeout message, and
+    a separate success-rate dict). The two halves belong together: ``failure`` is the
+    plan's own verdict and ``outcome`` is the twin's, and they disagree in both
+    directions -- a plan can complete and still have put the spoon down out of
+    tolerance, and a plan that raised halfway can still have delivered the bowl it had
+    already placed.
+
+    :param index: The run's number, i.e. the denominator of the rate column.
+    :param duration: Seconds the run took, measured around ``run_task`` alone -- so it
+        is directly comparable with :data:`TASK_TIMEOUT`, and excludes the reset and the
+        settle that follow it, which are fixed overhead rather than something the run
+        earned.
+    :param failure: What ``run_task`` returned, or the timeout that cut the run short;
+        ``None`` if the plan ran to completion.
+    :param outcome: The :class:`Delivery` per object, from :func:`delivered`.
+    """
+    width = max(len(name) for name in outcome)
+    header = REPORT_ROW.format(
+        width=width,
+        name="object",
+        offset="off by x/y/z [m]",
+        result="result",
+        rate="rate",
+    )
+    # Ruled off top and bottom, because the report is not the only thing a run prints:
+    # the plan's own failure line, the object pull and the reset all print as they
+    # happen, and ``failure`` deliberately appears twice -- once as it happened, once
+    # here. The rules are what say which of the two this is.
+    rule = "  " + "-" * (len(header) - 2)
+    print(rule)
+    print(f"  run {index} in {duration:.1f}s: {failure or 'plan completed'}")
+    print(header)
+    print(rule)
+    for name, delivery in outcome.items():
+        print(REPORT_ROW.format(
+            width=width,
+            name=name,
+            offset=" ".join(f"{axis:7.3f}" for axis in delivery.offset),
+            result="delivered" if delivery.reached else "missed",
+            # Read after the counters below have taken this run in, so the column is
+            # the rate including it rather than the one before it.
+            rate=f"{deliveries[name]}/{index}",
+        ))
+    print(rule)
+
+
 try:
     while RUNS == 0 or run < RUNS:
         run += 1
         print(f"=== run {run} ===")
         signal.setitimer(signal.ITIMER_REAL, TASK_TIMEOUT)
+        # Monotonic, not wall clock: this is a duration, and a run long enough to matter
+        # is long enough for an NTP step to land in the middle of it.
+        started_at = time.monotonic()
+        failure = None
         try:
-            outcome = run_task()
+            failure = run_task()
         except TaskTimeout as expired:
-            # Judged anyway: a run that was cut short still put the objects somewhere,
-            # and every run has to contribute one verdict or the rate means nothing.
-            # reset_all() below cancels the goal that was still executing.
-            print(f"  {expired}")
-            outcome = delivered()
+            # Kept and reported rather than only printed: a run that was cut short still
+            # put the objects somewhere, and every run has to contribute one verdict or
+            # the rate means nothing. reset_all() below cancels the goal that was still
+            # executing.
+            failure = str(expired)
         finally:
+            # In the finally, so the run that raised is timed like the one that returned.
+            duration = time.monotonic() - started_at
             signal.setitimer(signal.ITIMER_REAL, 0)
-        for name, reached in outcome.items():
-            deliveries[name] += reached
-        print("success rate:", success_rate())
+        # One judgement per run, here rather than inside run_task, so that a run the
+        # timeout cut short is judged exactly like one that returned. run_plan's finally
+        # has pulled the settled poses into the twin by now either way.
+        outcome = delivered()
+        for name, delivery in outcome.items():
+            deliveries[name] += delivery.reached
+        print_run_report(run, duration, failure, outcome)
         print("Reset in 5 seconds...")
         time.sleep(5)
         reset_all()
