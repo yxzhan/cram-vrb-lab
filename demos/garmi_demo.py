@@ -20,7 +20,7 @@ sys.path.insert(0, str(REPO))
 # os.environ.setdefault("ISAAC_PHYSICS", "newton")
 
 os.environ.setdefault("ISAAC_HEADLESS", "1")
-# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
@@ -32,7 +32,7 @@ os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
 # os.environ["ISAAC_WINDOW"] = "960x540"
 # os.environ["ISAAC_WINDOW"] = "854x480"
 # os.environ["ISAAC_WINDOW"] = "768x432"
-os.environ["ISAAC_WINDOW"] = "224x224"
+os.environ["ISAAC_WINDOW"] = "640x360"
 # os.environ["ISAAC_WINDOW"] = "512x288"
 # os.environ["DISPLAY"] = ":1"
 
@@ -59,7 +59,7 @@ os.environ["ISAAC_KITCHEN_PROPS"] = "0"
 # right of (0, 7, 1) -- see cram_vrb_lab.scenes.garmi_apartment.constants.FIXED_CAMERAS).
 # They render every cycle once they exist, so the other demos in this scene leave them
 # off; set this to "0" if the [sim] line starts reporting a rate near GISKARD_CONTROL_HZ.
-os.environ["ISAAC_FIXED_CAMERAS"] = "1"
+os.environ["ISAAC_FIXED_CAMERAS"] = "0"
 
 RVIZ_CONFIG = REPO / "demos" / "rviz" / "garmi.rviz"
 ROBOT, SCENE = "garmi", "garmi_apartment"
@@ -358,26 +358,30 @@ SCENE_OBJECTS = (
         "spoon.stl", "spoon.stl", Spoon, (0.0, 0.0, -0.069), parent="drawer_1",
         grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.80, 0.80, 0.0),
     ),
-    # SceneObject(
-    #     "spoon2.stl", "spoon.stl", Spoon, (0.5, 7.2, 1.0),
-    #     grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
-    # ),
-    # SceneObject(
-    #     "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.05, 7.58, 0.9650),
-    #     mass=0.120, color=(0.90, 0.90, 0.92),
-    # ),
+    SceneObject(
+        "spoon2.stl", "spoon.stl", Spoon, (0.2, 7.2, 1.0),
+        grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
+    ),
+    SceneObject(
+        "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.1, 7.35, 0.9650),
+        mass=0.120, color=(0.0, 0.0, 0.92),
+    ),
+    SceneObject(
+        "jeroen_cup2.stl", "jeroen_cup.stl", Cup, (0.1, 7.28, 0.9650),
+        mass=0.120, color=(0.92, 0.0, 0.0),
+    ),
     # SceneObject(
     #     "milk.stl", "milk.stl", Milk, (0.10, 7.58, 1.0527),
     #     mass=1.000, collider="convexHull", color=(0.88, 0.92, 0.96),
     # ),
-    # SceneObject(
-    #     "bread.stl", "bread.stl", Bread, (0.38, 7.58, 0.9943),
-    #     mass=0.400, collider="convexHull", color=(0.76, 0.55, 0.31),
-    # ),
-    # SceneObject(
-    #     "big-knife.stl", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
-    #     mass=0.100, color=(0.55, 0.57, 0.60),
-    # ),
+    SceneObject(
+        "bread.stl", "bread.stl", Bread, (0.38, 7.58, 0.9943),
+        mass=0.400, collider="convexHull", color=(0.76, 0.55, 0.31),
+    ),
+    SceneObject(
+        "big-knife.stl", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
+        mass=0.100, color=(0.55, 0.57, 0.60),
+    ),
 )
 
 
@@ -622,7 +626,10 @@ def run_task(arm=Arms.RIGHT):
         failure that ended it otherwise. Where the objects ended up is a separate
         question, answered by :func:`delivered` once the loop has the run back.
     """
-    return run_plan(sequential([
+    # while True:
+    #     time.sleep(1)
+
+    done = run_plan(sequential([
         # ParkArmsAction(arm=Arms.BOTH),
         TransportAction(
             object_designator=world.get_semantic_annotations_by_type(Bowl)[0],
@@ -631,19 +638,12 @@ def run_task(arm=Arms.RIGHT):
                 position=BOWL_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    # ], context=context), collision_avoidance=True)
+    ], context=context), collision_avoidance=True)
 
-    # run_plan(sequential([
-        # ParkArmsAction(arm=Arms.BOTH),
-        # NavigateAction(Pose(
-        #     Point3.from_iterable(
-        #         [0, 5.5, 0]
-        #     ),
-        #     Quaternion.from_iterable(
-        #         [0.0, 0.0, math.sin(math.pi / 4), math.cos(math.pi / 4)]
-        #     ),
-        #     reference_frame=world.root,
-        # )),
+    if done is not None:
+        return done
+    
+    done = run_plan(sequential([
         TransportAction(
             object_designator=world.get_semantic_annotations_by_type(Spoon)[0],
             arm=arm,
@@ -651,7 +651,9 @@ def run_task(arm=Arms.RIGHT):
                 position=SPOON_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    ], context=context), collision_avoidance=False)
+    ], context=context), collision_avoidance=True)
+
+    return done
 
 
 # %% [markdown]

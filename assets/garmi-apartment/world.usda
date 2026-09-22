@@ -1142,7 +1142,8 @@ def Scope "Root"
                     # faces at 0.945, which is the height KITCHEN_WORKTOP records.
                     #
                     # A handle is a collider of the door or drawer it sits on rather than a
-                    # body of its own, so its cylinder is authored on that body.
+                    # body of its own, so its shape is authored on that body: a box on the
+                    # drawers, a cylinder on the doors.
                     #
                     # purpose = "guide" keeps these out of the render; enable
                     # Show By Type > Guide in the viewport to see them.
@@ -2372,17 +2373,16 @@ def Scope "Root"
                         }
 
                         # MJCF body "drawer_1_handle": 1 shapes
-                        def Cylinder "collision_10" (
+                        def Cube "collision_10" (
                             prepend apiSchemas = ["PhysicsCollisionAPI"]
                         )
                         {
-                            uniform token axis = "Z"
-                            double height = 0.184
-                            double radius = 0.0059
+                            double size = 1
                             token purpose = "guide"
                             quatf xformOp:orient = (0.7071068, -7.850462e-17, -0.7071068, 7.850462e-17)
+                            float3 xformOp:scale = (0.0118, 0.0118, 0.184)
                             double3 xformOp:translate = (0.05229993, 7.107373, 0.8)
-                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
                     }
 
@@ -2513,17 +2513,16 @@ def Scope "Root"
                         }
 
                         # MJCF body "drawer_2_handle": 1 shapes
-                        def Cylinder "collision_10" (
+                        def Cube "collision_10" (
                             prepend apiSchemas = ["PhysicsCollisionAPI"]
                         )
                         {
-                            uniform token axis = "Z"
-                            double height = 0.184
-                            double radius = 0.0059
+                            double size = 1
                             token purpose = "guide"
                             quatf xformOp:orient = (0.7071068, -7.850462e-17, -0.7071068, 7.850462e-17)
+                            float3 xformOp:scale = (0.0118, 0.0118, 0.184)
                             double3 xformOp:translate = (0.05229993, 7.107373, 0.6)
-                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
                     }
 
@@ -2654,17 +2653,16 @@ def Scope "Root"
                         }
 
                         # MJCF body "drawer_3_handle": 1 shapes
-                        def Cylinder "collision_10" (
+                        def Cube "collision_10" (
                             prepend apiSchemas = ["PhysicsCollisionAPI"]
                         )
                         {
-                            uniform token axis = "Z"
-                            double height = 0.184
-                            double radius = 0.0059
+                            double size = 1
                             token purpose = "guide"
                             quatf xformOp:orient = (0.7071068, -7.850462e-17, -0.7071068, 7.850462e-17)
+                            float3 xformOp:scale = (0.0118, 0.0118, 0.184)
                             double3 xformOp:translate = (0.05229993, 7.107373, 0.3)
-                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
                     }
 
@@ -2795,17 +2793,16 @@ def Scope "Root"
                         }
 
                         # MJCF body "drawer_4_handle": 1 shapes
-                        def Cylinder "collision_10" (
+                        def Cube "collision_10" (
                             prepend apiSchemas = ["PhysicsCollisionAPI"]
                         )
                         {
-                            uniform token axis = "Z"
-                            double height = 0.184
-                            double radius = 0.0059
+                            double size = 1
                             token purpose = "guide"
                             quatf xformOp:orient = (0.7071068, -7.850462e-17, -0.7071068, 7.850462e-17)
+                            float3 xformOp:scale = (0.0118, 0.0118, 0.184)
                             double3 xformOp:translate = (1.394188, 7.107373, 0.8)
-                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient"]
+                            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
                         }
                     }
 
