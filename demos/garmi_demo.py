@@ -684,7 +684,7 @@ def reset_all():
 # %%
 from cram_vrb_lab.sim.episode_recording import EpisodeRecorderClient, describe
 
-RECORD_EPISODES = True
+RECORD_EPISODES = os.environ["ISAAC_FIXED_CAMERAS"]
 """Whether to record each run as a demonstration episode.
 
 Costs disk, not control rate: the capture is 10 Hz against the sim's ~20 Hz cycle
