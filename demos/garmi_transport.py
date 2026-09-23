@@ -477,7 +477,7 @@ def main(
         started = True
     try:
         GarmiApartmentOnIsaac(
-            used_robot=Garmi, execution_type=execution_type, collision_avoidance=False
+            used_robot=Garmi, execution_type=execution_type, collision_avoidance=True
         ).run()
     finally:
         if started and stop_after:

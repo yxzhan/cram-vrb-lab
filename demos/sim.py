@@ -116,6 +116,8 @@ if RENDER:
 #     * No versions of omni.services.livestream.nvcf that satisfies: ...
 if livestream_enabled():
     simulation_app.set_setting("/app/window/drawMouse", True)
+    simulation_app.set_setting(
+        "/exts/omni.kit.livestream.app/primaryStream/allowDynamicResize", True)
     enable_extension("omni.kit.livestream.app")
 
 # rendering_dt is the control cycle: cram_vrb_lab.sim.runner holds the loop to it, and
