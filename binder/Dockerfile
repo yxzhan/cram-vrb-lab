@@ -221,8 +221,13 @@ COPY --chown=${NB_USER}:users binder/GARMI-Apartment-autostart.desktop ${HOME}/.
 
 RUN code-server --install-extension mhutchie.git-graph
 
+# Temporary: put cramera on the vr-share branch. The clone above is --depth 1 and
+# so single-branch; set-branches lets it see vr-share at all (a bare fetch would
+# only fill FETCH_HEAD), and the switch is what actually changes the checkout.
 RUN cd ${REPO_DIR}/cognitive_robot_abstract_machine/cramera && \
-    git fetch origin vr-share && \
+    git remote set-branches --add origin vr-share && \
+    git fetch --depth 1 origin vr-share && \
+    git switch vr-share && \
     cd ../ && \
     .venv/bin/pip install -e cramera
 
