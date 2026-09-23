@@ -165,12 +165,14 @@ def reset_context(world, detach_to_root: bool = True, close_containers: bool = T
       grasps onto the tool frame and only ``PlaceAction`` puts it back, so a plan
       that failed between the two leaves the object riding the hand for every run
       that follows.
-    - **Drawers and doors the twin still believes are open.** This is the one that
-      a sim reset cannot help with, because the two sides are not connected here:
-      ``GarmiROS.publish_joint_states`` sends the *robot articulation's* degrees of
-      freedom and nothing else, so the apartment's containers have no path from
-      Isaac back to the twin at all. Reset the scene and the drawer shuts in the
-      render while giskard goes on planning around one that is 0.466 m out.
+    - **Drawers and doors the twin still believes are open.** For a scene that
+      declares its joints (:attr:`~cram_vrb_lab.specs.SceneSpec.joints`) this is
+      no longer the twin's to fix: giskard reads them from the sim every cycle, so
+      a sim reset shuts them in the twin too, and a value written here is
+      overwritten on the next one. For a scene without that path the containers
+      have no way from Isaac back to the twin at all -- reset the scene and the
+      drawer shuts in the render while giskard goes on planning around one that
+      is 0.466 m out -- and this is what shuts them.
 
     :param detach_to_root: whether to re-parent anything hanging off a robot link
         back to the world root. Off if a caller wants to inspect what was carried.

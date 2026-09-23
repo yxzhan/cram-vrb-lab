@@ -248,19 +248,6 @@ def run_plan(plan, collision_avoidance=True, real_mode=True):
         # around itself are what keep the two readable as the separate things they are.
         print(f"  plan failed -- {type(failure).__name__}: {failure}")
         return f"{type(failure).__name__}: {failure}"
-    finally:
-        # Physics owns where the objects ended up: a place lets them settle, a knock
-        # moves them. So the twin follows the sim here rather than asserting the poses a
-        # plan last believed. globals(), because scene_sync belongs to a later cell, and
-        # a failed pull must not be what ends a run.
-        sync = globals().get("scene_sync")
-        if sync is not None:
-            try:
-                moved = sync.pull(world)
-                if moved:
-                    print("  pulled:", {n: round(d, 4) for n, d in moved.items()})
-            except Exception as failure:
-                print(f"  object pull failed -- {type(failure).__name__}: {failure}")
     return None
 
 
@@ -358,18 +345,18 @@ SCENE_OBJECTS = (
         "spoon.stl", "spoon.stl", Spoon, (0.0, 0.0, -0.069), parent="drawer_1",
         grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.80, 0.80, 0.0),
     ),
-    SceneObject(
-        "spoon2.stl", "spoon.stl", Spoon, (0.2, 7.2, 1.0),
-        grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
-    ),
-    SceneObject(
-        "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.1, 7.35, 0.9650),
-        mass=0.120, color=(0.0, 0.0, 0.92),
-    ),
-    SceneObject(
-        "jeroen_cup2.stl", "jeroen_cup.stl", Cup, (0.1, 7.28, 0.9650),
-        mass=0.120, color=(0.92, 0.0, 0.0),
-    ),
+    # SceneObject(
+    #     "spoon2.stl", "spoon.stl", Spoon, (0.2, 7.2, 1.0),
+    #     grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
+    # ),
+    # SceneObject(
+    #     "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.1, 7.35, 0.9650),
+    #     mass=0.120, color=(0.0, 0.0, 0.92),
+    # ),
+    # SceneObject(
+    #     "jeroen_cup2.stl", "jeroen_cup.stl", Cup, (0.1, 7.28, 0.9650),
+    #     mass=0.120, color=(0.92, 0.0, 0.0),
+    # ),
     # SceneObject(
     #     "milk.stl", "milk.stl", Milk, (0.10, 7.58, 1.0527),
     #     mass=1.000, collider="convexHull", color=(0.88, 0.92, 0.96),
@@ -472,16 +459,19 @@ scene_sync = SceneSyncClient(node)
 _robot_bodies = {id(body) for body in robot.bodies}
 
 
-def sync_objects(settle=None):
-    """Force the render to the poses the twin holds for :data:`SCENE_OBJECTS`.
+def sync_objects():
+    """Force the render to the poses the twin holds for :data:`SCENE_OBJECTS`, creating
+    them in the sim if needed, and have the sim report them back from then on.
+
+    The one direction :meth:`SceneSyncClient.follow` does not cover: this is the twin
+    saying where the objects go. What physics then does to them -- settling, a knock, a
+    drop -- comes back by itself.
 
     Skips whatever the plan is carrying: the twin parents a grasped object onto the hand
     and the sim welds it there, so a pose written here would be overridden on the next
     step.
 
-    :param settle: seconds to let physics settle, after which the settled poses are
-        pulled back into the twin. None to only push.
-    :return: the sim's report, and what ``pull`` moved in the twin.
+    :return: the sim's report.
     """
     for scene_object in SCENE_OBJECTS:
         body = world.get_body_by_name(scene_object.name)
@@ -489,7 +479,7 @@ def sync_objects(settle=None):
             continue
         # Isaac spawns the mesh file at the pose it is handed and knows nothing of the
         # twin's body frames, so what crosses is the mesh's pose, not the body's.
-        # ``pull`` undoes the same offset on the way back.
+        # ``follow`` undoes the same offset on the way back.
         position, orientation = shape_pose_in_world(body)
         scene_sync.place(
             scene_object.name,
@@ -501,24 +491,16 @@ def sync_objects(settle=None):
             color=scene_object.color,
             track=True,
         )
-    report = scene_sync.apply()
-    if settle is None:
-        return report, {}
-    time.sleep(settle)
-    return report, scene_sync.pull(world)
+    return scene_sync.apply()
 
 
-def print_object_poses(label):
-    print(label)
-    for scene_object in SCENE_OBJECTS:
-        body = world.get_body_by_name(scene_object.name)
-        print(f"  {scene_object.name:15s} "
-              f"{np.round(np.asarray(body.global_pose.to_np())[:3, 3].ravel(), 4)}")
+# The twin follows Isaac for every object lying free, each sim cycle: see
+# SceneSyncClient.follow. So nothing below pulls poses back by hand. The drawers and
+# doors need nothing here either: giskard reads them from the sim itself and the twin
+# hears them over /world_sync, like the robot's joints.
+scene_sync.follow(world)
 
-
-report, moved = sync_objects(settle=2)
-print("sync:", report)
-print_object_poses("Object Settled:")
+print("sync:", sync_objects())
 
 # %%
 # Weld a grasped object to the hand in Isaac for as long as the twin says it is held.
@@ -595,8 +577,7 @@ class Delivery(NamedTuple):
 def delivered():
     """Which of :data:`TASK_TARGETS` the objects actually reached.
 
-    Read off the twin, which ``run_plan`` has just pulled the settled poses into, so
-    this judges where an object came to rest rather than where the plan believed it put
+    Read off the twin, which follows the sim's objects every cycle, so this judges where an object came to rest rather than where the plan believed it put
     it: a place that drops it on the way counts as a miss, and a plan that raised
     halfway can still have delivered the one it had already put down.
 
@@ -638,7 +619,7 @@ def run_task(arm=Arms.RIGHT):
                 position=BOWL_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    ], context=context), collision_avoidance=True)
+    ], context=context), collision_avoidance=False)
 
     if done is not None:
         return done
@@ -651,7 +632,7 @@ def run_task(arm=Arms.RIGHT):
                 position=SPOON_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    ], context=context), collision_avoidance=True)
+    ], context=context), collision_avoidance=False)
 
     return done
 
@@ -672,7 +653,10 @@ def reset_all():
     # reset restores.
     print("giskard:", cancel_motion(context))
     print("sim:    ", scene_reset())
-    print("context:", reset_context(world))
+    # close_containers=False: the drawers and doors are the sim's, and scene_reset()
+    # has just shut them there; the twin hears it through giskard. Writing 0 here
+    # would only be overwritten on the next cycle.
+    print("context:", reset_context(world, close_containers=False))
     time.sleep(2.0)
     print("base:   ",
           np.round(np.asarray(robot.root.global_pose.to_np())[:3, 3].ravel(), 4))
@@ -801,9 +785,8 @@ def print_run_report(index, duration, failure, outcome):
         rate="rate",
     )
     # Ruled off top and bottom, because the report is not the only thing a run prints:
-    # the plan's own failure line, the object pull and the reset all print as they
-    # happen, and ``failure`` deliberately appears twice -- once as it happened, once
-    # here. The rules are what say which of the two this is.
+    # the plan's own failure line and the reset print as they happen, and ``failure``
+    # deliberately appears twice -- once as it happened, once here. The rules are what say which of the two this is.
     rule = "  " + "-" * (len(header) - 2)
     print(rule)
     print(f"  run {index} in {duration:.1f}s: {failure or 'plan completed'}")
@@ -850,8 +833,7 @@ try:
             duration = time.monotonic() - started_at
             signal.setitimer(signal.ITIMER_REAL, 0)
         # One judgement per run, here rather than inside run_task, so that a run the
-        # timeout cut short is judged exactly like one that returned. run_plan's finally
-        # has pulled the settled poses into the twin by now either way.
+        # timeout cut short is judged exactly like one that returned.
         outcome = delivered()
         for name, delivery in outcome.items():
             deliveries[name] += delivery.reached
@@ -874,10 +856,14 @@ try:
         print_run_report(run, duration, failure, outcome)
         print("Reset in 5 seconds...")
         time.sleep(5)
-        reset_all()
-        spawn_objects()
-        print("sync:", sync_objects(settle=2)[0])
-        print_object_poses("Object Settled:")
+        # Paused: here the twin says where the objects go and the sim follows, the
+        # one time the direction is reversed. A pose report still in flight from
+        # before the reset would otherwise put an object straight back where the run
+        # left it, and sync_objects would then push that to the sim.
+        with scene_sync.paused():
+            reset_all()
+            spawn_objects()
+            print("sync:", sync_objects())
 except KeyboardInterrupt:
     print("stopped after run", run)
 finally:

@@ -212,11 +212,13 @@ class _GarmiContainerMotion(AlternativeMotion[Garmi]):
     holding the tool on the handle. What changes is that it is no longer the only
     way for the motion to end.
 
-    That matters more here than for the gripper, because the container's joint is
-    **not measured**: nothing in the sim publishes the apartment's articulation
-    back (see the topic list -- only robot joints, odometry and tf), so giskard
-    moves the drawer in its own model and has no way to notice that PhysX left it
-    somewhere else. If the handle slips, the goal simply never converges.
+    That matters more here than for the gripper, because the goal drives the
+    container's joint to its limit and only the handle can get it there. The joint
+    is measured -- the sim publishes the apartment's articulation and giskard
+    overwrites its own integration with it every cycle (see
+    :mod:`cram_vrb_lab.sim.scene_joints`) -- so when the handle slips, the drawer
+    in giskard's model stops where PhysX left it, and the goal simply never
+    converges.
 
     Also pins the base unless the robot is whole-body controlled -- point 1 of the
     module docstring. Only the *pull* needs this; the approach is already

@@ -241,6 +241,15 @@ def build(world, render, setup, spawn_pose, args):
     # The robot too: a carried object rides one of its links.
     sync = SceneSyncROS(world, retune=retune, robot=robot)
     nodes.append(sync)
+
+    # The scene's drawers and doors, measured every cycle like the robot's joints,
+    # so giskard -- and through it the twin -- sees what physics did to them.
+    if setup.scene.joints is not None:
+        from cram_vrb_lab.sim.scene_joints_bridge import SceneJointsROS
+
+        nodes.append(
+            SceneJointsROS(world, setup.scene.prim_root, setup.scene.joints())
+        )
     # The reset takes the sync bridge so a reset also forgets what was synced in:
     # objects a plan spawned are not part of the scene it should return to.
     # The integrator comes from the robot's own bridge -- it holds the targets the

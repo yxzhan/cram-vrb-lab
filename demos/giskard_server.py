@@ -34,7 +34,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from cram_vrb_lab.control.giskard_server import start_localization_stand_in
+from cram_vrb_lab.control.giskard_server import (
+    start_localization_stand_in,
+    with_scene_joint_states,
+)
 from cram_vrb_lab.setups import (
     add_setup_arguments,
     get_setup,
@@ -93,10 +96,15 @@ def main():
     # for the others too because RViz and the prop poses are stamped in `odom`
     # and would otherwise have no path to `map`.
     localization = start_localization_stand_in(setup.robot.base_link_height)
+    interface = setup.robot.giskard_interface()
+    if setup.scene.joints is not None:
+        from cram_vrb_lab.sim.scene_joints import SCENE_JOINT_STATES_TOPIC
+
+        interface = with_scene_joint_states(interface, SCENE_JOINT_STATES_TOPIC)
     try:
         giskard = Giskard(
             world_config=setup.robot.giskard_world(environment, spawn_pose),
-            robot_interface_config=setup.robot.giskard_interface(),
+            robot_interface_config=interface,
             server_config=GiskardServerConfig(
                 execution_mode=ExecutionMode.CLOSED_LOOP
             ),

@@ -38,10 +38,13 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 import uuid
+from contextlib import contextmanager
 from typing import Dict, List, Optional, Sequence
 
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from std_msgs.msg import String
 
 SCENE_SYNC_TOPIC = "/cram_vrb_lab/scene_sync"
@@ -198,8 +201,20 @@ class SceneSyncClient:
         self._subscription = node.create_subscription(
             String, SCENE_SYNC_ACK_TOPIC, self._on_ack, 10
         )
+        self._follow_world = None
+        self._follow_paused = 0
+        self._follow_model_version = None
+        self._follow_model_changed_at = 0.0
+        self._follow_written_at = 0.0
+        self._follow_lock = threading.Lock()
+        # Its own group: while following, this callback waits for the world lock, and
+        # in the node's default group that would hold up the acks apply() waits on.
         self._pose_subscription = node.create_subscription(
-            String, SCENE_SYNC_POSE_TOPIC, self._on_poses, 10
+            String,
+            SCENE_SYNC_POSE_TOPIC,
+            self._on_poses,
+            10,
+            callback_group=MutuallyExclusiveCallbackGroup(),
         )
 
     def _on_ack(self, message: String) -> None:
@@ -207,19 +222,111 @@ class SceneSyncClient:
         self._acks[ack["id"]] = ack
 
     def _on_poses(self, message: String) -> None:
-        """Cache the newest reported pose per tracked object.
+        """Cache the newest reported pose per tracked object, and write it into the
+        twin as well while :meth:`follow` is on.
 
-        Cached rather than applied, so the twin is written on the thread that owns
-        it, when :meth:`pull` is called -- and so a caller that stops pulling simply
-        stops updating, instead of having the world change under a plan mid-motion.
+        Without :meth:`follow` only cached, so the twin changes when :meth:`pull` is
+        called and not under a plan mid-motion.
         """
         body_names = {prim_name(name): name for name in self._synced}
-        self._poses.update(
-            {
-                body_names.get(reported, reported): pose
-                for reported, pose in json.loads(message.data).items()
-            }
-        )
+        reported = {
+            body_names.get(name, name): pose
+            for name, pose in json.loads(message.data).items()
+        }
+        self._poses.update(reported)
+        with self._follow_lock:
+            world = None if self._follow_paused else self._follow_world
+        if world is None or not self._follow_may_write(world):
+            return
+        # Every pose the sim has reported, not only this message's: a message skipped
+        # above is then made up for by the next one that is written.
+        if self._write(
+            world,
+            dict(self._poses),
+            min_translation=self.follow_min_translation,
+            min_rotation=self.follow_min_rotation,
+        ):
+            self._follow_written_at = time.monotonic()
+
+    def _follow_may_write(self, world) -> bool:
+        """Whether a followed pose may be written into ``world`` right now.
+
+        No while the world's model has just changed, and no more often than
+        :data:`follow_min_interval` -- because each write is one more message on
+        ``/world_sync``, and that topic loses messages when it is busy. It is
+        ``depth=10`` KEEP_LAST on both ends, and giskard takes a while to apply a
+        model change -- a spawned mesh is ~1 MB and recompiles its kinematics -- so a
+        stream of state updates arriving meanwhile pushes the model change out of the
+        queue before giskard reads it. Giskard then dies on the next update naming the
+        lost object's degrees of freedom::
+
+            StateUpdateContainsUnknownDegreesOfFreedomError: Received a
+            WorldStateUpdate containing 7 DOF identifier(s) absent from the world
+            state index
+
+        Which is what following at every sim cycle, from the moment the objects were
+        spawned, did at startup. ``SPAWN_PUBLISH_PAUSE`` in the demos is the same
+        limit from the spawning side.
+        """
+        now = time.monotonic()
+        version = world.get_world_model_manager().version
+        if version != self._follow_model_version:
+            self._follow_model_version = version
+            self._follow_model_changed_at = now
+        if now - self._follow_model_changed_at < self.follow_model_quiet:
+            return False
+        return now - self._follow_written_at >= self.follow_min_interval
+
+    follow_min_translation = 1e-3
+    """[m] a followed object has to move before the twin is written. A resting object
+    still reports sub-millimetre jitter every cycle, and each write is a state update
+    on ``/world_sync``, which giskard applies and every viewer redraws."""
+
+    follow_min_rotation = 1e-2
+    """[rad] the same, for turning."""
+
+    follow_min_interval = 0.2
+    """[s] between two followed writes, i.e. at most 5 state updates a second on
+    ``/world_sync`` from following. See :meth:`_follow_may_write`."""
+
+    follow_model_quiet = 3.0
+    """[s] to hold following off after the world's model changed -- a spawn, a
+    re-parent on pick or place -- so giskard has applied that change before more
+    traffic arrives behind it. See :meth:`_follow_may_write`."""
+
+    def follow(self, world) -> None:
+        """Write every pose the sim reports into ``world`` as it arrives -- each sim
+        cycle -- instead of waiting for :meth:`pull`.
+
+        Isaac then owns where a free object is, all the time, as it owns where the
+        robot's joints are: a plan reaching for the bowl sees where physics left it
+        rather than where the last pull did, and a grasp freezes the offset the
+        object really had in the hand. Ownership still follows the attachment, as
+        in :meth:`pull`: a body parented to the robot is the plan's, and skipped.
+
+        The rule that keeps it a stream rather than a loop still holds: nothing here
+        publishes to the sim. Call :meth:`paused` around anything that puts objects
+        somewhere *in the twin* for the sim to follow -- a reset, a respawn -- or a
+        report still in flight from before it writes the old pose straight back.
+        """
+        with self._follow_lock:
+            self._follow_world = world
+
+    def unfollow(self) -> None:
+        """Back to writing only on :meth:`pull`."""
+        with self._follow_lock:
+            self._follow_world = None
+
+    @contextmanager
+    def paused(self):
+        """Suspend :meth:`follow` for the block; nestable."""
+        with self._follow_lock:
+            self._follow_paused += 1
+        try:
+            yield
+        finally:
+            with self._follow_lock:
+                self._follow_paused -= 1
 
     def tracked_poses(self) -> Dict[str, Dict]:
         """The newest pose the sim reported for each tracked object, in ``map``.
@@ -244,39 +351,60 @@ class SceneSyncClient:
 
         :param names: which tracked objects to write, or ``None`` for all of them.
         """
+        source = (
+            dict(self._poses)
+            if names is None
+            else {name: self._poses[name] for name in names if name in self._poses}
+        )
+        return self._write(world, source)
+
+    def _write(
+        self, world, source, min_translation: float = 0.0, min_rotation: float = 0.0
+    ) -> Dict[str, float]:
+        """Write ``{name: pose}`` into ``world``; returns how far each body moved.
+
+        Under the world's own lock for the whole pass, as the twin's MuJoCo
+        synchronizer does from its physics thread: :meth:`follow` calls this from the
+        executor while a plan reads the world on another thread, and a pass that
+        held the lock only per write would let the plan see some objects moved and
+        some not.
+
+        :param min_translation: skip a body that would move less than this [m] and
+        :param min_rotation: turn less than this [rad].
+        """
         from semantic_digital_twin.spatial_types.spatial_types import (
             HomogeneousTransformationMatrix,
         )
 
         import numpy as np
 
-        source = (
-            self._poses
-            if names is None
-            else {name: self._poses[name] for name in names if name in self._poses}
-        )
         moved: Dict[str, float] = {}
-        for name, pose in source.items():
-            try:
-                body = world.get_body_by_name(name)
-            except Exception:
-                continue
-            if body.parent_kinematic_structure_entity is not world.root:
-                continue
-            before = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
-            # The sim reports where the *geometry* is; the twin stores where the body
-            # frame is, and the two are the same thing only for a body whose origin sits
-            # on its mesh. See :func:`body_T_shape`.
-            map_T_body = _pose_matrix(
-                pose["position"], pose["orientation"]
-            ) @ np.linalg.inv(body_T_shape(body))
-            body.parent_connection.origin = HomogeneousTransformationMatrix(
-                data=map_T_body, reference_frame=world.root
-            )
-            after = np.asarray(body.global_pose.to_np())[:3, 3].ravel()
-            moved[name] = float(np.linalg.norm(after - before))
-        if moved:
-            world.notify_state_change()
+        with world._world_lock:
+            for name, pose in source.items():
+                try:
+                    body = world.get_body_by_name(name)
+                except Exception:
+                    continue
+                if body.parent_kinematic_structure_entity is not world.root:
+                    continue
+                before = np.asarray(body.global_pose.to_np())
+                # The sim reports where the *geometry* is; the twin stores where the
+                # body frame is, and the two are the same thing only for a body whose
+                # origin sits on its mesh. See :func:`body_T_shape`.
+                map_T_body = _pose_matrix(
+                    pose["position"], pose["orientation"]
+                ) @ np.linalg.inv(body_T_shape(body))
+                distance = float(np.linalg.norm(map_T_body[:3, 3] - before[:3, 3]))
+                cosine = (np.trace(before[:3, :3].T @ map_T_body[:3, :3]) - 1.0) / 2.0
+                turn = float(np.arccos(np.clip(cosine, -1.0, 1.0)))
+                if distance < min_translation and turn < min_rotation:
+                    continue
+                body.parent_connection.origin = HomogeneousTransformationMatrix(
+                    data=map_T_body, reference_frame=world.root
+                )
+                moved[name] = distance
+            if moved:
+                world.notify_state_change()
         return moved
 
     def place(

@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from cram_vrb_lab.paths import ASSETS_DIR, CRAM_SUBMODULE_DIR, ROS2_WS_DIR
+from cram_vrb_lab.sim.scene_joints import SceneJoint
 
 GRID_USD_PATH = str(ASSETS_DIR / "Grid" / "default_environment.usd")
 """Ground/grid environment referenced under the apartment.
@@ -98,6 +99,40 @@ def garmi_apartment_pose_in_map():
         *MJCF_OFFSET_IN_USD, yaw=MJCF_YAW_IN_USD
     )
     return map_T_usd @ usd_T_mjcf
+
+
+# --- The apartment's own articulation, on both sides ------------------------------
+
+SCENE_JOINTS = (
+    SceneJoint("Meshes/Assets/door/Actor_0000/HingeJoint", "door_0_leaf"),
+    SceneJoint("Meshes/Assets/door/Actor_0001/HingeJoint", "door_1_leaf"),
+    SceneJoint("Meshes/Assets/door/Actor_0002/HingeJoint", "door_2_leaf"),
+    *(
+        SceneJoint(f"Meshes/Assets/cabinet/Actor_0000/joints/drawer_{n}_slide",
+                   f"drawer_{n}_joint", sign=-1.0)
+        for n in (1, 2, 3, 4)
+    ),
+    *(
+        SceneJoint(f"Meshes/Assets/cabinet/Actor_0000/joints/door_{n}_hinge",
+                   f"cabinet_door_{n}_joint")
+        for n in (1, 2, 3, 4)
+    ),
+)
+"""Every articulated joint of the apartment: the USD joint under ``/World/GarmiApartment``
+and the MJCF connection it is converted to.
+
+Paired by where the bodies sit (the room doors' ``Actor_000N`` is at the pose of the
+MJCF ``door_N``) and by the ``# MJCF body`` comments ``world.usda`` carries on each
+cabinet part. The signs are read off the limits, 0 = shut on both sides:
+
+- drawers: the asset slides along -Y, ``[-0.466, 0]``; the MJCF along +X,
+  ``[0, 0.466]`` -- hence -1.
+- ``door_0``: ``world.usda`` overrides the hinge to ``[-90, 0]``, the MJCF has
+  ``[-90, 0]`` too -- +1, not the -1 the asset file alone would suggest.
+- ``door_1``, ``door_2`` and the cabinet doors open to the positive side on both. The
+  MJCF lets ``door_2`` swing to 180 deg where the asset stops at 90; the physics
+  decides, the twin only reads.
+"""
 
 
 # --- Where the robot stands and what it looks at --------------------------------

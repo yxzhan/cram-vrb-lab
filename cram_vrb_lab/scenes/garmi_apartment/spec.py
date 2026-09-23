@@ -18,6 +18,12 @@ def _fixed_cameras():
     return dict(FIXED_CAMERA_SENSORS)
 
 
+def _joints():
+    from .constants import SCENE_JOINTS
+
+    return SCENE_JOINTS
+
+
 def _environment():
     from .giskard_world import garmi_apartment_environment
 
@@ -29,4 +35,6 @@ GARMI_APARTMENT = SceneSpec(
     load=_load,
     environment=_environment,
     fixed_cameras=_fixed_cameras,
+    joints=_joints,
+    prim_root="/World/GarmiApartment",
 )

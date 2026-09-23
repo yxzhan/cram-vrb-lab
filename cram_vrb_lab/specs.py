@@ -180,6 +180,19 @@ class SceneSpec:
     ``None`` when the scene has no such rig, which is every scene but the
     garmi-apartment. The recorder then records state and action alone."""
 
+    joints: Optional[Callable[[], Tuple["SceneJoint", ...]]] = None
+    """``() -> (SceneJoint, ...)``: the scene's own articulation -- drawers, doors --
+    as the USD asset and the twin each name it. Read on both sides: the sim publishes
+    these joints' positions, and the giskard server syncs its world to them, so the
+    twin shows a drawer as far open as physics left it rather than as far as the plan
+    pulled. See :mod:`cram_vrb_lab.sim.scene_joints`.
+
+    ``None`` when the scene has nothing articulated, or giskard does not know it."""
+
+    prim_root: Optional[str] = None
+    """The prim :attr:`load` puts the scene under; the paths in :attr:`joints` are
+    relative to it."""
+
 
 @dataclass(frozen=True)
 class PropsSpec:
