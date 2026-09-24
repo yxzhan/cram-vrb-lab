@@ -734,11 +734,33 @@ if bridge is not None:
     _queue_move = bridge.queue_move
     _marker_keys = set(MARKER_NAMES.values())
 
+    DRAG_IN_PROGRESS = 0.5
+    """[s] since a marker's last intermediate move within which it counts as held."""
+
+    _last_drag = {}            # marker -> monotonic time of its last intermediate move
+    _held_off = set()          # markers whose drag is ignored until it is let go of
+
     def _queue_marker_move(request):
-        if request.object_key not in _marker_keys:
+        key = request.object_key
+        if key not in _marker_keys:
             return
+        if key in _held_off:
+            # the drag that was going when the goal failed: the marker stays on the hand
+            # until it is let go of, instead of following the viewer straight back out
+            if request.is_final:
+                _held_off.discard(key)
+            return
+        if not request.is_final:
+            _last_drag[key] = time.monotonic()
         _queue_move(request)
         _moves_pending.set()
+
+    def hold_off_drags():
+        """Ignore every marker drag in progress until it is let go of."""
+        now = time.monotonic()
+        _held_off.update(
+            key for key, at in _last_drag.items() if now - at < DRAG_IN_PROGRESS
+        )
 
     bridge.queue_move = _queue_marker_move
 
@@ -844,7 +866,12 @@ try:
         print(f"teleop goal ended ({why_it_ended(result)}) -- markers back on the hands, "
               f"restarting (#{restarts})")
         if bridge is not None:
-            # drags queued before the failure would carry the markers straight back out
+            # A marker still in a viewer's hand would be dragged straight back to where
+            # it failed by the next move the viewer posts, 30 times a second -- so its
+            # drag is ignored from here until it is let go of. First, so nothing slips
+            # in behind the two steps below.
+            hold_off_drags()
+            # drags queued before the failure would carry the markers back out too
             with world._world_lock:
                 bridge.apply_moves()
             # and the viewer is shown the last drag target over the world's pose for
