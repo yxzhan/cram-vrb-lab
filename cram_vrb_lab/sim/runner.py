@@ -242,6 +242,13 @@ def build(world, render, setup, spawn_pose, args):
     sync = SceneSyncROS(world, retune=retune, robot=robot)
     nodes.append(sync)
 
+    # The viewers' hands, as ghosts that can drag anything (see sim.ghost_hands). Idle
+    # it is one subscription; it lets go of what it holds before the sync bridge
+    # deletes prims.
+    from cram_vrb_lab.sim.ghost_hands_bridge import GhostHandsROS
+
+    nodes.append(GhostHandsROS(world, robot=robot, sync_bridge=sync))
+
     # The scene's drawers and doors, measured every cycle like the robot's joints,
     # so giskard -- and through it the twin -- sees what physics did to them.
     if setup.scene.joints is not None:

@@ -349,26 +349,26 @@ SCENE_OBJECTS = (
     #     "spoon2.stl", "spoon.stl", Spoon, (0.2, 7.2, 1.0),
     #     grasp_point=(0.0, 0.0, 0.022), mass=0.05, color=(0.25, 0.70, 0.40),
     # ),
-    # SceneObject(
-    #     "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.1, 7.35, 0.9650),
-    #     mass=0.120, color=(0.0, 0.0, 0.92),
-    # ),
+    SceneObject(
+        "jeroen_cup.stl", "jeroen_cup.stl", Cup, (-0.1, 7.35, 0.9650),
+        mass=0.120, color=(0.25, 0.35, 0.80),
+    ),
     # SceneObject(
     #     "jeroen_cup2.stl", "jeroen_cup.stl", Cup, (0.1, 7.28, 0.9650),
-    #     mass=0.120, color=(0.92, 0.0, 0.0),
+    #     mass=0.120, color=(0.80, 0.30, 0.30),
     # ),
     # SceneObject(
     #     "milk.stl", "milk.stl", Milk, (0.10, 7.58, 1.0527),
     #     mass=1.000, collider="convexHull", color=(0.88, 0.92, 0.96),
     # ),
-    SceneObject(
-        "bread.stl", "bread.stl", Bread, (0.38, 7.58, 0.9943),
-        mass=0.400, collider="convexHull", color=(0.76, 0.55, 0.31),
-    ),
-    SceneObject(
-        "big-knife.stl", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
-        mass=0.100, color=(0.55, 0.57, 0.60),
-    ),
+    # SceneObject(
+    #     "bread.stl", "bread.stl", Bread, (0.38, 7.58, 0.9943),
+    #     mass=0.400, collider="convexHull", color=(0.76, 0.55, 0.31),
+    # ),
+    # SceneObject(
+    #     "big-knife.stl", "big-knife.stl", Knife, (0.23, 7.44, 0.9871),
+    #     mass=0.100, color=(0.55, 0.57, 0.60),
+    # ),
 )
 
 
@@ -632,7 +632,7 @@ def run_task(arm=Arms.RIGHT):
                 position=SPOON_TARGET_POINT, reference_frame=world.root
             ),
         ),
-    ], context=context), collision_avoidance=False)
+    ], context=context), collision_avoidance=True)
 
     return done
 

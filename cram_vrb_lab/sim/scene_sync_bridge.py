@@ -87,6 +87,9 @@ class SceneSyncROS(SimBridge):
         self._attached: Dict[str, Dict] = {}
         self._carry_view: Optional[RigidPrim] = None
         self._carry_viewed: List[str] = []
+        self.before_delete: List = []
+        """Called before this bridge deletes prims, to drop physics views of their own
+        that could cover them -- see :meth:`_release_view`."""
         if not is_prim_path_valid(SYNC_ROOT):
             define_prim(SYNC_ROOT, "Xform")
 
@@ -111,6 +114,8 @@ class SceneSyncROS(SimBridge):
         self._viewed = []
         self._carry_view = None
         self._carry_viewed = []
+        for release in self.before_delete:
+            release()
 
     def _on_request(self, message: String) -> None:
         """Queue a request. Deliberately does no stage work; see the class docstring."""
