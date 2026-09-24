@@ -38,8 +38,9 @@ HAND_COLOR = "#4ac2ff"
 HAND_OPACITY = 0.5
 """Half see-through: a ghost, and never hiding what it is reaching for."""
 
-GRAB_RADIUS = 0.12
-"""[m] from a body's bounds a hand may be and still take it."""
+GRAB_RADIUS = 0.05
+"""[m] from a body's bounds a hand may be and still take it: all but touching, so a
+hand reaching past one thing for another takes the one it is at."""
 
 HAND_TIMEOUT = 3.0
 """[s] without a report before a hand is taken out -- a headset taken off, a page
@@ -294,7 +295,7 @@ class GhostHandsROS(SimBridge):
         return self._bounds[path]
 
     def _take(self, world_T_hand: np.ndarray) -> Optional[_Grab]:
-        """The body nearest the hand within :data:`GRAB_RADIUS`, held where it is.
+        """The smallest body within :data:`GRAB_RADIUS` of the hand, held where it is.
 
         Poses from physics rather than from the stage, which lags behind it; the view
         used to read them is dropped right after (see :meth:`release_all`).
@@ -306,8 +307,13 @@ class GhostHandsROS(SimBridge):
         view.initialize()
         positions, orientations = view.get_world_poses()
         del view
+        # Of everything within reach, the smallest. Reach is measured to a body's
+        # bounding box, and a container's box holds everything in it: a hand in a
+        # drawer is inside the drawer's box, at distance 0 from it, however close it is
+        # to the spoon lying there. The smaller of the two is what it went in for -- a
+        # drawer is taken by its handle, outside its box's contents.
         point = world_T_hand[:3, 3]
-        best, best_distance, best_pose = None, GRAB_RADIUS, None
+        best, best_key, best_pose = None, None, None
         for index, path in enumerate(paths):
             world_T_body = _matrix(positions[index], orientations[index])
             local = world_T_body[:3, :3].T @ (point - world_T_body[:3, 3])
@@ -316,8 +322,11 @@ class GhostHandsROS(SimBridge):
                 continue
             low, high = np.array(bounds.GetMin()), np.array(bounds.GetMax())
             distance = float(np.linalg.norm(np.maximum(0.0, np.maximum(low - local, local - high))))
-            if distance <= best_distance:
-                best, best_distance, best_pose = path, distance, world_T_body
+            if distance > GRAB_RADIUS:
+                continue
+            key = (float(np.prod(high - low)), distance)
+            if best_key is None or key < best_key:
+                best, best_key, best_pose = path, key, world_T_body
         if best is None:
             return None
         self.get_logger().info(f"ghost hand takes {best}")
