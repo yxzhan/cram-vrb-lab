@@ -20,11 +20,12 @@ from __future__ import annotations
 
 GHOST_HANDS_TOPIC = "/cram_vrb_lab/ghost_hands"
 """``std_msgs/String``, JSON ``{"hands": {key: {"position": [x, y, z],
-"orientation": [x, y, z, w], "grab": bool, "scale": [x, y, z], "color": "#rrggbb"}},
-"gone": [key, ...]}`` in ``map``. A key names one hand of one viewer
-(``"<viewer>/left"``); ``gone`` lists hands to take out. ``scale`` and ``color`` are how
-cramera draws the hand -- a block of those extents, +X forward, in the viewer's colour
--- so the ghost in the render is the same block the viewers see."""
+"orientation": [x, y, z, w], "grab": bool, "scale": [x, y, z], "bar": [l, w, h],
+"color": "#rrggbb"}}, "gone": [key, ...]}`` in ``map``. A key names one hand of one
+viewer (``"<viewer>/left"``); ``gone`` lists hands to take out. ``scale``, ``bar`` and
+``color`` are how cramera draws the hand -- a ball of diameter ``scale`` on the hand,
+a bar of extents ``bar`` running back from it along -X, in the viewer's colour -- so
+the ghost in the render is the same hand the viewers see."""
 
 
 def hand_key(viewer: str, hand: str) -> str:

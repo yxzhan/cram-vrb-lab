@@ -301,8 +301,7 @@ class SceneSyncClient:
         Isaac then owns where a free object is, all the time, as it owns where the
         robot's joints are: a plan reaching for the bowl sees where physics left it
         rather than where the last pull did, and a grasp freezes the offset the
-        object really had in the hand. Ownership still follows the attachment, as
-        in :meth:`pull`: a body parented to the robot is the plan's, and skipped.
+        object really had in the hand.
 
         The rule that keeps it a stream rather than a loop still holds: nothing here
         publishes to the sim. Call :meth:`paused` around anything that puts objects
@@ -341,13 +340,8 @@ class SceneSyncClient:
 
         The read half of the loop this module deliberately does not close: it writes
         the twin and stops. Nothing here republishes, so a pose travels
-        Isaac -> twin and no further.
-
-        Skips a body no longer parented to the world root. That is the carried case,
-        and it is not an edge case: ``PickUpAction`` re-parents what it grasps onto
-        the tool frame, at which point the *plan* owns where the object is and a pose
-        from Isaac would fight that attachment every step. Ownership follows the
-        attachment rather than a flag someone has to remember to flip.
+        Isaac -> twin and no further. Every reported body is written, whatever it
+        hangs off, in its parent's frame (see :meth:`_write`).
 
         :param names: which tracked objects to write, or ``None`` for all of them.
         """
@@ -369,12 +363,19 @@ class SceneSyncClient:
         held the lock only per write would let the plan see some objects moved and
         some not.
 
+        Every body is written in its parent's frame and stays parented there: a spoon
+        parented to the drawer it lies in keeps saying where it *is*
+        (``TransportAction`` opens the drawer because the spoon is in it), while the
+        sim says where exactly. Only a body on anything but a free connection is
+        skipped, since its pose cannot be set.
+
         :param min_translation: skip a body that would move less than this [m] and
         :param min_rotation: turn less than this [rad].
         """
         from semantic_digital_twin.spatial_types.spatial_types import (
             HomogeneousTransformationMatrix,
         )
+        from semantic_digital_twin.world_description.connections import Connection6DoF
 
         import numpy as np
 
@@ -385,7 +386,8 @@ class SceneSyncClient:
                     body = world.get_body_by_name(name)
                 except Exception:
                     continue
-                if body.parent_kinematic_structure_entity is not world.root:
+                parent = body.parent_kinematic_structure_entity
+                if not isinstance(body.parent_connection, Connection6DoF):
                     continue
                 before = np.asarray(body.global_pose.to_np())
                 # The sim reports where the *geometry* is; the twin stores where the
@@ -399,9 +401,17 @@ class SceneSyncClient:
                 turn = float(np.arccos(np.clip(cosine, -1.0, 1.0)))
                 if distance < min_translation and turn < min_rotation:
                     continue
-                body.parent_connection.origin = HomogeneousTransformationMatrix(
-                    data=map_T_body, reference_frame=world.root
+                if parent is world.root:
+                    parent_T_body = map_T_body
+                else:
+                    parent_T_body = (
+                        np.linalg.inv(np.asarray(parent.global_pose.to_np())) @ map_T_body
+                    )
+                origin = HomogeneousTransformationMatrix(
+                    data=parent_T_body, reference_frame=parent
                 )
+                origin.child_frame = body
+                body.parent_connection.origin = origin
                 moved[name] = distance
             if moved:
                 world.notify_state_change()

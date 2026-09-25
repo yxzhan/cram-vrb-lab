@@ -8,10 +8,11 @@ QP is solved (``Executor.tick`` ticks the statechart, then solves with
 ``float_variable_data``). ``CartesianPositionTrajectory`` and ``WiggleInsert`` move
 their goals the same way.
 
-:class:`FollowFrame` and :class:`TeleopGripper` read their targets off the world -- a
-body, a joint -- and :class:`TeleopCartesianPose` off a topic. All start by holding
-where the robot is, so a goal sent before any target has moved keeps the arm and the
-hand still rather than driving them anywhere.
+:class:`FollowFrame` reads its target off a body in the world, :class:`TeleopCartesianPose`
+off a topic. Both start by holding where the robot is, so a goal sent before any target
+has moved keeps the arm still rather than driving it anywhere. The grippers are not
+here: a hand is opened and shut straight through the sim's finger drives
+(``robots.garmi.joints.gripper_topic``), with nothing for a QP to solve.
 
 Imported by the giskard server when it deserializes the goal (by module path), so this
 module must stay importable there: plain giskardpy and semantic_digital_twin, nothing
@@ -187,86 +188,6 @@ class FollowFrame(HoldPose):
             return True
         cosine = (np.trace(before[:3, :3].T @ after[:3, :3]) - 1.0) / 2.0
         return float(np.arccos(np.clip(cosine, -1.0, 1.0))) > self.rotation_deadband
-
-
-@dataclass(eq=False, repr=False)
-class TeleopGripper(Task):
-    """Drives a hand's finger joints to the opening of :attr:`command_joint`.
-
-    The command is a joint in the world rather than a topic, for the reason
-    :class:`FollowFrame`'s target is a body: whatever moves that joint in the twin --
-    the fingers of a teleop marker, squeezed shut from a VR controller -- opens and
-    closes the hand, and the change reaches giskard over ``/world_sync``.
-
-    Read into a float variable each tick rather than used as the joint's own position
-    symbol: :attr:`command_joint` is an active degree of freedom in giskard's world, and
-    an expression over it would let the QP satisfy the task by moving the command
-    instead of the fingers.
-
-    One opening in ``[0, 1]`` for the whole hand -- where :attr:`command_joint` stands
-    between its limits -- interpolated per finger joint between :attr:`closed` and
-    :attr:`opened`. Closing on an object does not converge -- the fingers stop at the
-    object -- and is meant not to: the error that remains is what keeps the sim's
-    integrator leading the fingers into it, which is the grip
-    (``velocity_integrator.MAX_LEAD``).
-    """
-
-    connections: List[str] = field(kw_only=True)
-    """The finger joints, by connection name."""
-
-    closed: List[float] = field(kw_only=True)
-    """Each joint's position when the hand is shut."""
-
-    opened: List[float] = field(kw_only=True)
-    """Each joint's position when the hand is wide open."""
-
-    command_joint: str = field(kw_only=True)
-    """The connection whose position commands the opening: at its lower limit the hand
-    is shut, at its upper one wide open."""
-
-    max_velocity: float = field(default=0.1, kw_only=True)
-    """Reference velocity of the fingers [m/s]."""
-
-    weight: float = field(
-        default=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE, kw_only=True
-    )
-
-    _opening: sm.FloatVariable = field(default=None, init=False, repr=False)
-
-    def build_artifacts(self, context: MotionStatechartContext) -> NodeArtifacts:
-        artifacts = NodeArtifacts()
-        self._opening = sm.FloatVariable(f"{self.name}_opening")
-        context.float_variable_data.register_expression(self._opening)
-        context.float_variable_data.set_value(self._opening, self._commanded(context))
-        for name, shut, wide in zip(self.connections, self.closed, self.opened):
-            connection = context.world.get_connection_by_name(name)
-            current = connection.dof.variables.position
-            target = shut + self._opening * (wide - shut)
-            artifacts.constraints.add_equality_constraint(
-                name=name,
-                reference_velocity=self.max_velocity,
-                equality_bound=target - current,
-                quadratic_weight=self.weight,
-                task_expression=current,
-            )
-        artifacts.observation = sm.Scalar.const_true()
-        return artifacts
-
-    def _commanded(self, context: MotionStatechartContext) -> float:
-        """The opening :attr:`command_joint` stands at, in ``[0, 1]``."""
-        connection = context.world.get_connection_by_name(self.command_joint)
-        limits = connection.dof.limits
-        lower, upper = limits.lower.position, limits.upper.position
-        if lower is None or upper is None or upper == lower:
-            return 0.0
-        return float(np.clip((connection.position - lower) / (upper - lower), 0.0, 1.0))
-
-    def on_start(self, context: MotionStatechartContext):
-        context.float_variable_data.set_value(self._opening, self._commanded(context))
-
-    def on_tick(self, context: MotionStatechartContext):
-        context.float_variable_data.set_value(self._opening, self._commanded(context))
-        return None
 
 
 @dataclass(eq=False, repr=False)

@@ -125,6 +125,15 @@ over :data:`CMD_VEL_TOPIC` as a Twist instead."""
 VELOCITY_CMD_TOPIC = "/garmi/joint_velocity_cmd"
 JOINT_STATES_TOPIC = "/garmi/joint_states"
 GRIPPER_CMD_TOPIC = "/garmi/gripper_command"
+
+
+def gripper_topic(side: str) -> str:
+    """``std_msgs/Float64``: one hand's finger travel [m], 0 shut to
+    :data:`MAX_FINGER_TRAVEL` wide -- straight to the sim's finger drives, without
+    giskard, as :data:`GRIPPER_CMD_TOPIC` does for both hands at once. Latched: the
+    hand goes on pressing towards it until told otherwise."""
+    return f"{GRIPPER_CMD_TOPIC}/{side}"
+
 CMD_VEL_TOPIC = "/garmi/cmd_vel"
 
 ODOM_TOPIC = "/odom"

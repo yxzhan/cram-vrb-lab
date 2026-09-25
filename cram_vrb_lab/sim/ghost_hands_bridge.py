@@ -22,15 +22,20 @@ from std_msgs.msg import String
 
 from cram_vrb_lab.sim.ghost_hands import GHOST_HANDS_TOPIC
 from cram_vrb_lab.sim.numpy_bridge import numpy_view
-from cram_vrb_lab.sim.ros_utils import SimBridge
+from cram_vrb_lab.sim.ros_utils import SimBridge, as_np, qrot
+from cram_vrb_lab.sim.scene_joints_bridge import AXES
 
 GHOST_ROOT = "/World/GhostHands"
-"""Where the hands are drawn, as the blocks cramera draws a viewer's hands in. Visual
-prims only: no rigid body, no collider, so nothing in the scene ever touches them."""
+"""Where the hands are drawn, as cramera draws a viewer's hands: a ball on the hand, a
+bar back from it. Visual prims only: no rigid body, no collider, so nothing in the
+scene ever touches them."""
 
-HAND_SCALE = (0.12, 0.035, 0.045)
-"""[m] of the block a hand is drawn as, +X forward -- cramera's avatar hand, used when a
+HAND_SCALE = (0.03, 0.03, 0.03)
+"""[m] the ball a hand is drawn as, its diameters -- cramera's avatar hand, used when a
 report does not say (see :data:`~cram_vrb_lab.sim.ghost_hands.GHOST_HANDS_TOPIC`)."""
+
+HAND_BAR = (0.1, 0.015, 0.015)
+"""[m] the bar behind the ball, (length, width, height), running back along -X."""
 
 HAND_COLOR = "#4ac2ff"
 """The first viewer's colour in cramera, used when a report does not say."""
@@ -102,10 +107,28 @@ def _clamp(vector: np.ndarray, limit: float) -> np.ndarray:
 
 
 @dataclass
+class _JointAxis:
+    """The one motion a joint leaves a held body, in that body's frame."""
+
+    revolute: bool
+    axis: np.ndarray
+    """Unit vector: the hinge's axis, or the direction a slide runs in."""
+    anchor: np.ndarray
+    """A point on the hinge's axis (unused for a slide)."""
+
+
+@dataclass
 class _Grab:
     path: str
     hand_T_body: np.ndarray
     view: Optional[RigidPrim] = None
+    joint: Optional[_JointAxis] = None
+    """The joint the body hangs on, if any: it is then pulled by one point, not by
+    its pose."""
+    point: Optional[np.ndarray] = None
+    """Where on a jointed body the hand took it, in the body's frame."""
+    center_of_mass: Optional[np.ndarray] = None
+    """The body's centre of mass in its frame, where physics takes its velocity at."""
 
 
 @dataclass
@@ -197,7 +220,9 @@ class GhostHandsROS(SimBridge):
         x, y, z, w = orientation
         world_T_hand = _matrix(position, (w, x, y, z))
         hand = self._hands.get(key) or self._make(key)
-        self._draw(hand, world_T_hand, report.get("scale"), report.get("color"))
+        self._draw(
+            hand, world_T_hand, report.get("scale"), report.get("bar"), report.get("color")
+        )
 
         grabbing = bool(report.get("grab"))
         if grabbing and not hand.was_grabbing and hand.grab is None:
@@ -217,34 +242,49 @@ class GhostHandsROS(SimBridge):
         if prim.IsValid():
             UsdGeom.Imageable(prim).MakeVisible()
         else:
-            # a unit cube, sized by its scale op: the translate-orient-scale order
-            # every pose below is written in
-            cube = UsdGeom.Cube.Define(self.world.stage, path)
-            cube.GetSizeAttr().Set(1.0)
-            cube.GetDisplayOpacityAttr().Set([HAND_OPACITY])
-            cube.AddTranslateOp()
-            cube.AddOrientOp(UsdGeom.XformOp.PrecisionDouble)
-            cube.AddScaleOp()
+            # the hand's frame, posed each step; the ball on its origin and the bar
+            # behind it, both sized by scale ops (a unit sphere, a unit cube)
+            hand = UsdGeom.Xform.Define(self.world.stage, path)
+            hand.AddTranslateOp()
+            hand.AddOrientOp(UsdGeom.XformOp.PrecisionDouble)
+            ball = UsdGeom.Sphere.Define(self.world.stage, f"{path}/ball")
+            ball.GetRadiusAttr().Set(0.5)
+            ball.AddScaleOp()
+            bar = UsdGeom.Cube.Define(self.world.stage, f"{path}/bar")
+            bar.GetSizeAttr().Set(1.0)
+            bar.AddTranslateOp()
+            bar.AddScaleOp()
+            for part in (ball, bar):
+                part.GetDisplayOpacityAttr().Set([HAND_OPACITY])
         hand = _Hand(prim=path)
         self._hands[key] = hand
         return hand
 
-    def _draw(self, hand: _Hand, world_T_hand: np.ndarray, scale=None, color=None) -> None:
-        """Put the hand's block on the hand, in the viewer's size and colour."""
+    def _draw(self, hand: _Hand, world_T_hand: np.ndarray, scale=None, bar=None,
+              color=None) -> None:
+        """Put the hand's ball and bar on the hand, in the viewer's size and colour."""
         prim = self.world.stage.GetPrimAtPath(hand.prim)
         if not prim.IsValid():
             return
-        translate, orient, scale_op = UsdGeom.Xformable(prim).GetOrderedXformOps()
+        translate, orient = UsdGeom.Xformable(prim).GetOrderedXformOps()
         translate.Set(Gf.Vec3d(*world_T_hand[:3, 3]))
         # Gf is row-vector: the transpose of the column-vector numpy rotation
         rotation = (
             Gf.Matrix3d(*world_T_hand[:3, :3].T.ravel().tolist()).ExtractRotation().GetQuat()
         )
         orient.Set(Gf.Quatd(rotation.GetReal(), Gf.Vec3d(rotation.GetImaginary())))
-        look = (tuple(scale or HAND_SCALE), color or HAND_COLOR)
+        look = (tuple(scale or HAND_SCALE), tuple(bar or HAND_BAR), color or HAND_COLOR)
         if look != hand.look:
-            scale_op.Set(Gf.Vec3d(*look[0]))
-            UsdGeom.Gprim(prim).GetDisplayColorAttr().Set([Gf.Vec3f(*_rgb(look[1]))])
+            ball_size, bar_size, hex_color = look
+            ball = self.world.stage.GetPrimAtPath(f"{hand.prim}/ball")
+            bar_prim = self.world.stage.GetPrimAtPath(f"{hand.prim}/bar")
+            UsdGeom.Xformable(ball).GetOrderedXformOps()[0].Set(Gf.Vec3d(*ball_size))
+            bar_translate, bar_scale = UsdGeom.Xformable(bar_prim).GetOrderedXformOps()
+            # back from the ball along -X, starting at its surface
+            bar_translate.Set(Gf.Vec3d(-(ball_size[0] / 2 + bar_size[0] / 2), 0.0, 0.0))
+            bar_scale.Set(Gf.Vec3d(*bar_size))
+            for part in (ball, bar_prim):
+                UsdGeom.Gprim(part).GetDisplayColorAttr().Set([Gf.Vec3f(*_rgb(hex_color))])
             hand.look = look
 
     def _drop(self, key: str) -> None:
@@ -330,7 +370,56 @@ class GhostHandsROS(SimBridge):
         if best is None:
             return None
         self.get_logger().info(f"ghost hand takes {best}")
-        return _Grab(path=best, hand_T_body=np.linalg.inv(world_T_hand) @ best_pose)
+        grab = _Grab(path=best, hand_T_body=np.linalg.inv(world_T_hand) @ best_pose)
+        grab.joint = self._joint_axis(best)
+        if grab.joint is not None:
+            # the point of the body nearest the hand: on it, or the hand itself when
+            # the hand is inside the body's bounds
+            bounds = self._local_bounds(best)
+            local = best_pose[:3, :3].T @ (point - best_pose[:3, 3])
+            grab.point = np.clip(local, np.array(bounds.GetMin()), np.array(bounds.GetMax()))
+            grab.center_of_mass = np.array(bounds.GetMidpoint(), dtype=float)
+        return grab
+
+    def _joint_axis(self, path: str) -> Optional[_JointAxis]:
+        """The revolute or prismatic joint ``path`` hangs on, in its frame; None for a
+        free body.
+
+        The joint frame's position is authored in the body's scaled space and the
+        pose physics reports is unscaled, so the scale is folded in, as
+        :class:`~cram_vrb_lab.sim.scene_joints_bridge._Joint` does.
+        """
+        stage = self.world.stage
+        for prim in Usd.PrimRange(stage.GetPseudoRoot()):
+            revolute = prim.IsA(UsdPhysics.RevoluteJoint)
+            if not (revolute or prim.IsA(UsdPhysics.PrismaticJoint)):
+                continue
+            joint = UsdPhysics.Joint(prim)
+            sides = (
+                (joint.GetBody0Rel().GetTargets(), joint.GetLocalPos0Attr(), joint.GetLocalRot0Attr()),
+                (joint.GetBody1Rel().GetTargets(), joint.GetLocalPos1Attr(), joint.GetLocalRot1Attr()),
+            )
+            for targets, position, rotation in sides:
+                if not targets or str(targets[0]) != path:
+                    continue
+                typed = (UsdPhysics.RevoluteJoint if revolute else UsdPhysics.PrismaticJoint)(prim)
+                world = np.array(
+                    UsdGeom.Xformable(stage.GetPrimAtPath(path)).ComputeLocalToWorldTransform(
+                        Usd.TimeCode.Default()
+                    )
+                ).T
+                scale = np.linalg.norm(world[:3, :3], axis=0)
+                quaternion = rotation.Get()
+                axis = qrot(
+                    np.array([*quaternion.GetImaginary(), quaternion.GetReal()], dtype=float),
+                    np.array(AXES[typed.GetAxisAttr().Get()]),
+                )
+                return _JointAxis(
+                    revolute=revolute,
+                    axis=axis / np.linalg.norm(axis),
+                    anchor=scale * np.array(position.Get(), dtype=float),
+                )
+        return None
 
     def _pull(self, hand: _Hand, world_T_hand: np.ndarray) -> None:
         grab = hand.grab
@@ -343,13 +432,52 @@ class GhostHandsROS(SimBridge):
                 RigidPrim([grab.path], name="ghost_grab", reset_xform_properties=False)
             )
             grab.view.initialize()
+            if grab.joint is not None:
+                try:
+                    grab.center_of_mass = as_np(grab.view.get_coms()[0]).reshape(-1, 3)[0]
+                except Exception:  # noqa: BLE001 - the bounds' centre stands in
+                    pass
         positions, orientations = grab.view.get_world_poses()
         world_T_body = _matrix(positions[0], orientations[0])
+        if grab.joint is not None:
+            grab.view.set_velocities(
+                np.array([self._pull_point(grab, world_T_body, world_T_hand[:3, 3])])
+            )
+            return
         target = world_T_hand @ grab.hand_T_body
         linear = _clamp((target[:3, 3] - world_T_body[:3, 3]) * LINEAR_GAIN, MAX_LINEAR_SPEED)
         turn = _rotation_vector(target[:3, :3] @ world_T_body[:3, :3].T)
         angular = _clamp(turn * ANGULAR_GAIN, MAX_ANGULAR_SPEED)
         grab.view.set_velocities(np.array([[*linear, *angular]]))
+
+    @staticmethod
+    def _pull_point(grab: _Grab, world_T_body: np.ndarray, hand: np.ndarray) -> np.ndarray:
+        """The velocity ``[linear, angular]`` of a jointed body pulled by one point.
+
+        An elastic band from the hand to where the body was taken: that point is
+        wanted moving towards the hand at :data:`LINEAR_GAIN` times the distance, and
+        the body is given the part of that its joint allows -- the slide's component,
+        or the turn about the hinge that moves the point that way. How the hand is
+        turned does not enter into it.
+        """
+        rotation, origin = world_T_body[:3, :3], world_T_body[:3, 3]
+        point = rotation @ grab.point + origin
+        wanted = _clamp((hand - point) * LINEAR_GAIN, MAX_LINEAR_SPEED)
+        axis = rotation @ grab.joint.axis
+        if not grab.joint.revolute:
+            return np.concatenate([axis * float(axis @ wanted), np.zeros(3)])
+        anchor = rotation @ grab.joint.anchor + origin
+        arm = point - anchor
+        arm = arm - axis * float(axis @ arm)
+        reach = float(arm @ arm)
+        if reach < 1e-6:  # taken on the hinge line: no pull there turns it
+            return np.zeros(6)
+        rate = float(np.clip(np.cross(axis, arm) @ wanted / reach,
+                             -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED))
+        angular = axis * rate
+        # physics takes a body's linear velocity at its centre of mass
+        center = rotation @ grab.center_of_mass + origin
+        return np.concatenate([np.cross(angular, center - anchor), angular])
 
     def _release(self, hand: Optional[_Hand]) -> None:
         """Let go: the body keeps the velocity it was last given, so it can be thrown."""

@@ -76,6 +76,8 @@ from .joints import (
     VELOCITY_CMD_TOPIC,
     WHEEL_JOINTS,
     arm_joints,
+    finger_joints,
+    gripper_topic,
     load_patched_urdf,
 )
 
@@ -504,6 +506,15 @@ class GarmiROS(SimBridge):
         )
         self.create_subscription(Twist, CMD_VEL_TOPIC, self.cmd_vel_cb, 1)
         self.create_subscription(Float64, GRIPPER_CMD_TOPIC, self.gripper_cmd_cb, 10)
+        # One hand at a time, for teleoperation: see gripper_topic
+        self._finger_goals = {}
+        for side in SIDES:
+            self.create_subscription(
+                Float64,
+                gripper_topic(side),
+                lambda msg, side=side: self._finger_goals.__setitem__(side, float(msg.data)),
+                10,
+            )
         self.pub_joint_states = self.create_publisher(
             JointState, JOINT_STATES_TOPIC, 10
         )
@@ -589,6 +600,10 @@ class GarmiROS(SimBridge):
     def apply_commands(self, dt):
         self.integrate_base(dt)
         self.integrator.step(dt)
+        # after the stream, so a hand on its own topic is the topic's, whatever
+        # giskard sent for its fingers
+        for side, goal in self._finger_goals.items():
+            self.integrator.lead_toward(finger_joints(side), goal)
 
     def resync_base(self):
         """Re-seed the dead-reckoned base pose from where the robot actually is.

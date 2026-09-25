@@ -20,8 +20,8 @@ sys.path.insert(0, str(REPO))
 
 # os.environ.setdefault("ISAAC_PHYSICS", "newton")
 
-# os.environ.setdefault("ISAAC_HEADLESS", "1")
-# os.environ.setdefault("ISAAC_LIVESTREAM", "1")
+os.environ.setdefault("ISAAC_HEADLESS", "1")
+os.environ.setdefault("ISAAC_LIVESTREAM", "1")
 
 # Browser viewer (cramera) for the plan: serves the live world, the plan tree and the
 # executing motions on http://localhost:8765. "none" runs the demo without it; "rviz"
@@ -118,8 +118,15 @@ if not rclpy.ok():
     # all this needs; quiet_shutdown takes rclpy down afterwards.
     rclpy.init(signal_handler_options=rclpy.signals.SignalHandlerOptions.NO)
 node = rclpy.create_node("cram_garmi_node")
+# The twin's /world_sync on a node of its own. Every callback of one node shares its
+# default group, where rclpy runs them one at a time: a backlog of state updates --
+# giskard publishes one every control cycle, and applying each takes the world lock --
+# would otherwise queue giskard's action results behind it, and a goal that aborted
+# would go unnoticed, with no restart, for as long as the backlog lasted.
+sync_node = rclpy.create_node("cram_garmi_world_sync")
 executor = MultiThreadedExecutor()
 executor.add_node(node)
+executor.add_node(sync_node)
 spin_thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
 spin_thread.start()
 
@@ -226,12 +233,13 @@ def quiet_shutdown():
 
     executor.shutdown()
     spin_thread.join(timeout=2.0)
+    sync_node.destroy_node()
     node.destroy_node()
     if rclpy.ok():
         rclpy.shutdown()
 
 world = fetch_world_from_service(node=node, timeout_seconds=300)
-WorldSynchronizer(_world=world, node=node)
+WorldSynchronizer(_world=world, node=sync_node)
 
 # Started after the world is fetched, so the viewer's first snapshot is the real
 # apartment rather than an empty world. The backend comes from CORAPLEX_VISUALIZATION
@@ -440,7 +448,6 @@ spawn_objects()
 from cram_vrb_lab.sim.scene_sync import SceneSyncClient, shape_pose_in_world
 
 scene_sync = SceneSyncClient(node)
-_robot_bodies = {id(body) for body in robot.bodies}
 
 
 def sync_objects():
@@ -451,15 +458,10 @@ def sync_objects():
     saying where the objects go. What physics then does to them -- settling, a knock, a
     drop -- comes back by itself.
 
-    Skips anything parented to the robot. Nothing is in this demo -- a grasp here is
-    physical, and the twin keeps the object on the map -- but the check costs nothing.
-
     :return: the sim's report.
     """
     for scene_object in SCENE_OBJECTS:
         body = world.get_body_by_name(scene_object.name)
-        if id(body.parent_kinematic_structure_entity) in _robot_bodies:
-            continue
         # Isaac spawns the mesh file at the pose it is handed and knows nothing of the
         # twin's body frames, so what crosses is the mesh's pose, not the body's.
         # ``follow`` undoes the same offset on the way back.
@@ -497,7 +499,8 @@ print("sync:", sync_objects())
 # The markers are ordinary bodies, so whatever moves a body in the twin moves a hand:
 # a drag in cramera's 3D view, a VR controller grabbing one with the trigger, a script.
 # Each marker has two fingers on one joint, and the hand's gripper follows how far they
-# are open: squeezing a VR controller's grip button while it holds the marker shuts them.
+# are open -- commanded straight to the sim, not through giskard. A VR controller's grip
+# button pressed while it holds the marker opens or shuts them, one press each.
 
 # %%
 from giskardpy.motion_statechart.goals.collision_avoidance import (
@@ -524,7 +527,7 @@ from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
-from cram_vrb_lab.control.teleop_tasks import FollowFrame, HoldJoints, TeleopGripper
+from cram_vrb_lab.control.teleop_tasks import FollowFrame, HoldJoints
 from cram_vrb_lab.robots.garmi.joints import HEAD_JOINTS, LIFT_JOINTS
 from cram_vrb_lab.sim.scene_reset import cancel_motion
 
@@ -543,13 +546,17 @@ FINGER_NAMES = {
 
 GRIP_JOINTS = {name: f"{marker}_grip" for name, marker in MARKER_NAMES.items()}
 """The joint that opens a marker's fingers, per arm: what a VR controller's grip button
-squeezes, and what the hand's gripper follows (see TeleopGripper)."""
+toggles, and what the hand's gripper is commanded to follow (see _queue_grip_move)."""
 
 FINGER_TRAVEL = 0.04
 """[m] each marker finger slides, shut to wide open -- the FR3 hand's own travel, so the
 marker opens as far as the hand it commands."""
 
 MARKER_COLORS = {"left": Color(0.15, 0.45, 0.95), "right": Color(0.95, 0.45, 0.10)}
+
+MARKER_SHIFT = 0.02
+"""[m] the marker is drawn back from the tool frame, towards the wrist -- the T and the
+fingers both. Only the drawing: the tool frame, what the hand follows, stays put."""
 
 
 def _box(position, extents, color):
@@ -561,11 +568,14 @@ def _box(position, extents, color):
 
 
 def marker_bodies(name: str, color: Color) -> Tuple[Body, Body, Body]:
-    """A marker shaped like the claw it drives, pointing where the claw points: a bar
-    across the tool frame's y -- the direction the fingers open in -- on the tool frame
-    itself, a short stem from it along +z, the way the hand points, and two fingers
-    along +z that slide apart along y as the grip joint opens. Nothing of it reaches
-    back towards the wrist.
+    """A T, with the claw it drives: a bar across the tool frame's y -- the direction the
+    fingers open in -- a stem from its middle back towards the wrist, and two fingers
+    along +z that slide apart along y as the grip joint opens.
+
+    All of it drawn :data:`MARKER_SHIFT` towards the wrist from the tool frame, which
+    stays where it is -- it is what the hand is driven to. The T is what a hand takes
+    it by -- the viewer tests reach against the marker's own body, not its fingers --
+    so it sits behind the fingertips, where a hand holding a claw would be.
 
     Visual only. With no collision shape giskard's collision avoidance never sees it,
     and a hand can be driven right into the marker it follows.
@@ -575,8 +585,9 @@ def marker_bodies(name: str, color: Color) -> Tuple[Body, Body, Body]:
     palm = Body(
         name=PrefixedName(name, prefix="teleop"),
         visual=ShapeCollection([
-            _box((0.0, 0.0, 0.0), (0.012, 0.11, 0.01), color),
-            _box((0.0, 0.0, 0.03), (0.006, 0.006, 0.06), color),
+            _box((0.0, 0.0, -MARKER_SHIFT), (0.012, 0.11, 0.012), color),
+            # the stem, 7 cm on from the bar towards the wrist
+            _box((0.0, 0.0, -MARKER_SHIFT - 0.035), (0.012, 0.012, 0.07), color),
         ]),
         collision=ShapeCollection([]),
     )
@@ -584,7 +595,9 @@ def marker_bodies(name: str, color: Color) -> Tuple[Body, Body, Body]:
         Body(
             name=PrefixedName(finger, prefix="teleop"),
             # inner face on the finger's own frame, so shut means touching
-            visual=ShapeCollection([_box((0.0, side * 0.005, 0.02), (0.012, 0.01, 0.04), color)]),
+            visual=ShapeCollection([
+                _box((0.0, side * 0.005, 0.02 - MARKER_SHIFT), (0.012, 0.01, 0.04), color)
+            ]),
             collision=ShapeCollection([]),
         )
         for finger, side in zip((f"{name}_finger_a", f"{name}_finger_b"), (1, -1))
@@ -673,9 +686,9 @@ MARKERS = {name: world.get_body_by_name(MARKER_NAMES[name]) for name in ARMS}
 
 
 def teleop_chart() -> MotionStatechart:
-    """One goal that runs until it is cancelled: both hands on their markers and their
-    grippers on the markers' fingers, the base held, and collisions avoided without
-    ever aborting over one."""
+    """One goal that runs until it is cancelled: both hands on their markers, the base
+    held, and collisions avoided without ever aborting over one. The grippers are not
+    in it: they are commanded straight to the sim (see _queue_grip_move)."""
     msc = MotionStatechart()
     for name, arm in ARMS.items():
         # Rooted at the arm mount, so each chain is its own arm alone: the two hands
@@ -685,18 +698,6 @@ def teleop_chart() -> MotionStatechart:
             root_link=arm.root,
             tip_link=arm.end_effector.tool_frame,
             target_frame=MARKERS[name],
-        ))
-        wide = arm.end_effector.get_joint_state_by_type(GripperState.OPEN)
-        shut = dict(zip(
-            (id(c) for c in arm.end_effector.get_joint_state_by_type(GripperState.CLOSE).connections),
-            arm.end_effector.get_joint_state_by_type(GripperState.CLOSE).target_values,
-        ))
-        msc.add_node(TeleopGripper(
-            name=f"teleop_{name}_gripper",
-            connections=[c.name.name for c in wide.connections],
-            closed=[float(shut.get(id(c), 0.0)) for c in wide.connections],
-            opened=[float(v) for v in wide.target_values],
-            command_joint=GRIP_JOINTS[name],
         ))
     # The base is teleported rather than driven, so anything collision avoidance asked
     # of it would jump the robot -- and leave behind whatever the hands are holding.
@@ -765,15 +766,30 @@ if bridge is not None:
     bridge.queue_move = _queue_marker_move
 
     _queue_joint_move = bridge.queue_joint_move
-    _grip_joints = {
-        str(world.get_connection_by_name(joint).name) for joint in GRIP_JOINTS.values()
+    # The hand the marker's fingers command, by the grip joint's full name, and where
+    # its fingers go: straight to the sim's finger drives (gripper_topic), not through
+    # giskard. A QP in the loop was a round trip through /world_sync plus a solve at
+    # the control rate, and a reference velocity capping how fast the fingers close --
+    # to open or shut a hand there is nothing for it to solve.
+    from std_msgs.msg import Float64 as _Float64
+
+    from cram_vrb_lab.robots.garmi.joints import MAX_FINGER_TRAVEL, gripper_topic
+
+    _grip_sides = {
+        str(world.get_connection_by_name(GRIP_JOINTS[side]).name): side for side in ARMS
+    }
+    _gripper_publishers = {
+        side: node.create_publisher(_Float64, gripper_topic(side), 10) for side in ARMS
     }
 
     def _queue_grip_move(request):
-        if request.connection_name not in _grip_joints:
+        side = _grip_sides.get(request.connection_name)
+        if side is None:
             return
-        _queue_joint_move(request)
+        _queue_joint_move(request)           # the marker's own fingers, in the twin
         _moves_pending.set()
+        travel = min(max(float(request.position), 0.0), MAX_FINGER_TRAVEL)
+        _gripper_publishers[side].publish(_Float64(data=travel))
 
     bridge.queue_joint_move = _queue_grip_move
 
@@ -791,6 +807,25 @@ if bridge is not None:
 
     if STALL_TRACE:
         watch_stalls(bridge)
+
+    # TELEOP_LATENCY_TRACE=1: time the robot's state on its way to the viewer, and a
+    # drag's on its way to the robot, stage by stage (see control.latency_trace).
+    if os.environ.get("TELEOP_LATENCY_TRACE"):
+        from cram_vrb_lab.control.latency_trace import LatencyTrace
+        from cram_vrb_lab.robots.garmi.joints import (
+            CONTROLLED_JOINTS,
+            JOINT_STATES_TOPIC,
+            VELOCITY_CMD_TOPIC,
+        )
+
+        latency_trace = LatencyTrace(
+            node, world, bridge,
+            joint=os.environ.get("TELEOP_LATENCY_JOINT", "right_fr3_joint1"),
+            joint_states_topic=JOINT_STATES_TOPIC,
+            velocity_topic=VELOCITY_CMD_TOPIC,
+            controlled_joints=CONTROLLED_JOINTS,
+            marker_keys=MARKER_NAMES.values(),
+        )
 
     # Ghost hands: every viewer's controllers, reported to the bridge as their avatar,
     # go on to the sim, where a hand whose trigger is held with no marker in it takes
@@ -811,6 +846,7 @@ if bridge is not None:
                     "orientation": part["quaternion"],
                     "grab": part["grab"],
                     "scale": part.get("scale"),
+                    "bar": part.get("bar"),
                     "color": part.get("color"),
                 }
                 for part in parts

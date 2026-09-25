@@ -137,6 +137,34 @@ class StreamedVelocityIntegrator:
         self._command_time = time.time()
         return True
 
+    def lead_toward(self, joint_names, goal: float) -> None:
+        """Move ``joint_names``' targets towards ``goal`` [rad or m], never more than
+        :data:`MAX_LEAD` ahead of where each joint measures.
+
+        :meth:`hold_at` for a goal something may be in the way of: a gripper told to
+        shut on an object. Called every step, the fingers close at the speed of their
+        drives, and once the object stops them they press on it with the force the
+        lead clamp allows -- the grip -- rather than with the whole remaining stroke
+        as a position error, which would squeeze it out of the hand. Being written
+        after :meth:`step`, it also overrides whatever giskard's stream said about
+        these joints.
+        """
+        indices = [self.joint_names.index(name) for name in joint_names]
+        measured = self.robot.get_joint_positions()[0][self.dof_indices[indices]]
+        if self._targets is None:
+            self._targets = self.robot.get_joint_positions()[0][self.dof_indices]
+            self._was_zero = np.ones(len(self.dof_indices), dtype=bool)
+        lower = np.asarray(self._lower)[indices]
+        upper = np.asarray(self._upper)[indices]
+        target = np.clip(
+            np.clip(float(goal), measured - MAX_LEAD, measured + MAX_LEAD), lower, upper
+        )
+        for slot, index in enumerate(indices):
+            self._targets[index] = target[slot]
+        self.robot.set_joint_position_targets(
+            target.reshape(1, -1), joint_indices=self.dof_indices[indices]
+        )
+
     def hold_at(self, joint_names, position: float) -> None:
         """Drive ``joint_names`` to ``position`` [rad or m] and make that the target
         the integrator holds.
