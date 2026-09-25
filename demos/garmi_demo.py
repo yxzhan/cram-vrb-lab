@@ -123,8 +123,14 @@ logging.disable(logging.CRITICAL)
 if not rclpy.ok():
     rclpy.init()
 node = rclpy.create_node("cram_garmi_node")
+# The twin's /world_sync on a node of its own. Every callback of one node shares its
+# default group, where rclpy runs them one at a time: a backlog of state updates --
+# giskard publishes one every control cycle, and applying each takes the world lock --
+# would otherwise queue giskard's action results behind it.
+sync_node = rclpy.create_node("cram_garmi_world_sync")
 executor = MultiThreadedExecutor()
 executor.add_node(node)
+executor.add_node(sync_node)
 spin_thread = threading.Thread(target=executor.spin, daemon=True, name="rclpy-executor")
 spin_thread.start()
 
@@ -167,12 +173,13 @@ def quiet_shutdown():
 
     executor.shutdown()
     spin_thread.join(timeout=2.0)
+    sync_node.destroy_node()
     node.destroy_node()
     if rclpy.ok():
         rclpy.shutdown()
 
 world = fetch_world_from_service(node=node, timeout_seconds=300)
-WorldSynchronizer(_world=world, node=node)
+WorldSynchronizer(_world=world, node=sync_node)
 
 # Started after the world is fetched, so the viewer's first snapshot is the real
 # apartment rather than an empty world. The backend comes from CORAPLEX_VISUALIZATION

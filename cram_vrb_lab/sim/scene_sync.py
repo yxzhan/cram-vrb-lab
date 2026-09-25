@@ -252,21 +252,21 @@ class SceneSyncClient:
         """Whether a followed pose may be written into ``world`` right now.
 
         No while the world's model has just changed, and no more often than
-        :data:`follow_min_interval` -- because each write is one more message on
-        ``/world_sync``, and that topic loses messages when it is busy. It is
-        ``depth=10`` KEEP_LAST on both ends, and giskard takes a while to apply a
-        model change -- a spawned mesh is ~1 MB and recompiles its kinematics -- so a
-        stream of state updates arriving meanwhile pushes the model change out of the
-        queue before giskard reads it. Giskard then dies on the next update naming the
-        lost object's degrees of freedom::
+        :data:`follow_min_interval`. Each write is one more state update on
+        ``/world_sync``, and a model change -- a spawned mesh is ~1 MB and recompiles
+        giskard's kinematics -- takes giskard a while to apply. A stream of state
+        updates arriving right behind it once pushed the model change out of the
+        topic's queue before giskard read it, and giskard then died on the next
+        update naming the lost object's degrees of freedom::
 
             StateUpdateContainsUnknownDegreesOfFreedomError: Received a
             WorldStateUpdate containing 7 DOF identifier(s) absent from the world
             state index
 
-        Which is what following at every sim cycle, from the moment the objects were
-        spawned, did at startup. ``SPAWN_PUBLISH_PAUSE`` in the demos is the same
-        limit from the spawning side.
+        The queue is deep now (``SYNCHRONIZATION_QOS``, KEEP_LAST 1000), which is what
+        lets following run at viewer rate; the quiet period after a model change
+        stays, so the change is applied before the traffic behind it arrives.
+        ``SPAWN_PUBLISH_PAUSE`` in the demos is the same limit from the spawning side.
         """
         now = time.monotonic()
         version = world.get_world_model_manager().version
@@ -285,9 +285,10 @@ class SceneSyncClient:
     follow_min_rotation = 1e-2
     """[rad] the same, for turning."""
 
-    follow_min_interval = 0.2
-    """[s] between two followed writes, i.e. at most 5 state updates a second on
-    ``/world_sync`` from following. See :meth:`_follow_may_write`."""
+    follow_min_interval = 1.0 / 20.0
+    """[s] between two followed writes, i.e. at most 30 state updates a second on
+    ``/world_sync`` from following -- what a viewer draws objects at. See
+    :meth:`_follow_may_write`."""
 
     follow_model_quiet = 3.0
     """[s] to hold following off after the world's model changed -- a spawn, a
