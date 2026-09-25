@@ -172,7 +172,12 @@ class GhostHandsROS(SimBridge):
         self._gone: List[str] = []
         self._hands: Dict[str, _Hand] = {}
         self._bounds: Dict[str, Gf.Range3d] = {}     # body path -> local bounds
-        self.create_subscription(String, GHOST_HANDS_TOPIC, self._on_message, 10)
+        # Depth 1: the newest report only. The sim loop takes one message per cycle
+        # (runner.SPINS_PER_STEP) and viewers report at ~30 Hz, faster than the loop
+        # runs, so a deeper queue fills and every hand is drawn and pulled from a pose
+        # a queue's length old -- ten reports, a third of a second. A report dropped
+        # here is superseded by the next one; a lost ``gone`` by HAND_TIMEOUT.
+        self.create_subscription(String, GHOST_HANDS_TOPIC, self._on_message, 1)
         if sync_bridge is not None:
             sync_bridge.before_delete.append(self.release_all)
         if not is_prim_path_valid(GHOST_ROOT):

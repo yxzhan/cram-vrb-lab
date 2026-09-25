@@ -1304,16 +1304,19 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
     # drifting when the gripper closes again is a door that chatters against it.
     # Damping is acceleration-normalised, so the number is independent of the body's
     # mass; angular drives measure velocity in deg/s, which is why a hinge wants a
-    # much smaller number than a slide. Measured at these values: a 25 N shove now
-    # coasts 6-9 mm instead of 180-470 mm and stops dead, while a 25 N pull still
-    # swings a door 0.5-0.8 m and draws a drawer 0.19 m out in three seconds.
+    # much smaller number than a slide. First tuned at 50 (slides) and 1 (hinges): a
+    # 25 N shove then coasted 6-9 mm instead of 180-470 mm and stopped dead, and a
+    # 25 N pull swung a door 0.5-0.8 m and drew a drawer 0.19 m out in three seconds --
+    # but a drawer moved only while pushed (its speed decayed in ~20 ms), which read
+    # as heavy under a hand. Now 10 and 0.5: a drawer's speed decays in ~0.1 s, so it
+    # glides a few centimetres after a push and still comes to rest. Not re-measured.
     def Scope "joints"
     {
         def PhysicsRevoluteJoint "door_2_hinge" (
             prepend apiSchemas = ["PhysicsDriveAPI:angular"]
         )
         {
-            float drive:angular:physics:damping = 1
+            float drive:angular:physics:damping = 0.5
             float drive:angular:physics:stiffness = 0
             float drive:angular:physics:targetVelocity = 0
             token drive:angular:physics:type = "acceleration"
@@ -1332,7 +1335,7 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             prepend apiSchemas = ["PhysicsDriveAPI:linear"]
         )
         {
-            float drive:linear:physics:damping = 50
+            float drive:linear:physics:damping = 10
             float drive:linear:physics:stiffness = 0
             float drive:linear:physics:targetVelocity = 0
             token drive:linear:physics:type = "acceleration"
@@ -1350,7 +1353,7 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             prepend apiSchemas = ["PhysicsDriveAPI:angular"]
         )
         {
-            float drive:angular:physics:damping = 1
+            float drive:angular:physics:damping = 0.5
             float drive:angular:physics:stiffness = 0
             float drive:angular:physics:targetVelocity = 0
             token drive:angular:physics:type = "acceleration"
@@ -1367,7 +1370,7 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             prepend apiSchemas = ["PhysicsDriveAPI:angular"]
         )
         {
-            float drive:angular:physics:damping = 1
+            float drive:angular:physics:damping = 0.5
             float drive:angular:physics:stiffness = 0
             float drive:angular:physics:targetVelocity = 0
             token drive:angular:physics:type = "acceleration"
@@ -1384,7 +1387,7 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             prepend apiSchemas = ["PhysicsDriveAPI:angular"]
         )
         {
-            float drive:angular:physics:damping = 1
+            float drive:angular:physics:damping = 0.5
             float drive:angular:physics:stiffness = 0
             float drive:angular:physics:targetVelocity = 0
             token drive:angular:physics:type = "acceleration"
@@ -1401,7 +1404,7 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             prepend apiSchemas = ["PhysicsDriveAPI:linear"]
         )
         {
-            float drive:linear:physics:damping = 50
+            float drive:linear:physics:damping = 10
             float drive:linear:physics:stiffness = 0
             float drive:linear:physics:targetVelocity = 0
             token drive:linear:physics:type = "acceleration"
@@ -1418,7 +1421,7 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             prepend apiSchemas = ["PhysicsDriveAPI:linear"]
         )
         {
-            float drive:linear:physics:damping = 50
+            float drive:linear:physics:damping = 10
             float drive:linear:physics:stiffness = 0
             float drive:linear:physics:targetVelocity = 0
             token drive:linear:physics:type = "acceleration"
@@ -1435,7 +1438,7 @@ over "cabinet_A71cf8c99Bd8a4ab0847b101e3f6f9fa4"
             prepend apiSchemas = ["PhysicsDriveAPI:linear"]
         )
         {
-            float drive:linear:physics:damping = 50
+            float drive:linear:physics:damping = 10
             float drive:linear:physics:stiffness = 0
             float drive:linear:physics:targetVelocity = 0
             token drive:linear:physics:type = "acceleration"

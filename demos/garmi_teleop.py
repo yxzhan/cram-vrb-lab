@@ -31,9 +31,9 @@ os.environ.setdefault("CORAPLEX_VISUALIZATION", "cramera")
 # os.environ["ISAAC_WINDOW"] = "1920x1080"
 # os.environ["ISAAC_WINDOW"] = "1280x720"
 # os.environ["ISAAC_WINDOW"] = "960x540"
-# os.environ["ISAAC_WINDOW"] = "854x480"
+os.environ["ISAAC_WINDOW"] = "854x480"
 # os.environ["ISAAC_WINDOW"] = "768x432"
-os.environ["ISAAC_WINDOW"] = "640x360"
+# os.environ["ISAAC_WINDOW"] = "640x360"
 # os.environ["ISAAC_WINDOW"] = "512x288"
 # os.environ["DISPLAY"] = ":1"
 
