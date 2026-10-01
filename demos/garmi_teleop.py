@@ -509,7 +509,6 @@ from giskardpy.motion_statechart.goals.collision_avoidance import (
     UpdateTemporaryCollisionRules,
 )
 from giskardpy.motion_statechart.motion_statechart import MotionStatechart
-from giskardpy.motion_statechart.tasks.cartesian_tasks import HoldPose
 from semantic_digital_twin.collision_checking.collision_rules import (
     AllowCollisionForEndEffector,
 )
@@ -527,7 +526,13 @@ from semantic_digital_twin.world_description.geometry import Box, Scale
 from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
-from cram_vrb_lab.control.teleop_tasks import FollowFrame, HoldJoints
+from cram_vrb_lab.control.teleop_tasks import (
+    BodyMarker,
+    FollowBodyBase,
+    FollowBodyLift,
+    FollowFrame,
+    HoldJoints,
+)
 from cram_vrb_lab.robots.garmi.joints import HEAD_JOINTS, LIFT_JOINTS
 from cram_vrb_lab.sim.scene_reset import cancel_motion
 
@@ -553,6 +558,21 @@ FINGER_TRAVEL = 0.04
 marker opens as far as the hand it commands."""
 
 MARKER_COLORS = {"left": Color(0.15, 0.45, 0.95), "right": Color(0.95, 0.45, 0.10)}
+
+BODY_MARKER_NAME = "teleop_body"
+"""The marker the whole robot follows: the base under it, the lift at its height."""
+
+BODY_MARKER_FORWARD = 0.35
+"""[m] how far ahead of the base the body marker sits: in front of the chest, between
+the hands, where a viewer reaches it without bending down."""
+
+BODY_MARKER_HEIGHT = 1.25
+"""[m] how high above the floor the body marker sits at spawn, with the lift as it is
+then. Raising or lowering it raises or lowers the lift by as much."""
+
+BODY_AXIS_LENGTH = 0.12
+"""[m] each of the body marker's axes, drawn as a TF frame is: x red, y green, z
+blue."""
 
 MARKER_SHIFT = 0.02
 """[m] the marker is drawn back from the tool frame, towards the wrist -- the T and the
@@ -605,6 +625,23 @@ def marker_bodies(name: str, color: Color) -> Tuple[Body, Body, Body]:
     return (palm,) + fingers
 
 
+def body_marker_body() -> Body:
+    """The body marker: a TF frame's three axes from a small grey cube, which is what a
+    hand takes it by. Visual only, like the hand markers."""
+    thickness = 0.012
+    half = BODY_AXIS_LENGTH / 2
+    return Body(
+        name=PrefixedName(BODY_MARKER_NAME, prefix="teleop"),
+        visual=ShapeCollection([
+            _box((0.0, 0.0, 0.0), (0.03, 0.03, 0.03), Color(0.6, 0.6, 0.6)),
+            _box((half, 0.0, 0.0), (BODY_AXIS_LENGTH, thickness, thickness), Color(0.9, 0.15, 0.15)),
+            _box((0.0, half, 0.0), (thickness, BODY_AXIS_LENGTH, thickness), Color(0.15, 0.8, 0.2)),
+            _box((0.0, 0.0, half), (thickness, thickness, BODY_AXIS_LENGTH), Color(0.2, 0.35, 0.95)),
+        ]),
+        collision=ShapeCollection([]),
+    )
+
+
 def hand_opening(arm) -> float:
     """[m] how far the robot's own fingers are open now, per finger."""
     wide = arm.end_effector.get_joint_state_by_type(GripperState.OPEN)
@@ -631,7 +668,8 @@ def spawn_markers():
         from cramera.live.overlay import mark_overlay_bodies
 
         mark_overlay_bodies(
-            *MARKER_NAMES.values(), *(n for pair in FINGER_NAMES.values() for n in pair)
+            *MARKER_NAMES.values(), *(n for pair in FINGER_NAMES.values() for n in pair),
+            BODY_MARKER_NAME,
         )
     except ImportError:
         pass
@@ -662,13 +700,42 @@ def spawn_markers():
                     axis=Vector3.Y(reference_frame=palm), multiplier=-1.0,
                 ))
             time.sleep(SPAWN_PUBLISH_PAUSE)
+    if not world.is_kinematic_structure_entity_in_world_by_name(BODY_MARKER_NAME):
+        body = body_marker_body()
+        with world.modify_world():
+            world.add_kinematic_structure_entity(body)
+            world.add_connection(Connection6DoF.create_with_dofs(
+                parent=world.root, child=body, world=world,
+            ))
+        time.sleep(SPAWN_PUBLISH_PAUSE)
+    global BODY
+    base_z = float(robot.root.global_pose.to_np()[2, 3])
+    lift = sum(float(world.get_connection_by_name(name).position) for name in LIFT_JOINTS)
+    BODY = BodyMarker(
+        marker=world.get_body_by_name(BODY_MARKER_NAME),
+        base=robot.root,
+        lift_connections=list(LIFT_JOINTS),
+        forward=BODY_MARKER_FORWARD,
+        height=BODY_MARKER_HEIGHT - base_z - lift,
+    )
     markers_to_hands()
 
 
+BODY = None
+"""The body marker as the goal follows it, once spawned (see :func:`spawn_markers`)."""
+
+
 def markers_to_hands():
-    """Put each marker back on its hand, its fingers as open as the hand's -- where the
-    robot really is, so a goal following them starts by holding still."""
+    """Put each marker back on its hand, its fingers as open as the hand's, and the body
+    marker level in front of the chest -- where the robot really is, so a goal following
+    them starts by holding still."""
     with world._world_lock:
+        if BODY is not None:
+            world.get_body_by_name(BODY_MARKER_NAME).parent_connection.origin = (
+                HomogeneousTransformationMatrix(
+                    data=BODY.rest_pose(world), reference_frame=world.root
+                )
+            )
         for arm_name, arm in ARMS.items():
             palm = world.get_body_by_name(MARKER_NAMES[arm_name])
             palm.parent_connection.origin = HomogeneousTransformationMatrix(
@@ -681,14 +748,49 @@ def markers_to_hands():
         world.notify_state_change()
 
 
+# %% [markdown]
+# ## Walk up to the cabinet
+#
+# The robot spawns at ``SPAWN_POSITION``, clear of the furniture, and drives the rest of
+# the way with its arms parked: spawned any closer, the arms swing out of their spawn
+# pose while physics settles them and hit the cabinet. Done before the markers exist,
+# so they are put on the hands where the hands end up.
+
+# %%
+from coraplex.datastructures.enums import Arms
+from coraplex.execution_environment import real_robot
+from coraplex.plans.factories import sequential
+from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.robot_body import ParkArmsAction
+from semantic_digital_twin.spatial_types.spatial_types import Pose
+
+from cram_vrb_lab.sim.scene_reset import cancel_motion
+
+TELEOP_POSITION = (0.8, 6.0)
+
+MODEL_SETTLE_SECONDS = 2.0
+time.sleep(MODEL_SETTLE_SECONDS)
+
+with real_robot(collision_avoidance=True):
+    sequential([
+        ParkArmsAction(arm=Arms.BOTH),
+        # NavigateAction(target_location=Pose.from_xyz_rpy(
+        #     *TELEOP_POSITION, 0.0, yaw=SPAWN_YAW, reference_frame=world.root,
+        # )),
+    ], context=context).perform()
+
+
 spawn_markers()
 MARKERS = {name: world.get_body_by_name(MARKER_NAMES[name]) for name in ARMS}
 
 
 def teleop_chart() -> MotionStatechart:
     """One goal that runs until it is cancelled: both hands on their markers, the base
-    held, and collisions avoided without ever aborting over one. The grippers are not
-    in it: they are commanded straight to the sim (see _queue_grip_move)."""
+    and the lift on the body marker, and collisions avoided without ever aborting over
+    one. While the robot follows the body marker the arms are locked on their mounts and
+    carried along; they take their markers up again once it has arrived and the markers
+    are back on the hands (see _watch_body). The grippers are not in it: they are
+    commanded straight to the sim (see _queue_grip_move)."""
     msc = MotionStatechart()
     for name, arm in ARMS.items():
         # Rooted at the arm mount, so each chain is its own arm alone: the two hands
@@ -698,14 +800,21 @@ def teleop_chart() -> MotionStatechart:
             root_link=arm.root,
             tip_link=arm.end_effector.tool_frame,
             target_frame=MARKERS[name],
+            body=BODY,
         ))
-    # The base is teleported rather than driven, so anything collision avoidance asked
-    # of it would jump the robot -- and leave behind whatever the hands are holding.
-    msc.add_node(HoldPose(name="hold_base", root_link=world.root, tip_link=robot.root))
-    # The lift and the head held too. The arm targets are rooted at the arm mounts and
-    # never reach them, but collision avoidance may -- and a lift that moves carries
-    # both mounts, so each hand's target shifts under the other arm's motion.
-    msc.add_node(HoldJoints(name="hold_torso_and_head", connections=LIFT_JOINTS + HEAD_JOINTS))
+    # The base under the body marker. At rest that is where it stands, so it holds still
+    # until the marker is moved.
+    msc.add_node(FollowBodyBase(
+        name="follow_body_base", root_link=world.root, tip_link=robot.root, body=BODY,
+    ))
+    # The lift at the body marker's height and the head held, above collision avoidance:
+    # the arm targets are rooted at the arm mounts and never reach them, but collision
+    # avoidance may -- and a lift that moves carries both mounts, so each hand's target
+    # would shift under the other arm's motion.
+    msc.add_node(FollowBodyLift(
+        name="follow_body_lift", connections=list(LIFT_JOINTS), body=BODY,
+    ))
+    msc.add_node(HoldJoints(name="hold_head", connections=list(HEAD_JOINTS)))
     # The hands may touch anything: grasping is contact. Everything else keeps its
     # distance, and a violated distance only brakes -- it must not end the session.
     msc.add_node(UpdateTemporaryCollisionRules(temporary_rules=[
@@ -733,7 +842,8 @@ bridge = (
 )
 if bridge is not None:
     _queue_move = bridge.queue_move
-    _marker_keys = set(MARKER_NAMES.values())
+    _hand_keys = set(MARKER_NAMES.values())
+    _marker_keys = _hand_keys | {BODY_MARKER_NAME}
 
     DRAG_IN_PROGRESS = 0.5
     """[s] since a marker's last intermediate move within which it counts as held."""
@@ -741,9 +851,23 @@ if bridge is not None:
     _last_drag = {}            # marker -> monotonic time of its last intermediate move
     _held_off = set()          # markers whose drag is ignored until it is let go of
 
+    def body_busy() -> bool:
+        """Whether the robot is following the body marker: held, or not yet arrived."""
+        if time.monotonic() - _last_drag.get(BODY_MARKER_NAME, 0.0) < DRAG_IN_PROGRESS:
+            return True
+        with world._world_lock:
+            return not BODY.settled(world)
+
     def _queue_marker_move(request):
         key = request.object_key
         if key not in _marker_keys:
+            return
+        if key in _hand_keys and body_busy():
+            # the arms are locked while the robot moves; a hand drag going on now is
+            # ignored until it is let go of, so it does not pull the marker back off the
+            # hand it is put on once the robot has arrived
+            if not request.is_final:
+                _held_off.add(key)
             return
         if key in _held_off:
             # the drag that was going when the goal failed: the marker stays on the hand
@@ -762,6 +886,16 @@ if bridge is not None:
         _held_off.update(
             key for key, at in _last_drag.items() if now - at < DRAG_IN_PROGRESS
         )
+
+    def forget_drags():
+        """Stop the viewer drawing the markers where they were last dragged to.
+
+        The viewer is shown the last drag target over the world's pose for as long as
+        no plan ticks -- which here is always -- so it would go on drawing a marker put
+        back on its hand where it was dragged to instead."""
+        with bridge._moves_lock:
+            for key in _marker_keys:
+                bridge._last_moves.pop(key, None)
 
     bridge.queue_move = _queue_marker_move
 
@@ -803,6 +937,26 @@ if bridge is not None:
 
     move_timer = node.create_timer(
         1.0 / MOVE_APPLY_HZ, _apply_marker_moves, callback_group=ReentrantCallbackGroup()
+    )
+
+    BODY_WATCH_HZ = 10.0
+    _body_was_busy = [False]
+
+    def _watch_body():
+        """Once the robot has arrived where the body marker was let go of, put the hand
+        markers back on the hands and the body marker level in front of the chest:
+        the arms, locked while the robot moved, take their markers up again from there."""
+        if body_busy():
+            _body_was_busy[0] = True
+            return
+        if not _body_was_busy[0]:
+            return
+        _body_was_busy[0] = False
+        forget_drags()
+        markers_to_hands()
+
+    body_timer = node.create_timer(
+        1.0 / BODY_WATCH_HZ, _watch_body, callback_group=ReentrantCallbackGroup()
     )
 
     if STALL_TRACE:
@@ -858,17 +1012,12 @@ if bridge is not None:
 
     bridge.avatar_listeners.append(_forward_hands)
 
-MODEL_SETTLE_SECONDS = 3.0
-"""How long to leave giskard to apply the model changes above before sending the goal.
 
-A goal starts by applying everything it has buffered, and it is the goal that dies if a
-model block went missing in the rush -- so the rush has to be over first."""
-
-time.sleep(MODEL_SETTLE_SECONDS)
 giskard = context.giskard_wrapper
 giskard.execute_async(teleop_chart())
 print("teleop running: move", " / ".join(MARKER_NAMES.values()),
-      "; open and close their fingers with", " / ".join(GRIP_JOINTS.values()))
+      "; open and close their fingers with", " / ".join(GRIP_JOINTS.values()),
+      "; move the robot with", BODY_MARKER_NAME)
 for name, arm in ARMS.items():
     position = np.asarray(arm.end_effector.tool_frame.global_pose.to_np())[:3, 3].ravel()
     print(f"  {name} hand at {np.round(position, 3)} in map")
@@ -910,19 +1059,16 @@ try:
             # drags queued before the failure would carry the markers back out too
             with world._world_lock:
                 bridge.apply_moves()
-            # and the viewer is shown the last drag target over the world's pose for
-            # as long as no plan ticks -- which here is always -- so it would go on
-            # drawing the markers where they failed rather than back on the hands
-            with bridge._moves_lock:
-                for key in MARKER_NAMES.values():
-                    bridge._last_moves.pop(key, None)
+            # and the viewer would go on drawing them where they failed
+            forget_drags()
         markers_to_hands()
         time.sleep(RESTART_PAUSE)
         giskard.execute_async(teleop_chart())
 except KeyboardInterrupt:
     print("stopping teleop")
 finally:
-    if globals().get("move_timer") is not None:
-        node.destroy_timer(move_timer)
+    for timer_name in ("move_timer", "body_timer"):
+        if globals().get(timer_name) is not None:
+            node.destroy_timer(globals()[timer_name])
     print("giskard:", cancel_motion(context))
     quiet_shutdown()

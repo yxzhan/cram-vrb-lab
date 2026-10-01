@@ -128,6 +128,121 @@ class TeleopCartesianPose(HoldPose):
 
 
 @dataclass(eq=False, repr=False)
+class BodyMarker:
+    """A marker in front of the robot's chest that moves the whole robot: the base goes
+    under it and turns with it, the lift raises the torso to its height.
+
+    At rest the marker sits :attr:`forward` ahead of the base and :attr:`height` above
+    it plus the lift's travel, turned with the base; moving it away from there is what
+    asks the robot to follow. Only its position and its heading count -- how it is
+    tipped means nothing to a base that drives on the floor.
+    """
+
+    marker: KinematicStructureEntity
+    """The marker body."""
+
+    base: KinematicStructureEntity
+    """The robot's root, which the base drives."""
+
+    lift_connections: List[str]
+    """The lift's joints, by connection name; their travel adds up to the lift's."""
+
+    forward: float
+    """[m] how far ahead of the base the marker sits at rest."""
+
+    height: float
+    """[m] how far above the base the marker sits at rest with the lift all the way
+    down."""
+
+    translation_tolerance: float = 0.02
+    """[m] how close the base has to be to where the marker puts it to have arrived."""
+
+    rotation_tolerance: float = 0.05
+    """[rad] the same, for its heading -- about 3 degrees."""
+
+    lift_tolerance: float = 0.01
+    """[m] the same, for the lift."""
+
+    def base_target(self, world) -> np.ndarray:
+        """``map_T_base`` where the marker puts the base: level, at the base's own
+        height, turned as the marker is."""
+        map_T_marker = world.compute_forward_kinematics_np(world.root, self.marker)
+        map_T_base = world.compute_forward_kinematics_np(world.root, self.base)
+        yaw = float(np.arctan2(map_T_marker[1, 0], map_T_marker[0, 0]))
+        target = np.eye(4)
+        target[:3, :3] = _yaw_matrix(yaw)
+        target[:2, 3] = map_T_marker[:2, 3] - target[:2, :2] @ np.array([self.forward, 0.0])
+        target[2, 3] = map_T_base[2, 3]
+        return target
+
+    def lift_targets(self, world) -> List[float]:
+        """Where each lift joint goes for the torso to reach the marker's height: the
+        travel shared out evenly, held inside every joint's limits."""
+        map_T_marker = world.compute_forward_kinematics_np(world.root, self.marker)
+        map_T_base = world.compute_forward_kinematics_np(world.root, self.base)
+        remaining = map_T_marker[2, 3] - map_T_base[2, 3] - self.height
+        connections = [world.get_connection_by_name(name) for name in self.lift_connections]
+        targets = []
+        for index, connection in enumerate(connections):
+            limits = connection.dof.limits
+            share = remaining / (len(connections) - index)
+            value = float(np.clip(share, limits.lower.position, limits.upper.position))
+            targets.append(value)
+            remaining -= value
+        return targets
+
+    def settled(self, world) -> bool:
+        """Whether the robot stands where the marker puts it."""
+        map_T_base = world.compute_forward_kinematics_np(world.root, self.base)
+        if not _within(map_T_base, self.base_target(world),
+                       self.translation_tolerance, self.rotation_tolerance):
+            return False
+        return all(
+            abs(float(world.get_connection_by_name(name).position) - target)
+            <= self.lift_tolerance
+            for name, target in zip(self.lift_connections, self.lift_targets(world))
+        )
+
+    def rest_pose(self, world) -> np.ndarray:
+        """``map_T_marker`` at rest on the robot as it stands."""
+        map_T_base = world.compute_forward_kinematics_np(world.root, self.base)
+        yaw = float(np.arctan2(map_T_base[1, 0], map_T_base[0, 0]))
+        lift = sum(float(world.get_connection_by_name(name).position)
+                   for name in self.lift_connections)
+        pose = np.eye(4)
+        pose[:3, :3] = _yaw_matrix(yaw)
+        pose[:3, 3] = map_T_base[:3, 3] + pose[:3, :3] @ np.array(
+            [self.forward, 0.0, self.height + lift]
+        )
+        return pose
+
+
+@dataclass(eq=False, repr=False)
+class FollowBodyBase(HoldPose):
+    """Drives the base to where :attr:`body` puts it, every control cycle.
+
+    With the marker at rest that is where the base already is, so the base holds still
+    until the marker is moved. No deadband, unlike :class:`FollowFrame`: a marker let
+    go of does not tremble, and the arms wait for the base to arrive exactly.
+    """
+
+    body: BodyMarker = field(kw_only=True)
+
+    weight: float = field(
+        default=DefaultWeights.WEIGHT_BELOW_COLLISION_AVOIDANCE, kw_only=True
+    )
+    """Below collision avoidance: the base is braked short of the furniture."""
+
+    def on_tick(self, context: MotionStatechartContext):
+        # The layout ForwardKinematicsBinding.bind writes: the top 3x4, column-major.
+        context.float_variable_data.set_value(
+            self._pose_to_keep.root_T_tip,
+            self.body.base_target(context.world)[:3, :4].T.flatten(),
+        )
+        return None
+
+
+@dataclass(eq=False, repr=False)
 class FollowFrame(HoldPose):
     """Keeps ``tip_link`` on :attr:`target_frame`, wherever that frame is moved.
 
@@ -159,11 +274,25 @@ class FollowFrame(HoldPose):
     rotation_deadband: float = field(default=0.05, kw_only=True)
     """[rad] the same, for turning -- about 3 degrees."""
 
+    body: Optional[BodyMarker] = field(default=None, kw_only=True)
+    """The marker the whole robot follows, if there is one. While the robot has not
+    reached it the arm is locked where it is on its mount -- the hand stops at once and
+    is carried along -- and :attr:`target_frame` is not followed until the robot has
+    arrived and the target has been put back on the hand."""
+
+    reset_tolerance: float = field(default=0.01, kw_only=True)
+    """[m] how close :attr:`target_frame` has to be to the hand for a locked arm to take
+    it up again."""
+
     _sent: Optional[np.ndarray] = field(default=None, init=False, repr=False)
     """The target last written into the goal, root_T_target."""
 
+    _locked: bool = field(default=False, init=False, repr=False)
+    """Whether the arm is held on its mount while the robot follows :attr:`body`."""
+
     def on_start(self, context: MotionStatechartContext):
         self._sent = None
+        self._locked = False
         self._follow(context)
 
     def on_tick(self, context: MotionStatechartContext):
@@ -171,16 +300,36 @@ class FollowFrame(HoldPose):
         return None
 
     def _follow(self, context: MotionStatechartContext) -> None:
-        root_T_target = context.world.compute_forward_kinematics_np(
+        world = context.world
+        if self.body is not None:
+            if self._locked:
+                if not (self.body.settled(world) and self._target_on_hand(world)):
+                    return
+                self._locked = False
+                self._sent = None
+            elif not self.body.settled(world):
+                self._locked = True
+                self._write(context, world.compute_forward_kinematics_np(
+                    self.root_link, self.tip_link
+                ))
+                return
+        root_T_target = world.compute_forward_kinematics_np(
             self.root_link, self.target_frame
         )
         if self._sent is not None and not self._moved(self._sent, root_T_target):
             return
         self._sent = np.array(root_T_target)
+        self._write(context, root_T_target)
+
+    def _write(self, context: MotionStatechartContext, root_T_target: np.ndarray) -> None:
         # The layout ForwardKinematicsBinding.bind writes: the top 3x4, column-major.
         context.float_variable_data.set_value(
             self._pose_to_keep.root_T_tip, root_T_target[:3, :4].T.flatten()
         )
+
+    def _target_on_hand(self, world) -> bool:
+        tip_T_target = world.compute_forward_kinematics_np(self.tip_link, self.target_frame)
+        return float(np.linalg.norm(tip_T_target[:3, 3])) <= self.reset_tolerance
 
     def _moved(self, before: np.ndarray, after: np.ndarray) -> bool:
         """Whether ``after`` is out of the deadband around ``before``."""
@@ -238,6 +387,33 @@ class HoldJoints(Task):
             context.float_variable_data.set_value(
                 held, float(context.world.get_connection_by_name(name).position)
             )
+
+
+@dataclass(eq=False, repr=False)
+class FollowBodyLift(HoldJoints):
+    """Raises and lowers the lift to the height of :attr:`body`, every control cycle.
+    :attr:`connections` must be the body's lift joints, in the same order."""
+
+    body: BodyMarker = field(kw_only=True)
+
+    def on_tick(self, context: MotionStatechartContext):
+        for held, target in zip(self._held, self.body.lift_targets(context.world)):
+            context.float_variable_data.set_value(held, target)
+        return None
+
+
+def _yaw_matrix(yaw: float) -> np.ndarray:
+    """3x3 rotation about z."""
+    cosine, sine = np.cos(yaw), np.sin(yaw)
+    return np.array([[cosine, -sine, 0.0], [sine, cosine, 0.0], [0.0, 0.0, 1.0]])
+
+
+def _within(before: np.ndarray, after: np.ndarray, translation: float, rotation: float) -> bool:
+    """Whether two 4x4 poses are within ``translation`` [m] and ``rotation`` [rad]."""
+    if np.linalg.norm(after[:3, 3] - before[:3, 3]) > translation:
+        return False
+    cosine = (np.trace(before[:3, :3].T @ after[:3, :3]) - 1.0) / 2.0
+    return float(np.arccos(np.clip(cosine, -1.0, 1.0))) <= rotation
 
 
 def _matrix(position, quaternion_xyzw) -> np.ndarray:
